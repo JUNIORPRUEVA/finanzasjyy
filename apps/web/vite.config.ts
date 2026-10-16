@@ -30,7 +30,7 @@ export default defineConfig({
     VitePWA({
       registerType: 'prompt',
       injectRegister: 'auto',
-      includeAssets: ['favicon.svg', 'apple-touch-icon.png'],
+      includeAssets: ['favicon.svg', 'favicon-32.png', 'apple-touch-icon.png'],
       manifest: {
         name: 'FINANZA — Control financiero',
         short_name: 'FINANZA',
@@ -38,17 +38,20 @@ export default defineConfig({
           'Control de ingresos, gastos, cuentas, deudas y cierres diarios por unidad financiera, con funcionamiento sin conexión.',
         lang: 'es-DO',
         dir: 'ltr',
-        theme_color: '#0f172a',
-        background_color: '#0f172a',
+        // El color del tema es el verde del logotipo: el mismo que usa la pantalla
+        // de arranque del móvil y la barra del navegador.
+        theme_color: '#0B3B2A',
+        background_color: '#0B3B2A',
         display: 'standalone',
         orientation: 'portrait',
         start_url: '/',
         scope: '/',
         categories: ['finance', 'business', 'productivity'],
+        // Los genera scripts/generate-icons.ps1 a partir del logotipo.
         icons: [
           { src: 'pwa-192.png', sizes: '192x192', type: 'image/png' },
           { src: 'pwa-512.png', sizes: '512x512', type: 'image/png' },
-          { src: 'pwa-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
+          { src: 'pwa-maskable-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
         ],
       },
       workbox: {

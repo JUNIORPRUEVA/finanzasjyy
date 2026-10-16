@@ -3,16 +3,21 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <meta name="theme-color" content="#0f172a" />
+    <meta name="theme-color" content="#0B3B2A" />
     <meta name="description" content="FINANZA — control financiero personal y empresarial, con funcionamiento sin conexión." />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="FINANZA" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
+    <link rel="icon" type="image/png" sizes="48x48" href="/favicon-48.png" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <title>FINANZA</title>
   </head>
-  <body class="bg-slate-950 text-slate-100 antialiased">
+  <!-- Los colores los pone src/index.css (variables del tema): así respeta el modo
+       claro y oscuro. Antes había aquí clases fijas de color y, en modo claro, el
+       fondo seguía siendo oscuro. -->
+  <body class="antialiased">
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

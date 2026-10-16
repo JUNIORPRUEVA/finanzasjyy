@@ -36,6 +36,29 @@ foreach ($required in @('DATABASE_URL', 'JWT_ACCESS_SECRET', 'JWT_REFRESH_SECRET
     }
 }
 
+# LAS CLAVES DE NOTIFICACIONES NO SE BORRAN
+# ----------------------------------------
+# `generate-vapid.ps1` escribe las claves en apps/api/.env, no en el .env raíz. Si
+# se ejecuta este script después (o se vuelve a ejecutar bootstrap), el valor del
+# .env raíz sigue vacío y se SOBRESCRIBIRÍA la clave que ya funcionaba: las
+# notificaciones dejarían de enviarse sin ningún aviso.
+# Por eso: si el .env raíz no las tiene pero el de la API ya las tenía, se
+# conservan las que había.
+$apiEnvPath = Join-Path (Split-Path -Parent $PSScriptRoot) 'apps/api/.env'
+$apiEnvPrevio = @{}
+if (Test-Path $apiEnvPath) {
+    foreach ($linea in (Get-Content $apiEnvPath)) {
+        if ($linea -match '^\s*([A-Za-z0-9_]+)\s*=\s*(.*)$') { $apiEnvPrevio[$Matches[1]] = $Matches[2].Trim() }
+    }
+}
+
+foreach ($clave in @('VAPID_PUBLIC_KEY', 'VAPID_PRIVATE_KEY', 'VAPID_SUBJECT')) {
+    if ([string]::IsNullOrWhiteSpace($values[$clave]) -and -not [string]::IsNullOrWhiteSpace($apiEnvPrevio[$clave])) {
+        $values[$clave] = $apiEnvPrevio[$clave]
+        Write-Host "    Se conservan las claves de notificaciones que ya estaban en apps/api/.env ($clave)" -ForegroundColor Yellow
+    }
+}
+
 $apiEnv = @"
 # Generado por scripts/sync-env.ps1 a partir del .env raíz — NO versionar.
 DATABASE_URL=$($values['DATABASE_URL'])
