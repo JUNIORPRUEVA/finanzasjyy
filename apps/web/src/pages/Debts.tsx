@@ -215,19 +215,19 @@ export function DebtsPage() {
       {summary ? (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           <Card>
-            <p className="text-xs uppercase text-slate-400">Total que debo</p>
-            <p className="text-xl font-semibold text-rose-300">{formatMoney(summary.totalDebt, currency)}</p>
-            <p className="mt-1 text-xs text-slate-500">Capital pendiente de préstamos y deudas.</p>
+            <p className="text-xs uppercase text-muted">Total que debo</p>
+            <p className="text-xl font-semibold text-negative">{formatMoney(summary.totalDebt, currency)}</p>
+            <p className="mt-1 text-xs text-faint">Capital pendiente de préstamos y deudas.</p>
           </Card>
           <Card>
-            <p className="text-xs uppercase text-slate-400">Total que me deben</p>
-            <p className="text-xl font-semibold text-emerald-300">{formatMoney(summary.totalReceivable, currency)}</p>
-            <p className="mt-1 text-xs text-slate-500">No es dinero disponible: todavía no está en caja.</p>
+            <p className="text-xs uppercase text-muted">Total que me deben</p>
+            <p className="text-xl font-semibold text-positive">{formatMoney(summary.totalReceivable, currency)}</p>
+            <p className="mt-1 text-xs text-faint">No es dinero disponible: todavía no está en caja.</p>
           </Card>
           <Card>
-            <p className="text-xs uppercase text-slate-400">Posición neta</p>
-            <p className="text-xl font-semibold text-slate-100">{formatMoney(summary.netPosition, currency)}</p>
-            <p className="mt-1 text-xs text-slate-500">
+            <p className="text-xs uppercase text-muted">Posición neta</p>
+            <p className="text-xl font-semibold text-ink">{formatMoney(summary.netPosition, currency)}</p>
+            <p className="mt-1 text-xs text-faint">
               {summary.overdueCount} vencido(s) · {summary.dueSoonCount} por vencer
             </p>
           </Card>
@@ -250,10 +250,10 @@ export function DebtsPage() {
           {loans.map((loan) => {
             const overdue = loan.nextDueDate ? new Date(loan.nextDueDate) < new Date() : false;
             return (
-              <div key={loan.id} className="rounded-lg border border-slate-800 p-3">
+              <div key={loan.id} className="rounded-lg border border-border-soft p-3">
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
-                    <p className="truncate text-sm font-medium text-slate-100">{loan.name}</p>
+                    <p className="truncate text-sm font-medium text-ink">{loan.name}</p>
                     <div className="mt-1 flex flex-wrap items-center gap-2">
                       <Badge tone={loan.isLiability ? 'negative' : 'positive'}>
                         {loan.isLiability ? 'Yo debo' : 'Me deben'}
@@ -262,20 +262,20 @@ export function DebtsPage() {
                       {loan.annualRatePct ? <Badge tone="neutral">{loan.annualRatePct}% anual</Badge> : null}
                       {overdue && loan.status === 'ACTIVE' ? <Badge tone="critical">Vencido</Badge> : null}
                     </div>
-                    <p className="mt-2 text-xs text-slate-400">
+                    <p className="mt-2 text-xs text-muted">
                       Capital pendiente: {formatMoney(loan.currentBalance, loan.currency)} de{' '}
                       {formatMoney(loan.principalAmount, loan.currency)}
                       {loan.installmentAmount ? ` · cuota ${formatMoney(loan.installmentAmount, loan.currency)}` : ''}
                       {loan.nextDueDate ? ` · vence ${formatBusinessDate(loan.nextDueDate)}` : ''}
                     </p>
-                    <p className="text-xs text-slate-500">{loan.paymentCount} pago(s) registrado(s)</p>
+                    <p className="text-xs text-faint">{loan.paymentCount} pago(s) registrado(s)</p>
                   </div>
                 </div>
 
                 {loan.status === 'ACTIVE' ? (
                   <div className="mt-2">
                     {payingLoanId === loan.id ? (
-                      <div className="space-y-2 rounded-lg border border-slate-700 p-3">
+                      <div className="space-y-2 rounded-lg border border-border-soft p-3">
                         <MoneyInput
                           label="Importe pagado"
                           value={payAmount}
@@ -319,11 +319,11 @@ export function DebtsPage() {
         <Card className="space-y-3">
           <SectionTitle title="Tarjetas de crédito" hint="Es deuda: reduce el patrimonio, no es dinero disponible" />
           {creditCards.map((card) => (
-            <div key={card.id} className="rounded-lg border border-slate-800 p-3">
+            <div key={card.id} className="rounded-lg border border-border-soft p-3">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm text-slate-100">{card.name}</p>
-                  <p className="text-xs text-slate-400">
+                  <p className="text-sm text-ink">{card.name}</p>
+                  <p className="text-xs text-muted">
                     Deuda actual: {formatMoney(card.balance, card.currency)}
                   </p>
                 </div>
@@ -338,7 +338,7 @@ export function DebtsPage() {
                 </Button>
               </div>
               {payingLoanId === card.id ? (
-                <div className="mt-2 space-y-2 rounded-lg border border-slate-700 p-3">
+                <div className="mt-2 space-y-2 rounded-lg border border-border-soft p-3">
                   <MoneyInput label="Importe a pagar" value={payAmount} onChange={setPayAmount} />
                   <Select label="Desde qué cuenta se paga" value={payAccountId} onChange={setPayAccountId} options={accountOptions} />
                   <Field label="Fecha" value={payDate} onChange={setPayDate} type="date" />
@@ -350,7 +350,7 @@ export function DebtsPage() {
                       Cancelar
                     </Button>
                   </div>
-                  <p className="text-xs text-slate-500">
+                  <p className="text-xs text-faint">
                     El pago baja la deuda de tarjetas de esa unidad (cuenta 2210) y sale del dinero de la cuenta elegida. No
                     se vuelve a contar como gasto.
                   </p>
@@ -401,7 +401,7 @@ export function DebtsPage() {
         </Button>
       </Card>
 
-      <p className="pb-4 text-center text-xs text-slate-600">
+      <p className="pb-4 text-center text-xs text-faint">
         Un préstamo recibido no es una ganancia, y devolver capital no es un gasto: sólo los intereses son gasto real.
       </p>
     </div>

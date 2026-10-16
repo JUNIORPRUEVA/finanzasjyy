@@ -211,6 +211,29 @@ export async function cacheCategories(categories: CacheCategory[]): Promise<void
   await setMeta('categoriesCachedAt', new Date().toISOString());
 }
 
+/**
+ * Añade o actualiza cuentas en la copia local SIN borrar las demás.
+ *
+ * Es importante que no borre: el servidor devuelve las cuentas filtrando por
+ * unidad financiera, así que reemplazar la tabla entera dejaría a las otras
+ * unidades sin datos justo cuando no hay conexión, que es cuando más falta hacen.
+ */
+export async function upsertCachedAccounts(accounts: CacheAccount[]): Promise<void> {
+  if (accounts.length === 0) {
+    return;
+  }
+  await db.cacheAccounts.bulkPut(accounts);
+  await setMeta('accountsCachedAt', new Date().toISOString());
+}
+
+export async function upsertCachedCategories(categories: CacheCategory[]): Promise<void> {
+  if (categories.length === 0) {
+    return;
+  }
+  await db.cacheCategories.bulkPut(categories);
+  await setMeta('categoriesCachedAt', new Date().toISOString());
+}
+
 export async function getCachedEntities(): Promise<CacheEntity[]> {
   return db.cacheEntities.orderBy('name').toArray();
 }

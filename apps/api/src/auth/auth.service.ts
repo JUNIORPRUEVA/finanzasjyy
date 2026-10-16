@@ -72,8 +72,31 @@ export class AuthService {
     return Number(this.config.get<string>('JWT_REFRESH_TTL') ?? 2_592_000);
   }
 
+  /** Duración del refresh token: la usan las cookies para su `max-age`. */
+  get sessionTtlSeconds(): number {
+    return this.refreshTtlSeconds;
+  }
+
   private get offlineWindowHours(): number {
     return Number(this.config.get<string>('OFFLINE_WINDOW_HOURS') ?? 24);
+  }
+
+  /**
+   * EXPIRACIÓN ABSOLUTA: la sesión no puede vivir más que esto aunque se use
+   * todos los días. Por defecto 30 días.
+   */
+  private get sessionMaxHours(): number {
+    return Number(this.config.get<string>('SESSION_MAX_HOURS') ?? 720);
+  }
+
+  /**
+   * EXPIRACIÓN POR INACTIVIDAD: si el dispositivo no se usa durante este tiempo,
+   * la sesión se cierra. Por defecto 7 días (más margen que la ventana offline
+   * de 24 h, para no cerrar sesiones de dispositivos que sólo se usan los fines
+   * de semana, pero sin permitir sesiones eternas).
+   */
+  private get sessionIdleHours(): number {
+    return Number(this.config.get<string>('SESSION_IDLE_HOURS') ?? 168);
   }
 
   /** ¿Existe ya algún usuario? Lo usa el onboarding del frontend. */
@@ -240,7 +263,10 @@ export class AuthService {
   }
 
   /** Rota el refresh token en cada uso (rotación de credenciales). */
-  async refresh(dto: RefreshTokenDto, meta: RequestMetaInfo): Promise<AuthResponse> {
+  async refresh(
+    dto: RefreshTokenDto & { refreshToken: string },
+    meta: RequestMetaInfo,
+  ): Promise<AuthResponse> {
     const tokenHash = hashToken(dto.refreshToken);
     const session = await this.prisma.session.findUnique({
       where: { refreshTokenHash: tokenHash },
@@ -248,7 +274,10 @@ export class AuthService {
     });
 
     if (!session) {
-      throw new UnauthorizedError('La sesión no es válida. Vuelva a iniciar sesión.');
+      throw new UnauthorizedError(
+        'La sesión no es válida. Vuelva a iniciar sesión.',
+        'SESSION_INVALID',
+      );
     }
     if (session.revokedAt) {
       // Un refresh token revocado que se vuelve a presentar es señal de robo:
@@ -265,11 +294,61 @@ export class AuthService {
         ip: meta.ip,
         userAgent: meta.userAgent,
       });
-      throw new UnauthorizedError('Se detectó un uso indebido del token. Todas las sesiones se cerraron.');
+      throw new UnauthorizedError(
+        'Se detectó un uso indebido del token. Todas las sesiones se cerraron.',
+        'SESSION_REUSE_DETECTED',
+      );
     }
     if (session.expiresAt.getTime() < Date.now()) {
-      throw new UnauthorizedError('La sesión ha caducado. Inicie sesión de nuevo.');
+      throw new UnauthorizedError('La sesión ha caducado. Inicie sesión de nuevo.', 'SESSION_EXPIRED');
     }
+
+    // Expiración por INACTIVIDAD: si el dispositivo lleva demasiado tiempo sin
+    // usarse, la sesión se revoca de verdad (queda registrado el motivo).
+    const idleLimitMs = this.sessionIdleHours * 3_600_000;
+    const lastSeen = (session.lastUsedAt ?? session.createdAt).getTime();
+    if (Date.now() - lastSeen > idleLimitMs) {
+      await this.prisma.session.update({
+        where: { id: session.id },
+        data: { revokedAt: new Date(), revokedReason: 'SESSION_IDLE_TIMEOUT' },
+      });
+      await this.audit.record({
+        userId: session.userId,
+        action: 'auth.refresh.idle_timeout',
+        entityType: 'Session',
+        entityId: session.id,
+        after: { idleHours: this.sessionIdleHours },
+        ip: meta.ip,
+        userAgent: meta.userAgent,
+      });
+      throw new UnauthorizedError(
+        `La sesión se cerró por inactividad (más de ${Math.round(this.sessionIdleHours / 24)} día(s) sin usarla). Inicie sesión de nuevo.`,
+        'SESSION_IDLE_TIMEOUT',
+      );
+    }
+
+    // Expiración ABSOLUTA: aunque se use a diario, una sesión no es eterna.
+    const maxLimitMs = this.sessionMaxHours * 3_600_000;
+    if (Date.now() - session.createdAt.getTime() > maxLimitMs) {
+      await this.prisma.session.update({
+        where: { id: session.id },
+        data: { revokedAt: new Date(), revokedReason: 'SESSION_MAX_LIFETIME' },
+      });
+      await this.audit.record({
+        userId: session.userId,
+        action: 'auth.refresh.max_lifetime',
+        entityType: 'Session',
+        entityId: session.id,
+        after: { maxHours: this.sessionMaxHours },
+        ip: meta.ip,
+        userAgent: meta.userAgent,
+      });
+      throw new UnauthorizedError(
+        'La sesión alcanzó su duración máxima. Inicie sesión de nuevo.',
+        'SESSION_MAX_LIFETIME',
+      );
+    }
+
     if (!session.user.isActive) {
       throw new ForbiddenError('El usuario está desactivado');
     }

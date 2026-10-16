@@ -108,22 +108,22 @@ export function AccountsPage() {
 
       <Card>
         <SectionTitle title="Resumen" hint="El dinero disponible NO incluye tarjetas ni cuentas por cobrar" />
-        <div className="grid grid-cols-3 gap-3 text-sm">
+        <div className="grid grid-cols-[repeat(auto-fit,minmax(8.5rem,1fr))] gap-3 text-sm">
           <div>
-            <p className="text-xs uppercase text-slate-400">Disponible</p>
+            <p className="text-xs uppercase text-muted">Disponible</p>
             <p className="text-lg font-semibold">
               <Money value={totalAssets.toFixed(2)} tone="positive" currency={currency} />
             </p>
           </div>
           <div>
-            <p className="text-xs uppercase text-slate-400">Deudas de cuentas</p>
+            <p className="text-xs uppercase text-muted">Deudas de cuentas</p>
             <p className="text-lg font-semibold">
               <Money value={totalLiabilities.toFixed(2)} tone="negative" currency={currency} />
             </p>
           </div>
           <div>
-            <p className="text-xs uppercase text-slate-400">Cuentas</p>
-            <p className="text-lg font-semibold text-slate-200">{accounts.length}</p>
+            <p className="text-xs uppercase text-muted">Cuentas</p>
+            <p className="text-lg font-semibold text-ink">{accounts.length}</p>
           </div>
         </div>
       </Card>
@@ -139,7 +139,7 @@ export function AccountsPage() {
         />
 
         {creating ? (
-          <div className="mb-4 space-y-3 rounded-lg border border-slate-800 p-3">
+          <div className="mb-4 space-y-3 rounded-lg border border-border-soft p-3">
             <Select
               label="Unidad financiera"
               value={entityId}
@@ -170,27 +170,27 @@ export function AccountsPage() {
 
         <div className="space-y-3">
           {accounts.map((account) => (
-            <div key={account.id} className="rounded-lg border border-slate-800 p-3">
+            <div key={account.id} className="rounded-lg border border-border-soft p-3">
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">
-                  <p className="flex items-center gap-2 truncate text-sm font-medium text-slate-200">
+                  <p className="flex items-center gap-2 truncate text-sm font-medium text-ink">
                     {account.name}
                     {account.isLiability ? <Badge tone="warning">pasivo</Badge> : <Badge tone="positive">activo</Badge>}
                     {account.status !== 'ACTIVE' ? <Badge tone="neutral">{account.status}</Badge> : null}
                   </p>
-                  <p className="truncate text-xs text-slate-500">
+                  <p className="truncate text-xs text-faint">
                     {account.entity?.name} · {account.type} · {account.movementCount} movimiento(s)
                   </p>
                 </div>
                 <div className="text-right">
                   <Money value={account.balance} currency={account.currency} tone={account.isLiability ? 'negative' : 'positive'} />
-                  <p className="text-xs text-slate-500">inicial {account.openingBalance}</p>
+                  <p className="text-xs text-faint">inicial {account.openingBalance}</p>
                 </div>
               </div>
             </div>
           ))}
           {accounts.length === 0 ? (
-            <p className="text-sm text-slate-500">
+            <p className="text-sm text-faint">
               Todavía no hay cuentas. Cree la primera con el dinero que tiene hoy disponible.
             </p>
           ) : null}

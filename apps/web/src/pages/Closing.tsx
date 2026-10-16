@@ -279,12 +279,12 @@ export function ClosingPage() {
           options={entities.map((entity) => ({ value: entity.id, label: entity.name }))}
         />
         <label className="block">
-          <span className="mb-1 block text-sm font-medium text-slate-300">Día que se cierra</span>
+          <span className="mb-1 block text-sm font-medium text-ink">Día que se cierra</span>
           <input
             type="date"
             value={date}
             onChange={(event) => setDate(event.target.value)}
-            className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100"
+            className="w-full rounded-lg border border-border-soft bg-surface-2 px-3 py-2 text-sm text-ink"
           />
         </label>
         <div className="flex flex-wrap items-center gap-2">
@@ -314,19 +314,19 @@ export function ClosingPage() {
                 title={`${day.date}: ${day.statusLabel}${day.movementCount > 0 ? ` (${day.movementCount} movimientos)` : ' (sin movimientos)'}`}
                 className={`aspect-square rounded-md border text-[10px] leading-tight ${
                   day.status === 'FINALIZED'
-                    ? 'border-emerald-500/50 bg-emerald-500/20 text-emerald-100'
+                    ? 'border-positive/50 bg-positive/20 text-positive'
                     : day.status === 'WITH_DIFFERENCES'
-                      ? 'border-amber-500/50 bg-amber-500/20 text-amber-100'
+                      ? 'border-warning/40 bg-warning/20 text-warning'
                       : day.hasMovements
-                        ? 'border-rose-500/50 bg-rose-500/15 text-rose-100'
-                        : 'border-slate-700 bg-slate-900 text-slate-500'
+                        ? 'border-negative/40 bg-negative/15 text-negative'
+                        : 'border-border-soft bg-surface text-faint'
                 }`}
               >
                 {day.date.slice(8)}
               </button>
             ))}
           </div>
-          <p className="mt-2 text-xs text-slate-500">
+          <p className="mt-2 text-xs text-faint">
             Los días sin movimientos no generan tarea de cierre, pero también se pueden cerrar.
           </p>
         </Card>
@@ -336,39 +336,39 @@ export function ClosingPage() {
         <SectionTitle title="Resumen del día" hint="Calculado con los movimientos ya registrados" />
         <div className="grid grid-cols-2 gap-3 text-sm">
           <div>
-            <p className="text-xs uppercase text-slate-400">Ingresos</p>
+            <p className="text-xs uppercase text-muted">Ingresos</p>
             <p className="text-lg font-semibold">
               <Money value={data.daySummary.income} tone="positive" currency={currency} />
             </p>
           </div>
           <div>
-            <p className="text-xs uppercase text-slate-400">Gastos</p>
+            <p className="text-xs uppercase text-muted">Gastos</p>
             <p className="text-lg font-semibold">
               <Money value={data.daySummary.expenses} tone="negative" currency={currency} />
             </p>
           </div>
           <div>
-            <p className="text-xs uppercase text-slate-400">Resultado</p>
+            <p className="text-xs uppercase text-muted">Resultado</p>
             <p className="text-lg font-semibold">
               <Money value={data.daySummary.result} currency={currency} />
             </p>
           </div>
           <div>
-            <p className="text-xs uppercase text-slate-400">Movimientos</p>
-            <p className="text-lg font-semibold text-slate-200">{data.daySummary.transactionCount}</p>
+            <p className="text-xs uppercase text-muted">Movimientos</p>
+            <p className="text-lg font-semibold text-ink">{data.daySummary.transactionCount}</p>
           </div>
           <div>
-            <p className="text-xs uppercase text-slate-400">Retiros del propietario</p>
-            <p className="text-sm text-slate-300">
+            <p className="text-xs uppercase text-muted">Retiros del propietario</p>
+            <p className="text-sm text-ink">
               <Money value={data.daySummary.withdrawals} currency={currency} />
             </p>
           </div>
           <div>
-            <p className="text-xs uppercase text-slate-400">Transferencias</p>
-            <p className="text-sm text-slate-300">{data.transfers.length}</p>
+            <p className="text-xs uppercase text-muted">Transferencias</p>
+            <p className="text-sm text-ink">{data.transfers.length}</p>
           </div>
         </div>
-        <p className="mt-2 text-xs text-slate-500">
+        <p className="mt-2 text-xs text-faint">
           Fecha de negocio: {formatBusinessDate(data.businessDateIso)} (no cambia aunque el dispositivo tenga otra hora)
         </p>
       </Card>
@@ -379,7 +379,7 @@ export function ClosingPage() {
           {data.checklist
             .filter((step) => step.requiresUserConfirmation)
             .map((step) => (
-              <label key={step.key} className="flex items-start gap-3 rounded-lg border border-slate-800 p-3 text-sm">
+              <label key={step.key} className="flex items-start gap-3 rounded-lg border border-border-soft p-3 text-sm">
                 <input
                   type="checkbox"
                   checked={confirmedSteps.includes(step.key)}
@@ -390,7 +390,7 @@ export function ClosingPage() {
                   }
                   className="mt-0.5 h-5 w-5"
                 />
-                <span className="text-slate-200">{step.label}</span>
+                <span className="text-ink">{step.label}</span>
               </label>
             ))}
         </div>
@@ -399,7 +399,7 @@ export function ClosingPage() {
             .filter((step) => !step.requiresUserConfirmation)
             .map((step) => (
               <div key={step.key} className="flex items-center justify-between text-xs">
-                <span className="text-slate-400">{step.label}</span>
+                <span className="text-muted">{step.label}</span>
                 <Badge tone={step.satisfied ? 'positive' : 'warning'}>{step.satisfied ? 'ok' : 'pendiente'}</Badge>
               </div>
             ))}
@@ -418,10 +418,10 @@ export function ClosingPage() {
             const hasDifference = differenceCents !== 0;
 
             return (
-              <div key={row.accountId} className="rounded-lg border border-slate-800 p-3">
+              <div key={row.accountId} className="rounded-lg border border-border-soft p-3">
                 <div className="flex items-center justify-between text-sm">
-                  <span className="font-medium text-slate-200">{row.name}</span>
-                  <span className="text-xs text-slate-400">
+                  <span className="font-medium text-ink">{row.name}</span>
+                  <span className="text-xs text-muted">
                     esperado <Money value={row.expectedBalance} currency={currency} />
                   </span>
                 </div>
@@ -437,12 +437,12 @@ export function ClosingPage() {
                       explicarla antes de cerrar el día.
                     </Notice>
                     <label className="block">
-                      <span className="mb-1 block text-sm text-slate-300">¿Qué pasó con esa diferencia?</span>
+                      <span className="mb-1 block text-sm text-ink">¿Qué pasó con esa diferencia?</span>
                       <input
                         value={explanations[row.accountId] ?? ''}
                         onChange={(event) => setExplanations((e) => ({ ...e, [row.accountId]: event.target.value }))}
                         placeholder="Ej.: Se pagó el almuerzo del equipo sin comprobante"
-                        className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100"
+                        className="w-full rounded-lg border border-border-soft bg-surface-2 px-3 py-2 text-sm text-ink"
                       />
                     </label>
                   </div>
@@ -454,10 +454,10 @@ export function ClosingPage() {
 
         {data.otherAccounts.length > 0 ? (
           <div className="mt-4">
-            <p className="mb-1 text-xs uppercase text-slate-400">Otras cuentas (no se cuentan a mano)</p>
+            <p className="mb-1 text-xs uppercase text-muted">Otras cuentas (no se cuentan a mano)</p>
             <div className="space-y-1">
               {data.otherAccounts.map((account) => (
-                <div key={account.accountId} className="flex items-center justify-between text-xs text-slate-400">
+                <div key={account.accountId} className="flex items-center justify-between text-xs text-muted">
                   <span>{account.name}</span>
                   <Money value={account.balance} currency={currency} tone={account.isLiability ? 'negative' : 'positive'} />
                 </div>
@@ -470,17 +470,17 @@ export function ClosingPage() {
       {differenceSummary ? (
         <Card>
           <SectionTitle title="Paso 3 · Resultado del conteo" />
-          <div className="grid grid-cols-3 gap-3 text-sm">
+          <div className="grid grid-cols-[repeat(auto-fit,minmax(8.5rem,1fr))] gap-3 text-sm">
             <div>
-              <p className="text-xs uppercase text-slate-400">Esperado</p>
+              <p className="text-xs uppercase text-muted">Esperado</p>
               <Money value={analysis?.totalExpected} currency={currency} />
             </div>
             <div>
-              <p className="text-xs uppercase text-slate-400">Contado</p>
+              <p className="text-xs uppercase text-muted">Contado</p>
               <Money value={analysis?.totalCounted} currency={currency} />
             </div>
             <div>
-              <p className="text-xs uppercase text-slate-400">Diferencia</p>
+              <p className="text-xs uppercase text-muted">Diferencia</p>
               <Money
                 value={differenceSummary.total}
                 currency={currency}
@@ -502,7 +502,7 @@ export function ClosingPage() {
           ) : null}
 
           <div className="mt-4 space-y-3">
-            <label className="flex items-start gap-3 text-sm text-slate-300">
+            <label className="flex items-start gap-3 text-sm text-ink">
               <input
                 type="checkbox"
                 checked={adjustDifferences}
@@ -528,7 +528,7 @@ export function ClosingPage() {
             </div>
 
             {!analysis?.canFinalize ? (
-              <p className="text-xs text-slate-500">
+              <p className="text-xs text-faint">
                 El cierre definitivo exige: diferencias explicadas, ningún movimiento sin confirmar por el servidor y
                 conexión activa. Mientras tanto, el cierre se guarda como provisional.
               </p>
@@ -541,12 +541,12 @@ export function ClosingPage() {
         <Card>
           <SectionTitle title="Reabrir el cierre" hint="Queda registrado en la auditoría con su motivo" />
           <label className="block">
-            <span className="mb-1 block text-sm text-slate-300">Motivo de la reapertura</span>
+            <span className="mb-1 block text-sm text-ink">Motivo de la reapertura</span>
             <input
               value={reopenReason}
               onChange={(event) => setReopenReason(event.target.value)}
               placeholder="Explique por qué hay que reabrir (mínimo 10 caracteres)"
-              className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100"
+              className="w-full rounded-lg border border-border-soft bg-surface-2 px-3 py-2 text-sm text-ink"
             />
           </label>
           <Button
@@ -558,7 +558,7 @@ export function ClosingPage() {
             {reopenMutation.isPending ? 'Reabriendo…' : 'Reabrir cierre'}
           </Button>
           {data.existingClosing?.lastReopenReason ? (
-            <p className="mt-2 text-xs text-slate-500">Última reapertura: {data.existingClosing.lastReopenReason}</p>
+            <p className="mt-2 text-xs text-faint">Última reapertura: {data.existingClosing.lastReopenReason}</p>
           ) : null}
         </Card>
       ) : null}

@@ -92,14 +92,27 @@ if ($exit -ne 0) {
 # Las pruebas de extremo a extremo necesitan la estructura mínima (catálogo
 # contable, categorías, unidades y usuario) igual que una instalación real: sin
 # ella no se puede registrar nada, y eso es precisamente lo que comprueban.
+#
+# El usuario propietario de la base de PRUEBAS se crea con una contraseña fija y
+# conocida, para que las pruebas de navegador puedan entrar sin depender de un
+# valor aleatorio que habría que leer del registro. Es seguro porque esta base de
+# datos es desechable y se vuelve a crear en cada verificación; la base de
+# trabajo (finanza) sigue generando su contraseña aleatoria, que sólo se muestra
+# una vez.
 Write-Step "Aplicando la semilla estructural a $TEST_DB"
 Push-Location 'apps/api'
 $env:DATABASE_URL = $testUrl
+$env:ADMIN_PASSWORD = 'FinanzaE2E2026!segura'
+$env:ADMIN_EMAIL = 'e2e@finanza.test'
+$env:ADMIN_NAME = 'Pruebas Automáticas'
 $ErrorActionPreference = 'Continue'
 npm run db:seed 2>&1 | Select-Object -Last 6 | Out-Host
 $seedExit = $LASTEXITCODE
 $ErrorActionPreference = 'Stop'
 Remove-Item Env:\DATABASE_URL -ErrorAction SilentlyContinue
+Remove-Item Env:\ADMIN_PASSWORD -ErrorAction SilentlyContinue
+Remove-Item Env:\ADMIN_EMAIL -ErrorAction SilentlyContinue
+Remove-Item Env:\ADMIN_NAME -ErrorAction SilentlyContinue
 Pop-Location
 
 if ($seedExit -ne 0) {
@@ -107,6 +120,7 @@ if ($seedExit -ne 0) {
     exit 1
 }
 Write-Ok 'Estructura creada en la base de datos de pruebas (sin importes)'
+Write-Ok 'Usuario de pruebas: e2e@finanza.test / FinanzaE2E2026!segura'
 
 Write-Step 'Comprobación final'
 

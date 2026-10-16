@@ -5,7 +5,7 @@ import { api, ApiError, OfflineError } from '../lib/api';
 import { getCachedAccounts, getCachedCategories } from '../lib/db';
 import { canOperateOffline, submitOrQueue } from '../lib/sync';
 import { useAuth } from '../store/auth';
-import { Badge, Button, Card, Field, MoneyInput, Notice, SectionTitle, Select, Tabs } from '../components/ui';
+import { Badge, Button, Card, Field, Money, MoneyInput, Notice, SectionTitle, Select, Tabs } from '../components/ui';
 import { formatBusinessDate, todayBusinessDate } from '../lib/format';
 
 type EntryKind = 'INCOME' | 'EXPENSE' | 'OWNER_WITHDRAWAL' | 'OWNER_CONTRIBUTION' | 'ADJUSTMENT';
@@ -51,8 +51,11 @@ export function QuickEntryPage() {
   const queryClient = useQueryClient();
 
   const initialEntity = params.get('entityId') ?? entities[0]?.id ?? '';
+  const kindParam = params.get('kind') as EntryKind | null;
+  const initialKind: EntryKind = KIND_TABS.some((tab) => tab.id === kindParam) ? (kindParam as EntryKind) : 'EXPENSE';
 
-  const [kind, setKind] = useState<EntryKind>('EXPENSE');
+  const [kind, setKind] = useState<EntryKind>(initialKind);
+  const currency = preferences?.currency ?? 'DOP';
   const [entityId, setEntityId] = useState(initialEntity);
   const [accountId, setAccountId] = useState('');
   const [categoryId, setCategoryId] = useState('');
@@ -110,6 +113,16 @@ export function QuickEntryPage() {
       setAccountId(accounts[0].id);
     }
   }, [accounts, accountId]);
+
+  // El botón «Añadir» del menú inferior entra aquí indicando qué se quiere
+  // registrar. Como la ruta es la misma, hay que reaccionar al cambio del
+  // parámetro: si no, se quedaría siempre en «Gasto».
+  useEffect(() => {
+    const requested = params.get('kind') as EntryKind | null;
+    if (KIND_TABS.some((tab) => tab.id === requested)) {
+      setKind(requested as EntryKind);
+    }
+  }, [params]);
 
   const createMutation = useMutation({
     mutationFn: async () => {
@@ -234,6 +247,7 @@ export function QuickEntryPage() {
           value={description}
           onChange={setDescription}
           placeholder={kind === 'EXPENSE' ? 'Ej.: Combustible del carro' : 'Ej.: Venta de servicio'}
+          hint="Obligatoria: es lo que le permitirá reconocer el movimiento después."
         />
 
         <Field label="Fecha" value={businessDate} onChange={setBusinessDate} type="date" />
@@ -280,7 +294,7 @@ export function QuickEntryPage() {
           {createMutation.isPending ? 'Registrando…' : 'Registrar movimiento'}
         </Button>
 
-        <p className="text-center text-xs text-slate-500">
+        <p className="text-center text-xs text-faint">
           Fecha de negocio: {formatBusinessDate(businessDate)} · Zona {preferences?.timezone ?? 'America/Santo_Domingo'}
         </p>
       </Card>
@@ -289,15 +303,19 @@ export function QuickEntryPage() {
         <SectionTitle title="Cuentas disponibles" hint="Saldos calculados desde el libro mayor" />
         <div className="space-y-1">
           {accounts.map((account) => (
-            <div key={account.id} className="flex items-center justify-between text-sm">
-              <span className="flex items-center gap-2 truncate text-slate-300">
+            <div key={account.id} className="flex items-center justify-between gap-2 text-sm">
+              <span className="flex min-w-0 items-center gap-2 truncate text-ink">
                 {account.name}
                 {account.isCreditCard ? <Badge tone="warning">pasivo</Badge> : null}
               </span>
-              <span className="money text-slate-200">{account.balance}</span>
+              <Money
+                value={account.balance}
+                currency={currency}
+                tone={account.balance.startsWith('-') ? 'negative' : 'neutral'}
+              />
             </div>
           ))}
-          {accounts.length === 0 ? <p className="text-sm text-slate-500">No hay cuentas en esta unidad.</p> : null}
+          {accounts.length === 0 ? <p className="text-sm text-faint">No hay cuentas en esta unidad.</p> : null}
         </div>
       </Card>
     </div>

@@ -166,19 +166,19 @@ export function MorePage() {
               <Link
                 key={task.id}
                 to={task.actionUrl}
-                className="block rounded-lg border border-slate-800 p-3 transition hover:border-slate-600"
+                className="block rounded-lg border border-border-soft p-3 transition hover:border-border-soft"
               >
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
-                    <p className="truncate text-sm font-medium text-slate-200">{task.title}</p>
-                    <p className="truncate text-xs text-slate-500">
+                    <p className="truncate text-sm font-medium text-ink">{task.title}</p>
+                    <p className="truncate text-xs text-faint">
                       {task.detail}
                       {task.entityName ? ` · ${task.entityName}` : ''}
                       {task.dueDate ? ` · vence ${formatBusinessDate(task.dueDate)}` : ''}
                     </p>
                   </div>
                   <div className="shrink-0 text-right">
-                    {task.amount ? <p className="money text-sm text-slate-200">{formatMoney(task.amount)}</p> : null}
+                    {task.amount ? <p className="money text-sm text-ink">{formatMoney(task.amount)}</p> : null}
                     <Badge tone={task.severity === 'CRITICAL' ? 'critical' : task.severity === 'WARNING' ? 'warning' : 'neutral'}>
                       {task.isMandatory ? 'obligatoria' : 'revisar'}
                     </Badge>
@@ -196,26 +196,26 @@ export function MorePage() {
             <SectionTitle title="Estado de sincronización" />
             <div className="grid grid-cols-2 gap-3 text-sm">
               <div>
-                <p className="text-xs uppercase text-slate-400">Pendientes en este dispositivo</p>
-                <p className="text-lg font-semibold text-slate-100">{localStatusQuery.data?.pending ?? 0}</p>
+                <p className="text-xs uppercase text-muted">Pendientes en este dispositivo</p>
+                <p className="text-lg font-semibold text-ink">{localStatusQuery.data?.pending ?? 0}</p>
               </div>
               <div>
-                <p className="text-xs uppercase text-slate-400">Última confirmación</p>
-                <p className="text-sm text-slate-200">
+                <p className="text-xs uppercase text-muted">Última confirmación</p>
+                <p className="text-sm text-ink">
                   {localStatusQuery.data?.lastSyncedAt ? formatDateTime(localStatusQuery.data.lastSyncedAt) : '—'}
                 </p>
               </div>
               <div>
-                <p className="text-xs uppercase text-slate-400">Ventana sin conexión hasta</p>
-                <p className="text-sm text-slate-200">
+                <p className="text-xs uppercase text-muted">Ventana sin conexión hasta</p>
+                <p className="text-sm text-ink">
                   {localStatusQuery.data?.offlineAllowedUntil
                     ? formatDateTime(localStatusQuery.data.offlineAllowedUntil)
                     : '—'}
                 </p>
               </div>
               <div>
-                <p className="text-xs uppercase text-slate-400">Conexión</p>
-                <p className="text-sm text-slate-200">{navigator.onLine ? 'En línea' : 'Sin conexión'}</p>
+                <p className="text-xs uppercase text-muted">Conexión</p>
+                <p className="text-sm text-ink">{navigator.onLine ? 'En línea' : 'Sin conexión'}</p>
               </div>
             </div>
 
@@ -226,7 +226,7 @@ export function MorePage() {
               <Button variant="secondary" onClick={() => void handleExport()}>
                 Exportar pendientes
               </Button>
-              <label className="inline-flex cursor-pointer items-center rounded-lg bg-slate-800 px-4 py-2 text-sm font-semibold text-slate-100">
+              <label className="inline-flex cursor-pointer items-center rounded-lg bg-surface-3 px-4 py-2 text-sm font-semibold text-ink">
                 Importar pendientes
                 <input
                   type="file"
@@ -243,7 +243,7 @@ export function MorePage() {
             </div>
 
             {storage ? (
-              <p className="mt-2 text-xs text-slate-500">
+              <p className="mt-2 text-xs text-faint">
                 Almacenamiento local usado: {storage.usageMb} MB de {storage.quotaMb} MB disponibles.
               </p>
             ) : null}
@@ -259,20 +259,20 @@ export function MorePage() {
             ) : (
               <div className="space-y-2">
                 {queued.map((operation) => (
-                  <div key={operation.id} className="rounded-lg border border-slate-800 p-3">
+                  <div key={operation.id} className="rounded-lg border border-border-soft p-3">
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0">
-                        <p className="truncate text-sm text-slate-200">{operation.summary}</p>
-                        <p className="truncate text-xs text-slate-500">
+                        <p className="truncate text-sm text-ink">{operation.summary}</p>
+                        <p className="truncate text-xs text-faint">
                           {formatDateTime(operation.occurredAt)} · {operation.type}
                           {operation.entityName ? ` · ${operation.entityName}` : ''}
                         </p>
                         {operation.lastError ? (
-                          <p className="mt-1 text-xs text-rose-300">{operation.lastError}</p>
+                          <p className="mt-1 text-xs text-negative">{operation.lastError}</p>
                         ) : null}
                       </div>
                       <div className="shrink-0 text-right">
-                        {operation.amount ? <p className="money text-sm text-slate-200">{formatMoney(operation.amount)}</p> : null}
+                        {operation.amount ? <p className="money text-sm text-ink">{formatMoney(operation.amount)}</p> : null}
                         <Badge
                           tone={
                             operation.status === 'CONFLICT' || operation.status === 'REJECTED'
@@ -316,11 +316,11 @@ export function MorePage() {
               <SectionTitle title="Operaciones que el servidor rechazó" hint="Requieren su decisión" />
               <div className="space-y-2">
                 {issuesQuery.data.map((issue) => (
-                  <div key={issue.id} className="rounded-lg border border-rose-500/40 bg-rose-500/5 p-3">
-                    <p className="text-sm font-medium text-rose-100">{issue.operationType} · {issue.status}</p>
-                    <p className="text-xs text-rose-200">{issue.errorMessage}</p>
-                    <p className="mt-1 text-xs text-slate-400">{issue.recommendation}</p>
-                    <p className="mt-1 text-xs text-slate-500">
+                  <div key={issue.id} className="rounded-lg border border-negative/40 bg-negative/5 p-3">
+                    <p className="text-sm font-medium text-negative">{issue.operationType} · {issue.status}</p>
+                    <p className="text-xs text-negative">{issue.errorMessage}</p>
+                    <p className="mt-1 text-xs text-muted">{issue.recommendation}</p>
+                    <p className="mt-1 text-xs text-faint">
                       {formatDateTime(issue.receivedAt)} · intentos: {issue.attempts} · id: {issue.clientOperationId}
                     </p>
                   </div>
@@ -345,10 +345,10 @@ export function MorePage() {
                 <Link
                   key={item.to}
                   to={item.to}
-                  className="rounded-lg border border-slate-800 p-3 transition hover:border-slate-600"
+                  className="rounded-lg border border-border-soft p-3 transition hover:border-border-soft"
                 >
-                  <p className="text-sm font-medium text-slate-200">{item.label}</p>
-                  <p className="text-xs text-slate-500">{item.hint}</p>
+                  <p className="text-sm font-medium text-ink">{item.label}</p>
+                  <p className="text-xs text-faint">{item.hint}</p>
                 </Link>
               ))}
             </div>
@@ -366,10 +366,10 @@ export function MorePage() {
                 <Link
                   key={item.to}
                   to={item.to}
-                  className="rounded-lg border border-slate-800 p-3 transition hover:border-slate-600"
+                  className="rounded-lg border border-border-soft p-3 transition hover:border-border-soft"
                 >
-                  <p className="text-sm font-medium text-slate-200">{item.label}</p>
-                  <p className="text-xs text-slate-500">{item.hint}</p>
+                  <p className="text-sm font-medium text-ink">{item.label}</p>
+                  <p className="text-xs text-faint">{item.hint}</p>
                 </Link>
               ))}
             </div>
@@ -388,10 +388,10 @@ export function MorePage() {
                 <Link
                   key={item.to}
                   to={item.to}
-                  className="rounded-lg border border-slate-800 p-3 transition hover:border-slate-600"
+                  className="rounded-lg border border-border-soft p-3 transition hover:border-border-soft"
                 >
-                  <p className="text-sm font-medium text-slate-200">{item.label}</p>
-                  <p className="text-xs text-slate-500">{item.hint}</p>
+                  <p className="text-sm font-medium text-ink">{item.label}</p>
+                  <p className="text-xs text-faint">{item.hint}</p>
                 </Link>
               ))}
             </div>
@@ -399,7 +399,7 @@ export function MorePage() {
         </>
       ) : null}
 
-      <p className="pb-4 text-center text-xs text-slate-600">
+      <p className="pb-4 text-center text-xs text-faint">
         FINANZA · {queued.length} operación(es) locales en este dispositivo
       </p>
     </div>

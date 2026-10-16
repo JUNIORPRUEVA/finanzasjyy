@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { BrowserRouter } from 'react-router-dom';
 import App from './App';
 import { AuthProvider } from './store/auth';
+import { mirrorApiDataToLocalCache } from './lib/cache-mirror';
 import './index.css';
 
 /**
@@ -20,6 +21,19 @@ const queryClient = new QueryClient({
       gcTime: 10 * 60_000,
       refetchOnWindowFocus: true,
       refetchOnReconnect: true,
+      // SIN CONEXIÓN NO SE PAUSA NADA (`networkMode: 'always'`).
+      //
+      // Con el valor por defecto ('online'), React Query deja las peticiones «en
+      // espera» cuando el navegador está sin conexión: no las envía, no fallan y
+      // no avisan. El resultado era doble y grave:
+      //   · El panel se quedaba con el esqueleto de carga para siempre.
+      //   · Al registrar un gasto sin conexión, el botón se quedaba en
+      //     «Registrando…» indefinidamente y el movimiento NUNCA llegaba a la
+      //     cola del dispositivo.
+      // Con 'always' la petición se intenta y falla rápido (sin conexión), y
+      // entonces la aplicación hace lo que tiene previsto: guardar en el
+      // dispositivo y marcarlo como «sin confirmar».
+      networkMode: 'always',
       retry: (failureCount, error) => {
         if (!navigator.onLine) {
           return false;
@@ -31,10 +45,19 @@ const queryClient = new QueryClient({
       },
     },
     mutations: {
+      // Igual que arriba: sin conexión, la operación debe ejecutarse para poder
+      // guardarse en la cola local. Pausarla equivalía a perderla.
+      networkMode: 'always',
       retry: false,
     },
   },
 });
+
+/**
+ * Copia local de cuentas y categorías: es lo que permite registrar un movimiento
+ * sin conexión (ver `lib/cache-mirror.ts`).
+ */
+mirrorApiDataToLocalCache(queryClient);
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

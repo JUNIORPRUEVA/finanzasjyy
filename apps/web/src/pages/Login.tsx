@@ -1,10 +1,9 @@
 import { useEffect, useState } from 'react';
-import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { api, ApiError } from '../lib/api';
+import { ApiError, api } from '../lib/api';
 import { useAuth } from '../store/auth';
-import { Button, Notice } from '../components/ui';
+import { Button, Field, Notice, PasswordField } from '../components/ui';
+import { IconAlert, IconLock, IconWifiOff } from '../components/icons';
 
 const loginSchema = z.object({
   email: z.string().email('Escriba un correo electrónico válido'),
@@ -14,33 +13,44 @@ const loginSchema = z.object({
 const setupSchema = z.object({
   name: z.string().min(2, 'Escriba su nombre'),
   email: z.string().email('Escriba un correo electrónico válido'),
-  password: z.string().min(10, 'La contraseña debe tener al menos 10 caracteres e incluir un número'),
+  password: z.string().min(10, 'La contraseña debe tener al menos 10 caracteres'),
 });
 
-type LoginForm = z.infer<typeof loginSchema>;
-type SetupForm = z.infer<typeof setupSchema>;
+type LoginErrors = Partial<Record<'email' | 'password', string>>;
+type SetupErrors = Partial<Record<'name' | 'email' | 'password', string>>;
 
 /**
  * ACCESO Y PRIMER USO
  * -------------------
- * Si FINANZA todavía no tiene ningún usuario, la pantalla muestra el alta del
- * propietario (onboarding). A partir de ahí, el registro sólo lo puede hacer un
- * administrador desde Ajustes.
+ * Dos cosas que se piden y se dan con claridad:
+ *  · Entrar una sola vez: la sesión se guarda en el servidor y se renueva sola,
+ *    así que cerrar la aplicación no obliga a escribir la contraseña otra vez.
+ *  · Ningún engaño: si falta algo (por ejemplo, la recuperación de contraseña)
+ *    se dice aquí mismo, en vez de poner un botón que no hace nada.
+ *
+ * Si FINANZA todavía no tiene usuarios, esta pantalla crea el usuario
+ * propietario. A partir de ahí, los demás usuarios los da de alta un
+ * administrador desde «Ajustes».
  */
 export function LoginPage({
   sessionExpired,
+  sessionMessage,
   onDismissExpired,
 }: {
   sessionExpired: boolean;
+  sessionMessage: string | null;
   onDismissExpired: () => void;
 }) {
   const { login, registerFirstUser } = useAuth();
   const [requiresSetup, setRequiresSetup] = useState<boolean | null>(null);
   const [serverError, setServerError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
 
-  const loginForm = useForm<LoginForm>({ resolver: zodResolver(loginSchema) });
-  const setupForm = useForm<SetupForm>({ resolver: zodResolver(setupSchema) });
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [name, setName] = useState('');
+  const [errors, setErrors] = useState<LoginErrors & SetupErrors>({});
 
   useEffect(() => {
     api
@@ -49,142 +59,209 @@ export function LoginPage({
       .catch(() => setRequiresSetup(false));
   }, []);
 
-  const handleLogin = loginForm.handleSubmit(async (values) => {
-    setSubmitting(true);
+  useEffect(() => {
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
+
+  const handleLogin = async () => {
+    const parsed = loginSchema.safeParse({ email, password });
+    if (!parsed.success) {
+      const fieldErrors: LoginErrors = {};
+      for (const issue of parsed.error.issues) {
+        const key = issue.path[0] as 'email' | 'password';
+        fieldErrors[key] = issue.message;
+      }
+      setErrors(fieldErrors);
+      return;
+    }
+    setErrors({});
     setServerError(null);
+    setSubmitting(true);
     try {
-      await login(values.email, values.password);
+      await login(parsed.data.email.trim(), parsed.data.password);
     } catch (error) {
-      setServerError(error instanceof ApiError ? error.message : 'No se pudo iniciar sesión. Revise su conexión.');
+      // Un error de red NO es «credenciales incorrectas»: son problemas distintos
+      // y el usuario merece saber cuál de los dos tiene delante.
+      setServerError(
+        error instanceof ApiError
+          ? error.message
+          : 'No se pudo contactar con el servidor. Revise su conexión e inténtelo de nuevo.',
+      );
     } finally {
       setSubmitting(false);
     }
-  });
+  };
 
-  const handleSetup = setupForm.handleSubmit(async (values) => {
-    setSubmitting(true);
+  const handleSetup = async () => {
+    const parsed = setupSchema.safeParse({ name, email, password });
+    if (!parsed.success) {
+      const fieldErrors: SetupErrors = {};
+      for (const issue of parsed.error.issues) {
+        const key = issue.path[0] as 'name' | 'email' | 'password';
+        fieldErrors[key] = issue.message;
+      }
+      setErrors(fieldErrors);
+      return;
+    }
+    setErrors({});
     setServerError(null);
+    setSubmitting(true);
     try {
-      await registerFirstUser(values.name, values.email, values.password);
+      await registerFirstUser(parsed.data.name.trim(), parsed.data.email.trim(), parsed.data.password);
     } catch (error) {
       setServerError(error instanceof ApiError ? error.message : 'No se pudo crear el usuario.');
     } finally {
       setSubmitting(false);
     }
-  });
+  };
+
+  const isSetup = requiresSetup === true;
 
   return (
-    <div className="mx-auto flex min-h-screen w-full max-w-md flex-col justify-center px-5 py-10">
-      <div className="mb-8 text-center">
-        <h1 className="text-3xl font-bold text-slate-100">FINANZA</h1>
-        <p className="mt-1 text-sm text-slate-400">
-          Que ningún peso entre o salga sin quedar identificado.
-        </p>
-      </div>
-
-      {sessionExpired ? (
-        <div className="mb-4">
-          <Notice tone="warning" title="Su sesión caducó">
-            Por seguridad debe volver a identificarse. Los movimientos registrados sin conexión siguen guardados en
-            este dispositivo.
-            <button type="button" onClick={onDismissExpired} className="ml-2 underline">
-              Entendido
-            </button>
-          </Notice>
+    <div className="flex min-h-dvh flex-col justify-center px-5 pb-[calc(var(--safe-bottom)+1.5rem)] pt-[calc(var(--safe-top)+2rem)]">
+      <div className="mx-auto w-full max-w-sm">
+        {/* Marca */}
+        <div className="mb-7 text-center">
+          <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-brand text-white shadow-elevated">
+            <IconLock size={26} />
+          </div>
+          <h1 className="text-2xl font-bold tracking-tight text-ink">FINANZA</h1>
+          <p className="mt-1 text-sm text-muted">Tu dinero, bajo control.</p>
         </div>
-      ) : null}
 
-      {serverError ? (
-        <div className="mb-4">
-          <Notice tone="negative">{serverError}</Notice>
-        </div>
-      ) : null}
+        {!isOnline ? (
+          <div className="mb-4">
+            <Notice tone="warning" title="Sin conexión">
+              <span className="flex items-start gap-2">
+                <IconWifiOff size={16} className="mt-0.5 shrink-0" />
+                Para entrar hace falta conexión con el servidor. Sus movimientos pendientes siguen guardados en este
+                dispositivo y se enviarán cuando vuelva la conexión.
+              </span>
+            </Notice>
+          </div>
+        ) : null}
 
-      {requiresSetup === null ? (
-        <p className="text-center text-sm text-slate-400">Comprobando el estado del sistema…</p>
-      ) : requiresSetup ? (
-        <form onSubmit={handleSetup} className="space-y-4">
-          <Notice tone="neutral" title="Primer uso">
-            FINANZA no tiene usuarios todavía. Cree el usuario propietario; después podrá añadir más desde Ajustes.
-          </Notice>
+        {sessionExpired ? (
+          <div className="mb-4">
+            <Notice tone="warning" title="Su sesión terminó">
+              {sessionMessage ??
+                'Por seguridad debe volver a identificarse. Los movimientos registrados sin conexión siguen guardados en este dispositivo.'}
+              <button type="button" onClick={onDismissExpired} className="ml-1 underline">
+                Entendido
+              </button>
+            </Notice>
+          </div>
+        ) : null}
 
-          <label className="block">
-            <span className="mb-1 block text-sm text-slate-300">Nombre</span>
-            <input
-              {...setupForm.register('name')}
-              className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100 outline-none focus:border-emerald-500"
+        {serverError ? (
+          <div className="mb-4">
+            <Notice tone="negative" title="No se pudo entrar">
+              {serverError}
+            </Notice>
+          </div>
+        ) : null}
+
+        {requiresSetup === null ? (
+          <div className="space-y-3" aria-busy="true">
+            <div className="h-11 animate-pulse rounded-xl bg-surface-2" />
+            <div className="h-11 animate-pulse rounded-xl bg-surface-2" />
+            <div className="h-12 animate-pulse rounded-xl bg-surface-2" />
+          </div>
+        ) : isSetup ? (
+          <form
+            className="space-y-4"
+            onSubmit={(event) => {
+              event.preventDefault();
+              void handleSetup();
+            }}
+          >
+            <Notice tone="info" title="Primer uso">
+              FINANZA todavía no tiene usuarios. Cree el propietario: después podrá añadir más personas desde «Ajustes».
+            </Notice>
+
+            <Field
+              label="Nombre"
+              value={name}
+              onChange={setName}
+              autoComplete="name"
+              enterKeyHint="next"
+              error={errors.name}
             />
-            {setupForm.formState.errors.name ? (
-              <span className="text-xs text-rose-400">{setupForm.formState.errors.name.message}</span>
-            ) : null}
-          </label>
-
-          <label className="block">
-            <span className="mb-1 block text-sm text-slate-300">Correo electrónico</span>
-            <input
+            <Field
+              label="Correo electrónico"
+              value={email}
+              onChange={setEmail}
               type="email"
-              {...setupForm.register('email')}
-              className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100 outline-none focus:border-emerald-500"
-            />
-            {setupForm.formState.errors.email ? (
-              <span className="text-xs text-rose-400">{setupForm.formState.errors.email.message}</span>
-            ) : null}
-          </label>
-
-          <label className="block">
-            <span className="mb-1 block text-sm text-slate-300">Contraseña</span>
-            <input
-              type="password"
-              {...setupForm.register('password')}
-              className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100 outline-none focus:border-emerald-500"
-            />
-            {setupForm.formState.errors.password ? (
-              <span className="text-xs text-rose-400">{setupForm.formState.errors.password.message}</span>
-            ) : null}
-          </label>
-
-          <Button type="submit" disabled={submitting} className="w-full">
-            {submitting ? 'Creando…' : 'Crear usuario propietario'}
-          </Button>
-        </form>
-      ) : (
-        <form onSubmit={handleLogin} className="space-y-4">
-          <label className="block">
-            <span className="mb-1 block text-sm text-slate-300">Correo electrónico</span>
-            <input
-              type="email"
+              inputMode="email"
               autoComplete="username"
-              {...loginForm.register('email')}
-              className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100 outline-none focus:border-emerald-500"
+              enterKeyHint="next"
+              placeholder="usted@ejemplo.com"
+              error={errors.email}
             />
-            {loginForm.formState.errors.email ? (
-              <span className="text-xs text-rose-400">{loginForm.formState.errors.email.message}</span>
-            ) : null}
-          </label>
-
-          <label className="block">
-            <span className="mb-1 block text-sm text-slate-300">Contraseña</span>
-            <input
-              type="password"
-              autoComplete="current-password"
-              {...loginForm.register('password')}
-              className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100 outline-none focus:border-emerald-500"
+            <PasswordField
+              label="Contraseña"
+              value={password}
+              onChange={setPassword}
+              autoComplete="new-password"
+              hint="Mínimo 10 caracteres."
             />
-            {loginForm.formState.errors.password ? (
-              <span className="text-xs text-rose-400">{loginForm.formState.errors.password.message}</span>
-            ) : null}
-          </label>
+            {errors.password ? <p className="-mt-2 text-xs text-negative">{errors.password}</p> : null}
 
-          <Button type="submit" disabled={submitting} className="w-full">
-            {submitting ? 'Entrando…' : 'Entrar'}
-          </Button>
+            <Button type="submit" fullWidth size="lg" disabled={submitting || !isOnline}>
+              {submitting ? 'Creando su acceso…' : 'Crear usuario propietario'}
+            </Button>
+          </form>
+        ) : (
+          <form
+            className="space-y-4"
+            onSubmit={(event) => {
+              event.preventDefault();
+              void handleLogin();
+            }}
+          >
+            <Field
+              label="Correo electrónico"
+              value={email}
+              onChange={setEmail}
+              type="email"
+              inputMode="email"
+              autoComplete="username"
+              enterKeyHint="next"
+              placeholder="usted@ejemplo.com"
+              error={errors.email}
+            />
+            <PasswordField label="Contraseña" value={password} onChange={setPassword} autoComplete="current-password" />
+            {errors.password ? <p className="-mt-2 text-xs text-negative">{errors.password}</p> : null}
 
-          <p className="text-center text-xs text-slate-500">
-            Al entrar, este dispositivo queda autorizado para registrar movimientos sin conexión durante la ventana
-            configurada (24 h por defecto).
-          </p>
-        </form>
-      )}
+            <Button type="submit" fullWidth size="lg" disabled={submitting || !isOnline}>
+              {submitting ? 'Entrando…' : 'Entrar'}
+            </Button>
+
+            <p className="text-center text-xs leading-snug text-faint">
+              Este dispositivo quedará autorizado para registrar movimientos sin conexión durante la ventana configurada
+              (24 h por defecto). Cerrar la aplicación <strong>no</strong> cierra su sesión.
+            </p>
+
+            <div className="rounded-xl border border-border-soft bg-surface p-3">
+              <p className="flex items-start gap-2 text-xs leading-snug text-muted">
+                <IconAlert size={15} className="mt-0.5 shrink-0 text-warning" />
+                <span>
+                  <strong className="text-ink">Recuperación de contraseña: pendiente.</strong> Todavía no existe un
+                  mecanismo de recuperación automática. Si olvida la contraseña, hay que restablecerla desde la
+                  administración del sistema; por eso esta pantalla no ofrece un enlace que no llevaría a ningún sitio.
+                </span>
+              </p>
+            </div>
+          </form>
+        )}
+      </div>
     </div>
   );
 }

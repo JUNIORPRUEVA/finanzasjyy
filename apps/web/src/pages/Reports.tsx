@@ -107,25 +107,25 @@ export function ReportsPage() {
         <Select label="Informe" value={type} onChange={setType} options={REPORT_OPTIONS} placeholder="— Seleccione —" />
         <div className="grid grid-cols-2 gap-3">
           <label className="block">
-            <span className="mb-1 block text-sm text-slate-300">Desde</span>
+            <span className="mb-1 block text-sm text-ink">Desde</span>
             <input
               type="date"
               value={from}
               onChange={(event) => setFrom(event.target.value)}
-              className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100"
+              className="w-full rounded-lg border border-border-soft bg-surface-2 px-3 py-2 text-sm text-ink"
             />
           </label>
           <label className="block">
-            <span className="mb-1 block text-sm text-slate-300">Hasta</span>
+            <span className="mb-1 block text-sm text-ink">Hasta</span>
             <input
               type="date"
               value={to}
               onChange={(event) => setTo(event.target.value)}
-              className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100"
+              className="w-full rounded-lg border border-border-soft bg-surface-2 px-3 py-2 text-sm text-ink"
             />
           </label>
         </div>
-        <p className="text-xs text-slate-500">
+        <p className="text-xs text-faint">
           Si no indica fechas, cada informe usa su período natural (hoy, semana o mes en curso).
         </p>
       </Card>
@@ -187,7 +187,7 @@ export function ReportsPage() {
             <div className="-mx-4 overflow-x-auto px-4">
               <table className="min-w-full text-sm">
                 <thead>
-                  <tr className="border-b border-slate-800 text-left text-xs uppercase text-slate-400">
+                  <tr className="border-b border-border-soft text-left text-xs uppercase text-muted">
                     {reportQuery.data.columns.map((column) => (
                       <th key={column.key} className="whitespace-nowrap px-2 py-2">
                         {column.header}
@@ -197,14 +197,14 @@ export function ReportsPage() {
                 </thead>
                 <tbody>
                   {reportQuery.data.rows.map((row, index) => (
-                    <tr key={index} className="border-b border-slate-900">
+                    <tr key={index} className="border-b border-border-soft">
                       {reportQuery.data!.columns.map((column) => {
                         const value = row[column.key];
                         const isMoneyColumn = /amount|income|expense|result|balance|limit|spent|remaining|pending|difference|total|withdrawals|contributions|assets|liabilities|toPay|toCollect|inflows|outflows|net/i.test(
                           column.key,
                         );
                         return (
-                          <td key={column.key} className="whitespace-nowrap px-2 py-2 text-slate-200">
+                          <td key={column.key} className="whitespace-nowrap px-2 py-2 text-ink">
                             {value === null || value === undefined
                               ? '—'
                               : isMoneyColumn && String(value) !== ''
@@ -220,7 +220,7 @@ export function ReportsPage() {
             </div>
           )}
 
-          <p className="mt-3 text-xs text-slate-500">
+          <p className="mt-3 text-xs text-faint">
             Informe generado el {formatBusinessDate(reportQuery.data.generatedAt)}. Reproducible: los mismos datos
             producen el mismo informe. «PDF / Imprimir» abre el diálogo del navegador, desde donde se puede guardar
             como PDF con los mismos totales que ve aquí.

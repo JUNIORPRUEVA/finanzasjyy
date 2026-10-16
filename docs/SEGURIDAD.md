@@ -26,16 +26,37 @@ de tu máquina y no la guarda en ningún sitio.
 
 ## 3. Sesiones y tokens
 
-- **Token de acceso** de vida corta, enviado en la cabecera `Authorization: Bearer`.
+- **Token de acceso** de vida corta, enviado en la cabecera `Authorization: Bearer`. **Vive sólo en
+  memoria** en la PWA: no toca `localStorage` ni IndexedDB, así que un fallo de XSS no se lleva una
+  sesión.
 - **Token de refresco** rotado: al usarlo se emite uno nuevo y el anterior deja de valer.
   En la base de datos se guarda **sólo su hash** (`refreshTokenHash`), no el token.
+- El token de refresco viaja en una **cookie `HttpOnly`** (`finanza_rt`, con `Path=/api/v1/auth`):
+  `document.cookie` no puede leerla. Lleva `Secure` cuando hay HTTPS y `SameSite=Lax` por defecto
+  (configurable con `COOKIE_SAMESITE`).
+- **Antifalsificación (CSRF) por doble envío**: una cookie legible `finanza_csrf` y la misma marca en
+  la cabecera `X-CSRF-Token`. Sin coincidencia, la renovación se rechaza. Sólo se exige cuando el
+  token viene de la cookie, no cuando se envía en el cuerpo (clientes antiguos).
 - Cada sesión está ligada a un **dispositivo** (`X-Device-Id`), con IP y agente de usuario
   registrados, visibles y revocables uno a uno desde Ajustes → Seguridad.
+- **Una sesión robada se detecta:** si se presenta un token de refresco ya revocado, se cierran
+  **todas** las sesiones del usuario y queda registrado en la auditoría (`SESSION_REUSE_DETECTED`).
+- Caducidad por **inactividad** (`SESSION_IDLE_HOURS`, 168 h por defecto) y **duración máxima**
+  (`SESSION_MAX_HOURS`, 720 h): al superarlas, la sesión se revoca con su motivo.
 - Cambiar la contraseña **cierra las demás sesiones**.
 - La sesión guarda `offlineAllowedUntil`: hasta cuándo se permite registrar sin conexión.
+- **Fallar no es cerrar sesión.** Ni un 401 sin código, ni un 403, ni un 500, ni un 502/503, ni un
+  tiempo agotado, ni un corte de red cierran la sesión: sólo los códigos explícitos `SESSION_*`.
+  Si un mal minuto del servidor bastara para expulsar al usuario, la contraseña acabaría escrita en
+  sitios peores.
 
 **Los tokens no se guardan en IndexedDB.** La caché local de la PWA contiene operaciones pendientes y
-datos de lectura, pero nunca credenciales.
+datos de lectura (cuentas y categorías confirmadas por el servidor), pero nunca credenciales.
+
+**Límites de intentos:** 5 accesos por minuto y 60 renovaciones por minuto. Existen las variables de
+**proceso** `E2E_AUTH_LOGIN_LIMIT` y `E2E_AUTH_REFRESH_LIMIT` para las pruebas de navegador (que
+abren muchos navegadores seguidos). No son variables del archivo `.env`, de modo que la aplicación
+real siempre usa 5 y 60. Está explicado en `auth.controller.ts`.
 
 ---
 

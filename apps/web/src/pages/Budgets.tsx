@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, ApiError } from '../lib/api';
-import { Badge, Button, Card, EmptyState, Field, MoneyInput, Notice, SectionTitle, Select, Spinner } from '../components/ui';
+import { Badge, Button, Card, EmptyState, Field, MoneyInput, Notice, SectionTitle, Select, Sheet, Spinner } from '../components/ui';
 import { useAuth } from '../store/auth';
 import { formatMoney, todayBusinessDate } from '../lib/format';
 
@@ -94,6 +94,8 @@ export function BudgetsPage() {
 
   const [message, setMessage] = useState<{ tone: 'positive' | 'warning' | 'negative'; text: string } | null>(null);
   const [busy, setBusy] = useState(false);
+  const [allocationTarget, setAllocationTarget] = useState<{ budget: BudgetRow; category: CategoryRow } | null>(null);
+  const [allocationAmount, setAllocationAmount] = useState('');
 
   const [entityId, setEntityId] = useState('');
   const [name, setName] = useState('');
@@ -187,11 +189,11 @@ export function BudgetsPage() {
 
         <div className="space-y-3">
           {budgets.map((budget) => (
-            <div key={budget.id} className="rounded-lg border border-slate-800 p-3">
+            <div key={budget.id} className="rounded-lg border border-border-soft p-3">
               <div className="flex items-start justify-between gap-2">
                 <div>
-                  <p className="text-sm font-medium text-slate-100">{budget.name}</p>
-                  <p className="mt-0.5 text-xs text-slate-400">
+                  <p className="text-sm font-medium text-ink">{budget.name}</p>
+                  <p className="mt-0.5 text-xs text-muted">
                     {budget.entity?.name ?? 'unidad'} · {budget.period} · desde {budget.startDate}
                   </p>
                 </div>
@@ -203,24 +205,24 @@ export function BudgetsPage() {
               <div className="mt-3 space-y-2">
                 {budget.allocations.map((allocation) => (
                   <div key={allocation.id}>
-                    <div className="flex items-center justify-between text-xs text-slate-300">
+                    <div className="flex items-center justify-between text-xs text-ink">
                       <span>{allocation.categoryName}</span>
                       <span>
                         {formatMoney(allocation.spentAmount, budget.currency)} / {formatMoney(allocation.limitAmount, budget.currency)} ·{' '}
                         {allocation.percentUsed}%
                       </span>
                     </div>
-                    <div className="mt-1 h-2 w-full overflow-hidden rounded-full bg-slate-800">
+                    <div className="mt-1 h-2 w-full overflow-hidden rounded-full bg-surface-3">
                       <div
                         className={`h-full ${
-                          allocation.health === 'EXCEEDED' ? 'bg-rose-500' : allocation.health === 'WARNING' ? 'bg-amber-400' : 'bg-emerald-500'
+                          allocation.health === 'EXCEEDED' ? 'bg-negative' : allocation.health === 'WARNING' ? 'bg-warning' : 'bg-brand'
                         }`}
                         style={{ width: `${Math.min(100, Number(allocation.percentUsed))}%` }}
                       />
                     </div>
                     <div className="mt-1 flex items-center gap-2">
                       <Badge tone={HEALTH_TONE[allocation.health]}>{HEALTH_LABEL[allocation.health]}</Badge>
-                      <span className="text-xs text-slate-500">Queda {formatMoney(allocation.remainingAmount, budget.currency)}</span>
+                      <span className="text-xs text-faint">Queda {formatMoney(allocation.remainingAmount, budget.currency)}</span>
                     </div>
                   </div>
                 ))}
@@ -231,7 +233,7 @@ export function BudgetsPage() {
                   type="text"
                   placeholder="Añadir categoría…"
                   list={`categories-${budget.id}`}
-                  className="w-40 rounded-lg border border-slate-700 bg-slate-950 px-2 py-1 text-xs text-slate-100"
+                  className="w-40 rounded-lg border border-border-soft bg-surface-2 px-2 py-1 text-xs text-ink"
                   onKeyDown={(event) => {
                     if (event.key !== 'Enter') {
                       return;
@@ -241,11 +243,12 @@ export function BudgetsPage() {
                     if (!selected) {
                       return;
                     }
-                    const limit = window.prompt(`Límite mensual para ${selected.name} (importe)`);
-                    if (limit) {
-                      void upsertAllocation(budget, selected.id, limit);
-                      target.value = '';
-                    }
+                    // Se pide el límite con la hoja de la aplicación, no con el
+                    // cuadro del navegador: así el campo es numérico, se ve el
+                    // importe formateado y puedo cancelar sin perder lo escrito.
+                    setAllocationTarget({ budget, category: selected });
+                    setAllocationAmount('');
+                    target.value = '';
                   }}
                 />
                 <datalist id={`categories-${budget.id}`}>
@@ -298,16 +301,54 @@ export function BudgetsPage() {
           </Button>
         </div>
 
-        <p className="text-xs text-slate-400">Total presupuestado: {formatMoney(totalPlanned.toFixed(2), currency)}</p>
+        <p className="text-xs text-muted">Total presupuestado: {formatMoney(totalPlanned.toFixed(2), currency)}</p>
 
         <Button disabled={!canCreate || busy} onClick={() => void create()}>
           {busy ? 'Guardando…' : 'Crear presupuesto'}
         </Button>
       </Card>
 
-      <p className="pb-4 text-center text-xs text-slate-600">
+      <p className="pb-4 text-center text-xs text-faint">
         Superar un presupuesto no impide registrar el gasto: se avisa y se muestra en rojo, porque el gasto ya ocurrió.
       </p>
+
+      {/* Límite por categoría: hoja inferior con campo de importe de verdad. */}
+      <Sheet
+        open={allocationTarget !== null}
+        onClose={() => setAllocationTarget(null)}
+        title={allocationTarget ? `Límite para «${allocationTarget.category.name}»` : ''}
+      >
+        <div className="space-y-3 pb-3">
+          <MoneyInput
+            label="Límite del período"
+            value={allocationAmount}
+            onChange={setAllocationAmount}
+            autoFocus
+            size="md"
+          />
+          <p className="text-xs leading-snug text-muted">
+            Se aplica al presupuesto «{allocationTarget?.budget.name}». Si ya existía un límite para esta categoría, se
+            reemplaza.
+          </p>
+          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+            <Button variant="secondary" onClick={() => setAllocationTarget(null)}>
+              Cancelar
+            </Button>
+            <Button
+              disabled={busy || Number(allocationAmount) <= 0}
+              onClick={() => {
+                if (!allocationTarget) {
+                  return;
+                }
+                void upsertAllocation(allocationTarget.budget, allocationTarget.category.id, allocationAmount);
+                setAllocationTarget(null);
+              }}
+            >
+              Guardar límite
+            </Button>
+          </div>
+        </div>
+      </Sheet>
     </div>
   );
 }

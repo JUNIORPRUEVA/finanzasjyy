@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, ApiError } from '../lib/api';
-import { Badge, Button, Card, EmptyState, Field, MoneyInput, Notice, SectionTitle, Select, Spinner } from '../components/ui';
+import { Badge, Button, Card, ConfirmDialog, EmptyState, Field, MoneyInput, Notice, SectionTitle, Select, Spinner } from '../components/ui';
 import { useAuth } from '../store/auth';
 import { formatMoney } from '../lib/format';
 
@@ -163,6 +163,7 @@ export function SetupPage() {
   const [saving, setSaving] = useState(false);
   const [result, setResult] = useState<OrganizeResult | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [confirmReset, setConfirmReset] = useState(false);
 
   // Recupera el borrador guardado: se puede dejar el asistente a medias.
   useEffect(() => {
@@ -228,23 +229,23 @@ export function SetupPage() {
           <SectionTitle title="Qué ha quedado registrado" hint={`Fecha de corte: ${result.asOfDate}`} />
           <div className="space-y-3">
             {result.perEntity.map((row) => (
-              <div key={row.entityId} className="rounded-lg border border-slate-800 p-3">
-                <p className="font-medium text-slate-200">{row.entityName ?? 'Unidad'}</p>
+              <div key={row.entityId} className="rounded-lg border border-border-soft p-3">
+                <p className="font-medium text-ink">{row.entityName ?? 'Unidad'}</p>
                 <div className="mt-2 grid grid-cols-2 gap-2 text-sm sm:grid-cols-3">
                   <div>
-                    <p className="text-xs text-slate-400">Dinero declarado</p>
-                    <p className="text-emerald-300">{formatMoney(row.cash, currency)}</p>
+                    <p className="text-xs text-muted">Dinero declarado</p>
+                    <p className="text-positive">{formatMoney(row.cash, currency)}</p>
                   </div>
                   <div>
-                    <p className="text-xs text-slate-400">Deudas</p>
-                    <p className="text-rose-300">{formatMoney(row.debts, currency)}</p>
+                    <p className="text-xs text-muted">Deudas</p>
+                    <p className="text-negative">{formatMoney(row.debts, currency)}</p>
                   </div>
                   <div>
-                    <p className="text-xs text-slate-400">Patrimonio neto</p>
-                    <p className="text-slate-100">{formatMoney(row.equity, currency)}</p>
+                    <p className="text-xs text-muted">Patrimonio neto</p>
+                    <p className="text-ink">{formatMoney(row.equity, currency)}</p>
                   </div>
                 </div>
-                <p className="mt-2 text-xs text-slate-500">
+                <p className="mt-2 text-xs text-faint">
                   Asiento nº {row.entrySequence} · debe {formatMoney(row.debits, currency)} = haber{' '}
                   {formatMoney(row.credits, currency)}
                 </p>
@@ -355,8 +356,8 @@ export function SetupPage() {
               onClick={() => setStep(index)}
               className={`rounded-full border px-2 py-1 ${
                 index === step
-                  ? 'border-emerald-500 text-emerald-300'
-                  : 'border-slate-700 text-slate-400 hover:border-slate-500'
+                  ? 'border-positive/50 text-positive'
+                  : 'border-border-soft text-muted hover:border-border-soft'
               }`}
             >
               {index + 1}. {label}
@@ -364,7 +365,7 @@ export function SetupPage() {
           ))}
         </div>
         {statusQuery.data ? (
-          <p className="mt-3 text-xs text-slate-400">
+          <p className="mt-3 text-xs text-muted">
             Falta por registrar: {statusQuery.data.pending.length === 0 ? 'nada' : statusQuery.data.pending.join(' · ')}
           </p>
         ) : null}
@@ -394,12 +395,12 @@ export function SetupPage() {
           ) : null}
 
           {draft.accounts.map((row, index) => (
-            <div key={`account-${index}`} className="space-y-2 rounded-lg border border-slate-800 p-3">
+            <div key={`account-${index}`} className="space-y-2 rounded-lg border border-border-soft p-3">
               <div className="flex items-center justify-between">
                 <Badge tone="neutral">{entities.find((entity) => entity.id === row.entityId)?.name ?? 'Unidad'}</Badge>
                 <button
                   type="button"
-                  className="text-xs text-rose-300 underline"
+                  className="text-xs text-negative underline"
                   onClick={() => setDraft({ ...draft, accounts: draft.accounts.filter((_, position) => position !== index) })}
                 >
                   Quitar
@@ -437,7 +438,7 @@ export function SetupPage() {
             </div>
           ))}
 
-          <p className="text-xs text-slate-500">
+          <p className="text-xs text-faint">
             Las tarjetas de crédito se registran como DEUDA (pasivo), nunca como dinero disponible.
           </p>
         </Card>
@@ -479,12 +480,12 @@ export function SetupPage() {
           ) : null}
 
           {draft.loans.map((row, index) => (
-            <div key={`loan-${index}`} className="space-y-2 rounded-lg border border-slate-800 p-3">
+            <div key={`loan-${index}`} className="space-y-2 rounded-lg border border-border-soft p-3">
               <div className="flex items-center justify-between">
                 <Badge tone="neutral">{entities.find((entity) => entity.id === row.entityId)?.name ?? 'Unidad'}</Badge>
                 <button
                   type="button"
-                  className="text-xs text-rose-300 underline"
+                  className="text-xs text-negative underline"
                   onClick={() => setDraft({ ...draft, loans: draft.loans.filter((_, position) => position !== index) })}
                 >
                   Quitar
@@ -574,12 +575,12 @@ export function SetupPage() {
               placeholder="— Elija la unidad —"
             />
             {draft.receivables.map((row, index) => (
-              <div key={`receivable-${index}`} className="space-y-2 rounded-lg border border-slate-800 p-3">
+              <div key={`receivable-${index}`} className="space-y-2 rounded-lg border border-border-soft p-3">
                 <div className="flex items-center justify-between">
                   <Badge tone="neutral">{entities.find((entity) => entity.id === row.entityId)?.name ?? 'Unidad'}</Badge>
                   <button
                     type="button"
-                    className="text-xs text-rose-300 underline"
+                    className="text-xs text-negative underline"
                     onClick={() => setDraft({ ...draft, receivables: draft.receivables.filter((_, position) => position !== index) })}
                   >
                     Quitar
@@ -633,12 +634,12 @@ export function SetupPage() {
               placeholder="— Elija la unidad —"
             />
             {draft.payables.map((row, index) => (
-              <div key={`payable-${index}`} className="space-y-2 rounded-lg border border-slate-800 p-3">
+              <div key={`payable-${index}`} className="space-y-2 rounded-lg border border-border-soft p-3">
                 <div className="flex items-center justify-between">
                   <Badge tone="neutral">{entities.find((entity) => entity.id === row.entityId)?.name ?? 'Unidad'}</Badge>
                   <button
                     type="button"
-                    className="text-xs text-rose-300 underline"
+                    className="text-xs text-negative underline"
                     onClick={() => setDraft({ ...draft, payables: draft.payables.filter((_, position) => position !== index) })}
                   >
                     Quitar
@@ -701,12 +702,12 @@ export function SetupPage() {
             <EmptyState title="Sin compromisos registrados" hint="Los avisos de vencimiento se calculan con lo que añada aquí." />
           ) : null}
           {draft.recurrings.map((row, index) => (
-            <div key={`recurring-${index}`} className="space-y-2 rounded-lg border border-slate-800 p-3">
+            <div key={`recurring-${index}`} className="space-y-2 rounded-lg border border-border-soft p-3">
               <div className="flex items-center justify-between">
                 <Badge tone="neutral">{entities.find((entity) => entity.id === row.entityId)?.name ?? 'Unidad'}</Badge>
                 <button
                   type="button"
-                  className="text-xs text-rose-300 underline"
+                  className="text-xs text-negative underline"
                   onClick={() => setDraft({ ...draft, recurrings: draft.recurrings.filter((_, position) => position !== index) })}
                 >
                   Quitar
@@ -768,27 +769,27 @@ export function SetupPage() {
               hint="La fecha en la que el dinero y las deudas son como los declara aquí."
             />
             <div className="grid grid-cols-2 gap-3">
-              <div className="rounded-lg border border-slate-800 p-3">
-                <p className="text-xs uppercase text-slate-400">Dinero declarado</p>
-                <p className="text-lg text-emerald-300">{formatMoney(totales.cash.toFixed(2), currency)}</p>
+              <div className="rounded-lg border border-border-soft p-3">
+                <p className="text-xs uppercase text-muted">Dinero declarado</p>
+                <p className="text-lg text-positive">{formatMoney(totales.cash.toFixed(2), currency)}</p>
               </div>
-              <div className="rounded-lg border border-slate-800 p-3">
-                <p className="text-xs uppercase text-slate-400">Deudas</p>
-                <p className="text-lg text-rose-300">{formatMoney(totales.debts.toFixed(2), currency)}</p>
+              <div className="rounded-lg border border-border-soft p-3">
+                <p className="text-xs uppercase text-muted">Deudas</p>
+                <p className="text-lg text-negative">{formatMoney(totales.debts.toFixed(2), currency)}</p>
               </div>
-              <div className="rounded-lg border border-slate-800 p-3">
-                <p className="text-xs uppercase text-slate-400">Patrimonio neto</p>
-                <p className="text-lg text-slate-100">
+              <div className="rounded-lg border border-border-soft p-3">
+                <p className="text-xs uppercase text-muted">Patrimonio neto</p>
+                <p className="text-lg text-ink">
                   {formatMoney((totales.cash - totales.debts).toFixed(2), currency)}
                 </p>
               </div>
-              <div className="rounded-lg border border-slate-800 p-3">
-                <p className="text-xs uppercase text-slate-400">Compromisos al mes</p>
-                <p className="text-lg text-amber-200">{formatMoney(totales.commit.toFixed(2), currency)}</p>
+              <div className="rounded-lg border border-border-soft p-3">
+                <p className="text-xs uppercase text-muted">Compromisos al mes</p>
+                <p className="text-lg text-warning">{formatMoney(totales.commit.toFixed(2), currency)}</p>
               </div>
             </div>
 
-            <div className="space-y-1 text-sm text-slate-300">
+            <div className="space-y-1 text-sm text-ink">
               <p>· Cuentas: {draft.accounts.length}</p>
               <p>· Préstamos y deudas: {draft.loans.length}</p>
               <p>· Por cobrar: {draft.receivables.length}</p>
@@ -801,7 +802,7 @@ export function SetupPage() {
               declarados no se registran como ingresos del mes.
             </Notice>
 
-            <label className="flex items-start gap-2 text-sm text-slate-200">
+            <label className="flex items-start gap-2 text-sm text-ink">
               <input
                 type="checkbox"
                 checked={confirmed}
@@ -831,18 +832,12 @@ export function SetupPage() {
             </Button>
             <Button
               variant="ghost"
-              onClick={() => {
-                if (window.confirm('¿Borrar todo lo escrito en el asistente?')) {
-                  localStorage.removeItem(STORAGE_KEY);
-                  setDraft(emptyDraft(statusQuery.data?.businessDate ?? draft.asOfDate));
-                  setStep(0);
-                }
-              }}
+              onClick={() => setConfirmReset(true)}
             >
               Empezar de cero
             </Button>
           </div>
-          <p className="text-xs text-slate-500">
+          <p className="text-xs text-faint">
             El progreso se guarda en este dispositivo: puede cerrar y continuar después.
           </p>
         </div>
@@ -862,6 +857,21 @@ export function SetupPage() {
           Siguiente
         </Button>
       </div>
+
+      <ConfirmDialog
+        open={confirmReset}
+        tone="danger"
+        title="¿Empezar de cero?"
+        confirmLabel="Borrar lo escrito"
+        message="Se borrará lo que ha ido escribiendo en el asistente en este dispositivo. Nada de lo ya guardado en el servidor se toca."
+        onCancel={() => setConfirmReset(false)}
+        onConfirm={() => {
+          setConfirmReset(false);
+          localStorage.removeItem(STORAGE_KEY);
+          setDraft(emptyDraft(statusQuery.data?.businessDate ?? draft?.asOfDate));
+          setStep(0);
+        }}
+      />
     </div>
   );
 }

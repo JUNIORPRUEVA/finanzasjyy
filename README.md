@@ -58,15 +58,24 @@ Ejecuta, sin preguntar nada:
 | --------------------- | ------------------ | ------------------ |
 | Tipos (`tsc`)         | ✅                 | ✅                 |
 | Lint (ESLint)         | ✅ 0 errores       | ✅ 0 errores       |
-| Pruebas               | 82 unitarias + 89 e2e | 33                |
+| Pruebas               | 82 unitarias + 89 e2e | 54 (formato, sin conexión, sincronización y **sesión**) |
 | Compilación producción | ✅ `nest build`   | ✅ `vite build` + service worker |
 
-**204 pruebas automatizadas** en total. De ellas, **28 defienden las reglas del dinero**
+**225 pruebas automatizadas** de aplicación, más **123 pruebas de navegador** (Playwright) en cinco
+tamaños de móvil y escritorio. De ellas, **28 defienden las reglas del dinero**
 (`apps/api/test/integridad-financiera.e2e-spec.ts`) y 4 recorren el ciclo completo de 24 h sin
 conexión (`apps/web/src/lib/offline.test.ts`).
 
 Las pruebas de extremo a extremo **no escriben en la base de datos de trabajo**: se ejecutan contra
 `finanza_test`, que el propio script prepara. Ver `docs/UAT.md`.
+
+Las pruebas de navegador levantan su propia API (3310) y su propia PWA (5280) contra `finanza_test`,
+con capturas de pantalla en `docs/capturas/`. Ver `docs/INFORME-MOVIL-Y-SESION.md`.
+
+```powershell
+.\scripts\e2e-web.ps1                                  # navegador: todas las pantallas y tamaños
+.\scripts\e2e-web.ps1 -Project android-390x844 -Grep sesi   # sólo la sesión
+```
 
 ### Scripts
 
@@ -78,6 +87,7 @@ Las pruebas de extremo a extremo **no escriben en la base de datos de trabajo**:
 | `scripts\verify.ps1` | Verificación completa de las dos aplicaciones |
 | `scripts\generate-vapid.ps1` | Genera las claves de las notificaciones push |
 | `scripts\create-test-db.ps1` | Prepara `finanza_test` (aislada): migra y siembra |
+| `scripts\e2e-web.ps1` | Pruebas de navegador (Playwright) con capturas de pantalla |
 | `scripts\reset-dev-db.ps1` | Deja limpia la base de trabajo (pide escribir `LIMPIAR`) |
 | `scripts\backup-db.ps1` | Copia de seguridad comprimida |
 | `scripts\restore-test.ps1` | Restaura en una base aparte y comprueba que los asientos cuadran |
@@ -94,6 +104,7 @@ Las pruebas de extremo a extremo **no escriben en la base de datos de trabajo**:
 | [docs/FUNCIONALIDADES.md](docs/FUNCIONALIDADES.md)           | Qué está hecho, qué no y qué falta                                |
 | [docs/SEGURIDAD.md](docs/SEGURIDAD.md)                       | Contraseñas, sesiones, aislamiento entre unidades y datos         |
 | [docs/UAT.md](docs/UAT.md)                                   | Pruebas de aceptación: 28 casos con su resultado                  |
+| [docs/INFORME-MOVIL-Y-SESION.md](docs/INFORME-MOVIL-Y-SESION.md) | Diseño móvil, sesión persistente y qué NO se ha probado       |
 | [docs/DESPLIEGUE.md](docs/DESPLIEGUE.md)                     | Docker, copias de seguridad, restauración y despliegue            |
 
 ---

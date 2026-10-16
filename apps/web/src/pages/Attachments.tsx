@@ -1,7 +1,7 @@
 import { useMemo, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, ApiError } from '../lib/api';
-import { Badge, Card, EmptyState, Notice, SectionTitle, Select, Spinner } from '../components/ui';
+import { Badge, Card, ConfirmDialog, EmptyState, Notice, SectionTitle, Select, Spinner } from '../components/ui';
 import { useAuth } from '../store/auth';
 import { formatDateTime } from '../lib/format';
 
@@ -56,6 +56,9 @@ export function AttachmentsPage() {
   const [entityId, setEntityId] = useState(entities[0]?.id ?? '');
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<{ tone: 'positive' | 'warning' | 'negative'; text: string } | null>(null);
+  // Se pregunta con el diálogo propio de la aplicación (el del navegador es
+  // bloqueante, no se puede leer cómodo en un teléfono y no se ve el archivo).
+  const [pendingRemoval, setPendingRemoval] = useState<AttachmentRow | null>(null);
 
   const listQuery = useQuery<unknown>({ queryKey: ['attachments'], queryFn: () => api.get('/attachments') });
   const attachments = useMemo(() => asArray<AttachmentRow>(listQuery.data), [listQuery.data]);
@@ -119,9 +122,6 @@ export function AttachmentsPage() {
   };
 
   const remove = async (attachment: AttachmentRow) => {
-    if (!window.confirm(`¿Desvincular «${attachment.filename}»? El archivo se conserva para auditoría.`)) {
-      return;
-    }
     setBusy(true);
     try {
       await api.delete(`/attachments/${attachment.id}`);
@@ -162,9 +162,9 @@ export function AttachmentsPage() {
               void upload(file);
             }
           }}
-          className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-300"
+          className="w-full rounded-lg border border-border-soft bg-surface-2 px-3 py-2 text-sm text-ink"
         />
-        <p className="text-xs text-slate-500">
+        <p className="text-xs text-faint">
           Imágenes o PDF, hasta {MAX_MB} MB. En el móvil se abre la cámara directamente. Los archivos no se guardan en
           ninguna carpeta pública: se descargan sólo desde aquí y sólo con permiso sobre la unidad.
         </p>
@@ -182,10 +182,10 @@ export function AttachmentsPage() {
         ) : null}
         <div className="space-y-2">
           {attachments.map((attachment) => (
-            <div key={attachment.id} className="flex items-start justify-between gap-2 rounded-lg border border-slate-800 p-3">
+            <div key={attachment.id} className="flex items-start justify-between gap-2 rounded-lg border border-border-soft p-3">
               <div className="min-w-0">
-                <p className="truncate text-sm text-slate-100">{attachment.filename}</p>
-                <p className="mt-0.5 text-xs text-slate-400">
+                <p className="truncate text-sm text-ink">{attachment.filename}</p>
+                <p className="mt-0.5 text-xs text-muted">
                   {formatSize(attachment.sizeBytes)} · {formatDateTime(attachment.createdAt)}
                 </p>
                 <div className="mt-1 flex flex-wrap gap-2">
@@ -194,10 +194,10 @@ export function AttachmentsPage() {
                 </div>
               </div>
               <div className="flex shrink-0 flex-col gap-1">
-                <button type="button" className="text-xs text-emerald-300 underline" onClick={() => void download(attachment)}>
+                <button type="button" className="text-xs text-positive underline" onClick={() => void download(attachment)}>
                   Descargar
                 </button>
-                <button type="button" className="text-xs text-rose-300 underline" onClick={() => void remove(attachment)}>
+                <button type="button" className="text-xs text-negative underline" onClick={() => setPendingRemoval(attachment)}>
                   Desvincular
                 </button>
               </div>
@@ -206,9 +206,33 @@ export function AttachmentsPage() {
         </div>
       </Card>
 
-      <p className="pb-4 text-center text-xs text-slate-600">
+      <p className="pb-4 text-center text-xs text-faint">
         Nada se borra de verdad: al desvincular, el archivo se conserva para poder auditar meses después.
       </p>
+
+      <ConfirmDialog
+        open={pendingRemoval !== null}
+        title="¿Desvincular el documento?"
+        tone="danger"
+        confirmLabel="Sí, desvincular"
+        message={
+          <>
+            <p className="font-medium text-ink">{pendingRemoval?.filename}</p>
+            <p className="mt-1">
+              Dejará de aparecer en la lista, pero <strong>el archivo se conserva para auditoría</strong>. Esto queda
+              registrado en el historial.
+            </p>
+          </>
+        }
+        onCancel={() => setPendingRemoval(null)}
+        onConfirm={() => {
+          const target = pendingRemoval;
+          setPendingRemoval(null);
+          if (target) {
+            void remove(target);
+          }
+        }}
+      />
     </div>
   );
 }

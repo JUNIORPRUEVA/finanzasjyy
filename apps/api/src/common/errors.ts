@@ -25,9 +25,17 @@ export class ValidationError extends DomainError {
   }
 }
 
+/**
+ * Falta autenticación o la sesión ya no sirve (401).
+ *
+ * `code` permite al cliente distinguir «la sesión se ha terminado de verdad»
+ * (SESSION_EXPIRED, SESSION_REVOKED, SESSION_INVALID) de «no he podido
+ * comprobarlo ahora» (un 503 o un corte de red). Esa distinción es la que evita
+ * cerrar sesión al usuario por un fallo temporal de internet.
+ */
 export class UnauthorizedError extends DomainError {
-  constructor(message = 'Se requiere autenticación') {
-    super(message, 'UNAUTHORIZED', 401);
+  constructor(message = 'Se requiere autenticación', code = 'UNAUTHORIZED') {
+    super(message, code, 401);
   }
 }
 

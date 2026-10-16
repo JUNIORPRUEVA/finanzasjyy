@@ -200,7 +200,7 @@ export function TransfersPage() {
             />
 
             {fromAccount ? (
-              <p className="text-xs text-slate-400">
+              <p className="text-xs text-muted">
                 Saldo actual: {formatMoney(fromAccount.balance, fromAccount.currency)}
                 {fromAccount.isCreditCard ? ' (deuda de la tarjeta)' : ''}
               </p>
@@ -267,19 +267,19 @@ export function TransfersPage() {
               transfer.fromAccount && transfer.toAccount && transfer.fromAccount.entityId !== transfer.toAccount.entityId,
             );
             return (
-              <div key={transfer.id} className="rounded-lg border border-slate-800 p-3">
+              <div key={transfer.id} className="rounded-lg border border-border-soft p-3">
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
-                    <p className="truncate text-sm text-slate-200">{transfer.description}</p>
-                    <p className="mt-0.5 text-xs text-slate-400">
+                    <p className="truncate text-sm text-ink">{transfer.description}</p>
+                    <p className="mt-0.5 text-xs text-muted">
                       {transfer.fromAccount?.name ?? 'origen'} → {transfer.toAccount?.name ?? 'destino'}
                     </p>
                     <div className="mt-2 flex flex-wrap items-center gap-2">
-                      <span className="text-xs text-slate-500">{formatBusinessDate(transfer.businessDate)}</span>
+                      <span className="text-xs text-faint">{formatBusinessDate(transfer.businessDate)}</span>
                       {crossesEntities ? <Badge tone="neutral">entre negocios</Badge> : null}
                     </div>
                   </div>
-                  <span className="shrink-0 text-sm text-slate-100">{formatMoney(transfer.amount, transfer.currency)}</span>
+                  <span className="shrink-0 text-sm text-ink">{formatMoney(transfer.amount, transfer.currency)}</span>
                 </div>
               </div>
             );
@@ -287,7 +287,7 @@ export function TransfersPage() {
         </div>
       </Card>
 
-      <p className="pb-4 text-center text-xs text-slate-600">
+      <p className="pb-4 text-center text-xs text-faint">
         Un traspaso nunca aparece como ingreso ni como gasto: sólo cambia el dinero de sitio.
       </p>
     </div>

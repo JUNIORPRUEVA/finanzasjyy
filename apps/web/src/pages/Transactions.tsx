@@ -115,8 +115,8 @@ export function TransactionsPage() {
               }}
               className={`rounded-full border px-3 py-1 text-xs ${
                 kindFilter === option.value
-                  ? 'border-emerald-500 bg-emerald-500/20 text-emerald-200'
-                  : 'border-slate-700 text-slate-400'
+                  ? 'border-positive/50 bg-positive/20 text-positive'
+                  : 'border-border-soft text-muted'
               }`}
             >
               {option.label}
@@ -129,7 +129,7 @@ export function TransactionsPage() {
               setTo(todayBusinessDate());
               setPage(1);
             }}
-            className="rounded-full border border-slate-700 px-3 py-1 text-xs text-slate-400"
+            className="rounded-full border border-border-soft px-3 py-1 text-xs text-muted"
           >
             Hoy
           </button>
@@ -148,7 +148,7 @@ export function TransactionsPage() {
             title={`${listQuery.data.meta.total} movimiento(s)`}
             hint="Los importes y saldos vienen del libro contable del servidor"
           />
-          <div className="divide-y divide-slate-800">
+          <div className="divide-y divide-border-soft">
             {listQuery.data.data.map((row) => (
               <div key={row.id} className="py-2">
                 <button
@@ -157,8 +157,8 @@ export function TransactionsPage() {
                   onClick={() => setExpanded(expanded === row.id ? null : row.id)}
                 >
                   <div className="min-w-0">
-                    <p className="truncate text-sm font-medium text-slate-200">{row.description}</p>
-                    <p className="truncate text-xs text-slate-500">
+                    <p className="truncate text-sm font-medium text-ink">{row.description}</p>
+                    <p className="truncate text-xs text-faint">
                       {formatBusinessDate(row.businessDate)} · {txnKindLabel(row.kind)}
                       {row.category ? ` · ${row.category.name}` : ''}
                       {row.account ? ` · ${row.account.name}` : ''}
@@ -175,15 +175,15 @@ export function TransactionsPage() {
                 </button>
 
                 {expanded === row.id ? (
-                  <div className="mt-3 space-y-3 rounded-lg border border-slate-800 bg-slate-950/60 p-3">
-                    <dl className="grid grid-cols-2 gap-2 text-xs text-slate-400">
+                  <div className="mt-3 space-y-3 rounded-lg border border-border-soft bg-surface-2 p-3">
+                    <dl className="grid grid-cols-2 gap-2 text-xs text-muted">
                       <div>
                         <dt>Método</dt>
-                        <dd className="text-slate-200">{row.method ?? '—'}</dd>
+                        <dd className="text-ink">{row.method ?? '—'}</dd>
                       </div>
                       <div>
                         <dt>Referencia</dt>
-                        <dd className="text-slate-200">{row.reference ?? '—'}</dd>
+                        <dd className="text-ink">{row.reference ?? '—'}</dd>
                       </div>
                     </dl>
 
@@ -206,7 +206,7 @@ export function TransactionsPage() {
                         >
                           Anular movimiento
                         </Button>
-                        <p className="text-xs text-slate-500">
+                        <p className="text-xs text-faint">
                           Anular no borra: se genera un asiento de reverso y el movimiento queda marcado como anulado.
                         </p>
                       </div>
@@ -221,7 +221,7 @@ export function TransactionsPage() {
             <Button variant="secondary" disabled={page === 1} onClick={() => setPage((current) => Math.max(1, current - 1))}>
               Anterior
             </Button>
-            <span className="text-xs text-slate-400">Página {page}</span>
+            <span className="text-xs text-muted">Página {page}</span>
             <Button
               variant="secondary"
               disabled={!listQuery.data.meta.hasNext}

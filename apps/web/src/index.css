@@ -1,25 +1,153 @@
 @import 'tailwindcss';
 
 /**
- * Tema de FINANZA.
- * Prioridad: legibilidad y jerarquía clara. Colores semánticos consistentes:
- *   verde  = entra dinero / conciliado / al día
- *   rojo   = sale dinero / alerta / atrasado
- *   ámbar  = advertencia (presupuesto, pendiente)
- *   gris   = informativo / provisional
+ * SISTEMA DE DISEÑO DE FINANZA
+ * ============================
+ * Todo lo visual sale de aquí: colores, radios, sombras, tipografía, animaciones
+ * y áreas seguras. Las pantallas usan estos NOMBRES (bg-surface, text-muted,
+ * border-border-soft…) en lugar de colores sueltos, de modo que el modo claro y
+ * el oscuro funcionan sin tocar cada archivo.
+ *
+ * Criterios de una aplicación financiera en el móvil:
+ *  · Contraste alto: el dinero se lee de un vistazo.
+ *  · Cifras tabulares: los números no «bailan» al cambiar de fila.
+ *  · Superficies planas separadas por un borde suave, no por sombras fuertes.
+ *  · El color significa algo: verde entra, rojo sale, ámbar pendiente.
+ *  · Notch, isla dinámica y barra de gestos respetados (safe areas).
  */
-@theme {
-  --color-finanza-bg: #0b1220;
-  --color-finanza-surface: #111a2e;
-  --color-finanza-border: #1e293b;
-  --color-positive: #22c55e;
-  --color-negative: #f87171;
-  --color-warning: #fbbf24;
-  --font-sans: 'Segoe UI', system-ui, -apple-system, sans-serif;
-}
 
 :root {
+  /* Tema oscuro (por defecto) */
+  --bg: #0a0f1c;
+  --bg-elevated: #0f1626;
+  --surface: #131c2e;
+  --surface-2: #1a2438;
+  --surface-3: #223049;
+  --border-soft: #222f47;
+  --border-strong: #33415c;
+  --text: #eef2f9;
+  --text-muted: #a7b3c8;
+  --text-faint: #6f7d95;
+  --brand: #10b981;
+  --brand-strong: #059669;
+  --brand-soft: rgba(16, 185, 129, 0.14);
+  --positive: #34d399;
+  --negative: #fb7185;
+  --warning: #fbbf24;
+  --info: #60a5fa;
+  --shadow-card-value: 0 1px 2px rgba(0, 0, 0, 0.25);
+  --shadow-elevated-value: 0 10px 30px -12px rgba(0, 0, 0, 0.6);
+  --ring: rgba(16, 185, 129, 0.55);
+
+  /* Áreas seguras del dispositivo. */
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
+  /* Alto de la barra inferior, para no tapar contenido. */
+  --nav-height: 4.25rem;
+
   color-scheme: dark;
+}
+
+/* Tema claro: se activa con data-theme="light" en <html>. */
+html[data-theme='light'] {
+  --bg: #f4f6fb;
+  --bg-elevated: #ffffff;
+  --surface: #ffffff;
+  --surface-2: #f7f9fc;
+  --surface-3: #eef2f8;
+  --border-soft: #e2e8f0;
+  --border-strong: #cbd5e1;
+  --text: #0b1220;
+  --text-muted: #45536b;
+  --text-faint: #6b7a90;
+  --brand: #047857;
+  --brand-strong: #065f46;
+  --brand-soft: rgba(4, 120, 87, 0.1);
+  --positive: #047857;
+  --negative: #be123c;
+  --warning: #b45309;
+  --info: #1d4ed8;
+  --shadow-card-value: 0 1px 2px rgba(15, 23, 42, 0.06);
+  --shadow-elevated-value: 0 10px 30px -14px rgba(15, 23, 42, 0.25);
+  --ring: rgba(4, 120, 87, 0.45);
+
+  color-scheme: light;
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-bg-elevated: var(--bg-elevated);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-surface-3: var(--surface-3);
+  --color-border-soft: var(--border-soft);
+  --color-border-strong: var(--border-strong);
+  --color-ink: var(--text);
+  --color-muted: var(--text-muted);
+  --color-faint: var(--text-faint);
+  --color-brand: var(--brand);
+  --color-brand-strong: var(--brand-strong);
+  --color-brand-soft: var(--brand-soft);
+  --color-positive: var(--positive);
+  --color-negative: var(--negative);
+  --color-warning: var(--warning);
+  --color-info: var(--info);
+
+  --radius-card: 1rem;
+  --radius-sheet: 1.25rem;
+
+  --shadow-card: var(--shadow-card-value);
+  --shadow-elevated: var(--shadow-elevated-value);
+
+  --font-sans: 'Inter', 'Segoe UI', system-ui, -apple-system, 'Helvetica Neue', sans-serif;
+
+  --animate-fade-in: fade-in 0.18s ease-out both;
+  --animate-rise: rise 0.22s cubic-bezier(0.16, 1, 0.3, 1) both;
+  --animate-pop: pop 0.16s ease-out both;
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes pop {
+  from {
+    opacity: 0;
+    transform: scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* Respeta a quien pide menos movimiento en su sistema. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
 }
 
 html,
@@ -28,46 +156,80 @@ body,
   height: 100%;
 }
 
+html {
+  /* Evita el ajuste automático de tamaño de texto en iPhone. */
+  -webkit-text-size-adjust: 100%;
+}
+
 body {
   margin: 0;
+  background-color: var(--bg);
+  color: var(--text);
   font-family: var(--font-sans);
   -webkit-tap-highlight-color: transparent;
+  overscroll-behavior-y: none;
 }
 
-/* Modo claro: se activa con data-theme="light" en <html>. */
-html[data-theme='light'] {
-  color-scheme: light;
+/* Los campos NUNCA por debajo de 16px: si no, el móvil hace zoom al enfocar. */
+input,
+select,
+textarea {
+  font-size: 16px;
 }
 
-html[data-theme='light'] body {
-  background-color: #f1f5f9;
-  color: #0f172a;
+/* Sin selección accidental de texto al tocar botones. */
+button,
+[role='button'] {
+  -webkit-user-select: none;
+  user-select: none;
+  touch-action: manipulation;
 }
 
-/* Áreas de trabajo reutilizables. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-strong) transparent;
+}
+
+/* Tarjeta base del sistema. */
 @utility card {
-  border-radius: 0.75rem;
-  border: 1px solid var(--color-finanza-border);
-  background-color: var(--color-finanza-surface);
-  padding: 1rem;
+  border-radius: var(--radius-card);
+  border: 1px solid var(--border-soft);
+  background-color: var(--surface);
+  box-shadow: var(--shadow-card);
 }
 
+/* Cifras tabulares: el dinero no se desplaza al cambiar de fila. */
 @utility money {
   font-variant-numeric: tabular-nums;
   font-feature-settings: 'tnum';
   letter-spacing: -0.01em;
 }
 
+/* Espacio inferior para que la barra de navegación no tape el contenido. */
+@utility page-bottom-space {
+  padding-bottom: calc(var(--nav-height) + var(--safe-bottom) + 1.5rem);
+}
+
+/* Zona táctil mínima recomendada (44x44 px). */
+@utility touch-target {
+  min-height: 2.75rem;
+  min-width: 2.75rem;
+}
+
 /**
  * IMPRESIÓN Y PDF
  * ---------------
- * «PDF / Imprimir» en los informes usa el diálogo del navegador, que permite
- * guardar como PDF. Para que el papel sirva de algo: fondo blanco, texto negro,
- * sin navegación ni botones, y la tabla completa (sin scroll horizontal).
+ * «PDF / Imprimir» usa el diálogo del navegador. En papel: fondo blanco, texto
+ * negro, sin navegación ni botones, y la tabla completa (sin scroll horizontal).
  */
 @media print {
   :root {
     color-scheme: light;
+    --bg: #ffffff;
+    --surface: #ffffff;
+    --text: #000000;
+    --text-muted: #333333;
+    --border-soft: #94a3b8;
   }
 
   html,
@@ -76,10 +238,10 @@ html[data-theme='light'] body {
     color: #000000 !important;
   }
 
-  /* Fuera todo lo que no es el informe: barra superior, menú inferior y botones. */
   header,
   nav,
-  button {
+  button,
+  [data-print='hide'] {
     display: none !important;
   }
 
@@ -88,22 +250,6 @@ html[data-theme='light'] body {
     max-width: none !important;
   }
 
-  a[href]::after {
-    content: none !important;
-  }
-
-  /* Los contenedores oscuros pasan a papel blanco con líneas visibles. */
-  div,
-  table,
-  td,
-  th,
-  tr {
-    background: transparent !important;
-    color: #000000 !important;
-    border-color: #94a3b8 !important;
-  }
-
-  /* Las tablas largas no se cortan: se imprimen completas. */
   .overflow-x-auto {
     overflow: visible !important;
   }
@@ -111,16 +257,5 @@ html[data-theme='light'] body {
   table {
     width: 100% !important;
     font-size: 10pt;
-  }
-}
-
-/* Un número grande se lee mejor sin saltos de línea raros. */
-.money {
-  white-space: nowrap;
-}
-
-@media print {
-  .no-print {
-    display: none !important;
   }
 }

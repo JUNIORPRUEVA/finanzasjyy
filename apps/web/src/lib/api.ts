@@ -12,9 +12,25 @@
 
 const API_URL = (import.meta.env.VITE_API_URL as string | undefined) ?? '/api/v1';
 
-const ACCESS_TOKEN_KEY = 'finanza.accessToken';
-const REFRESH_TOKEN_KEY = 'finanza.refreshToken';
 const DEVICE_ID_KEY = 'finanza.deviceId';
+
+/**
+ * DÓNDE VIVE LA SESIÓN
+ * --------------------
+ * · El ACCESS token vive SÓLO EN MEMORIA. Si se recarga la página se pierde, y
+ *   se pide otro nuevo con la cookie (renovación silenciosa): el usuario no
+ *   vuelve a ver la pantalla de acceso.
+ * · El REFRESH token NO se guarda aquí: va en una cookie HttpOnly que JavaScript
+ *   no puede leer. Así un fallo de XSS no se lleva una sesión de 30 días.
+ * · Únicamente se guarda el identificador de dispositivo (no es un secreto).
+ */
+let accessTokenInMemory: string | null = null;
+
+/** Cookie legible con el token CSRF (doble envío). */
+function readCsrfCookie(): string | null {
+  const match = /(?:^|;\s*)finanza_csrf=([^;]+)/.exec(document.cookie);
+  return match ? decodeURIComponent(match[1]) : null;
+}
 
 export class ApiError extends Error {
   constructor(
@@ -31,6 +47,25 @@ export class ApiError extends Error {
   get isUserFixable(): boolean {
     return this.status === 400 || this.status === 409 || this.status === 422;
   }
+
+  /**
+   * ¿El servidor ha dicho CLARAMENTE que la sesión ya no sirve?
+   *
+   * Sólo estos códigos justifican volver a la pantalla de acceso. Un 401 sin
+   * código, un 403, un 500, un 502/503 o un fallo de red NO significan que el
+   * usuario haya cerrado sesión: significan que no se ha podido comprobar.
+   */
+  get isSessionFatal(): boolean {
+    return [
+      'SESSION_INVALID',
+      'SESSION_EXPIRED',
+      'SESSION_REVOKED',
+      'SESSION_MISSING',
+      'SESSION_REUSE_DETECTED',
+      'SESSION_IDLE_TIMEOUT',
+      'SESSION_MAX_LIFETIME',
+    ].includes(this.code);
+  }
 }
 
 /** No hay conexión (o el servidor no responde): la operación puede encolarse. */
@@ -38,6 +73,18 @@ export class OfflineError extends Error {
   constructor(message = 'Sin conexión con el servidor') {
     super(message);
     this.name = 'OfflineError';
+  }
+}
+
+/**
+ * El servidor no ha podido confirmar la sesión por un problema temporal
+ * (timeout, 502/503, red intermitente). NO es un cierre de sesión: se conserva el
+ * estado y se reintenta.
+ */
+export class SessionTemporarilyUnavailableError extends Error {
+  constructor(message = 'No se pudo comprobar la sesión con el servidor. Se reintentará.') {
+    super(message);
+    this.name = 'SessionTemporarilyUnavailableError';
   }
 }
 
@@ -51,20 +98,16 @@ export interface RequestOptions {
 
 export const tokenStore = {
   getAccessToken(): string | null {
-    return localStorage.getItem(ACCESS_TOKEN_KEY);
+    return accessTokenInMemory;
   },
-  getRefreshToken(): string | null {
-    return localStorage.getItem(REFRESH_TOKEN_KEY);
+  setAccessToken(accessToken: string | null): void {
+    accessTokenInMemory = accessToken;
   },
-  set(accessToken: string, refreshToken?: string): void {
-    localStorage.setItem(ACCESS_TOKEN_KEY, accessToken);
-    if (refreshToken) {
-      localStorage.setItem(REFRESH_TOKEN_KEY, refreshToken);
-    }
+  hasSession(): boolean {
+    return accessTokenInMemory !== null;
   },
   clear(): void {
-    localStorage.removeItem(ACCESS_TOKEN_KEY);
-    localStorage.removeItem(REFRESH_TOKEN_KEY);
+    accessTokenInMemory = null;
   },
   /**
    * Identificador del dispositivo: se guarda una vez y se envía en el login y
@@ -98,51 +141,178 @@ export function newOperationId(prefix: string): string {
   return `${prefix}_${Date.now().toString(36)}_${crypto.randomUUID().replace(/-/g, '').slice(0, 16)}`;
 }
 
-let refreshInFlight: Promise<boolean> | null = null;
-
-async function tryRefreshSession(): Promise<boolean> {
-  if (refreshInFlight) {
-    return refreshInFlight;
-  }
-
-  const refreshToken = tokenStore.getRefreshToken();
-  if (!refreshToken) {
-    return false;
-  }
-
-  refreshInFlight = (async () => {
-    try {
-      const response = await fetch(`${API_URL}/auth/refresh`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ refreshToken, ...deviceInfoPayload() }),
-      });
-
-      if (!response.ok) {
-        tokenStore.clear();
-        return false;
-      }
-
-      const data = (await response.json()) as { accessToken: string; refreshToken: string };
-      tokenStore.set(data.accessToken, data.refreshToken);
-      return true;
-    } catch {
-      // Sin conexión: no se borra la sesión, simplemente no se pudo renovar.
-      return false;
-    } finally {
-      refreshInFlight = null;
-    }
-  })();
-
-  return refreshInFlight;
-}
-
 function deviceInfoPayload(): Record<string, string> {
   return {
     deviceId: deviceInfo.deviceId(),
     deviceName: deviceInfo.deviceName(),
     platform: deviceInfo.platform(),
   };
+}
+
+/** Cabeceras comunes: identificación del dispositivo y, si toca, CSRF. */
+function baseHeaders(options: { csrf?: boolean; sessionMode?: boolean } = {}): Record<string, string> {
+  const headers: Record<string, string> = { 'X-Device-Id': deviceInfo.deviceId() };
+  if (options.sessionMode) {
+    // Pide al servidor que entregue la sesión por cookie HttpOnly.
+    headers['X-Session-Mode'] = 'cookie';
+  }
+  if (options.csrf) {
+    const csrf = readCsrfCookie();
+    if (csrf) {
+      headers['X-CSRF-Token'] = csrf;
+    }
+  }
+  return headers;
+}
+
+export type RefreshOutcome =
+  | { status: 'refreshed' }
+  | { status: 'no-session' }
+  | { status: 'temporary' }
+  | { status: 'session-fatal'; code: string; message: string };
+
+let refreshInFlight: Promise<RefreshOutcome> | null = null;
+
+/**
+ * Renueva la sesión. Varias peticiones simultáneas comparten UNA sola llamada
+ * (si no, la rotación del token invalidaría unas a otras).
+ *
+ * Nunca borra la sesión por un fallo temporal: sólo cuando el servidor dice
+ * explícitamente que la sesión ya no sirve.
+ */
+export async function refreshSession(): Promise<RefreshOutcome> {
+  if (refreshInFlight) {
+    return refreshInFlight;
+  }
+
+  refreshInFlight = (async (): Promise<RefreshOutcome> => {
+    let response: Response;
+    try {
+      response = await fetch(`${API_URL}/auth/refresh`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json', ...baseHeaders({ csrf: true, sessionMode: true }) },
+        body: JSON.stringify(deviceInfoPayload()),
+      });
+    } catch {
+      // Sin conexión: la sesión se conserva y se reintentará.
+      return { status: 'temporary' };
+    }
+
+    if (response.ok) {
+      const data = (await response.json()) as { accessToken: string };
+      tokenStore.setAccessToken(data.accessToken);
+      return { status: 'refreshed' };
+    }
+
+    if (response.status === 401 || response.status === 403) {
+      let code = 'SESSION_INVALID';
+      let message = 'La sesión ha terminado. Inicie sesión de nuevo.';
+      try {
+        const payload = (await response.json()) as { code?: string; message?: string };
+        code = payload.code ?? code;
+        message = payload.message ?? message;
+      } catch {
+        // Respuesta sin JSON: se usa el mensaje genérico.
+      }
+      tokenStore.clear();
+      return { status: 'session-fatal', code, message };
+    }
+
+    // 5xx / 502 / 503 / 429: el servidor existe pero no puede atender ahora.
+    // La sesión NO se toca.
+    return { status: 'temporary' };
+  })();
+
+  try {
+    return await refreshInFlight;
+  } finally {
+    refreshInFlight = null;
+  }
+}
+
+/** ¿Hay indicios de una sesión guardada en el navegador? */
+export function hasSessionCookieHint(): boolean {
+  return /(?:^|;\s*)finanza_sesion=1/.test(document.cookie);
+}
+
+/** Cierra la sesión en el servidor (revoca) y limpia el estado local de sesión. */
+export async function endSession(): Promise<void> {
+  try {
+    if (tokenStore.hasSession()) {
+      await fetch(`${API_URL}/auth/logout`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json', ...baseHeaders({ csrf: true, sessionMode: true }) },
+      });
+    }
+  } catch {
+    // Aunque el servidor no conteste, la sesión local se cierra igual: la cookie
+    // se borra en la siguiente recarga y el token de memoria desaparece.
+  } finally {
+    tokenStore.clear();
+  }
+}
+
+/**
+ * Avisa a la aplicación de que la sesión ha terminado DE VERDAD.
+ * Sólo se llama cuando el servidor lo dice con un código explícito: nunca por un
+ * fallo de red, un timeout ni un 502/503.
+ */
+export function dispatchSessionExpired(message: string, code: string): void {
+  tokenStore.clear();
+  window.dispatchEvent(new CustomEvent('finanza:session-expired', { detail: { message, code } }));
+}
+
+export interface AuthSessionResponse {
+  accessToken: string;
+  expiresIn: number;
+  offlineAllowedUntil: string;
+  sessionMode?: 'cookie' | 'token';
+  user: { id: string; email: string; name: string; role: string };
+}
+
+/**
+ * Inicia sesión o crea el primer usuario pidiendo la entrega de la sesión por
+ * cookie HttpOnly. El access token se queda en memoria y el refresh token nunca
+ * pasa por JavaScript.
+ */
+export async function startSession(
+  path: '/auth/login' | '/auth/register',
+  body: Record<string, unknown>,
+): Promise<AuthSessionResponse> {
+  let response: Response;
+  try {
+    response = await fetch(`${API_URL}${path}`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json', ...baseHeaders({ sessionMode: true }) },
+      body: JSON.stringify(body),
+    });
+  } catch {
+    throw new OfflineError(
+      'No se pudo conectar con el servidor. Compruebe su conexión e inténtelo de nuevo.',
+    );
+  }
+
+  if (!response.ok) {
+    let code = 'HTTP_ERROR';
+    let message = `Error ${response.status}`;
+    let details: unknown;
+    try {
+      const payload = (await response.json()) as { code?: string; message?: string; details?: unknown };
+      code = payload.code ?? code;
+      message = payload.message ?? message;
+      details = payload.details;
+    } catch {
+      // Respuesta sin JSON.
+    }
+    throw new ApiError(response.status, code, message, details);
+  }
+
+  const data = (await response.json()) as AuthSessionResponse;
+  tokenStore.setAccessToken(data.accessToken);
+  return data;
 }
 
 /** Petición cruda a la API con renovación automática de sesión. */
@@ -182,6 +352,8 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
       headers,
       body: body === undefined ? undefined : JSON.stringify(body),
       signal: effectiveSignal,
+      // La cookie HttpOnly de sesión viaja en las peticiones al mismo origen.
+      credentials: 'include',
     });
   } catch (error) {
     if (timedOut) {
@@ -202,12 +374,21 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
   }
 
   if (response.status === 401 && !skipRefresh) {
-    const refreshed = await tryRefreshSession();
-    if (refreshed) {
+    const outcome = await refreshSession();
+
+    if (outcome.status === 'refreshed') {
       return apiRequest<T>(path, { ...options, skipRefresh: true });
     }
-    tokenStore.clear();
-    window.dispatchEvent(new CustomEvent('finanza:session-expired'));
+
+    if (outcome.status === 'session-fatal') {
+      // El servidor ha dicho claramente que la sesión terminó.
+      dispatchSessionExpired(outcome.message, outcome.code);
+    } else {
+      // Fallo TEMPORAL (sin red, timeout, 502/503): la sesión NO se cierra.
+      // Se avisa para que la interfaz muestre «sin conexión» y siga mostrando lo
+      // último conocido, en vez de tirar al usuario a la pantalla de acceso.
+      throw new SessionTemporarilyUnavailableError();
+    }
   }
 
   if (!response.ok) {
@@ -247,6 +428,7 @@ export async function downloadFile(path: string, filename: string): Promise<void
   try {
     response = await fetch(`${API_URL}${path}`, {
       headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
+      credentials: 'include',
     });
   } catch {
     throw new OfflineError('No se puede descargar el informe sin conexión');

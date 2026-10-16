@@ -5,6 +5,11 @@ import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 import { VitePWA } from 'vite-plugin-pwa';
 
+// `process.env` sin depender de @types/node: este paquete es de navegador y no
+// se quiere arrastrar los tipos de Node a todo el código de la aplicación.
+const processEnv =
+  (globalThis as unknown as { process?: { env?: Record<string, string | undefined> } }).process?.env ?? {};
+
 /**
  * CONFIGURACIÓN DE LA PWA DE FINANZA
  * ----------------------------------
@@ -61,12 +66,16 @@ export default defineConfig({
     }),
   ],
   server: {
-    port: 5180,
+    // El puerto y el destino de la API se pueden cambiar por entorno. Es lo que
+    // permite que las pruebas de navegador levanten su propia pareja
+    // (API + PWA) apuntando a la base de datos de pruebas, sin tocar las cuentas
+    // reales ni los puertos de desarrollo.
+    port: Number(processEnv.VITE_PORT ?? 5180),
     strictPort: true,
     proxy: {
       // En desarrollo, el front habla con la API por el mismo origen.
       '/api': {
-        target: 'http://localhost:3010',
+        target: processEnv.VITE_PROXY_TARGET ?? 'http://localhost:3010',
         changeOrigin: true,
       },
     },

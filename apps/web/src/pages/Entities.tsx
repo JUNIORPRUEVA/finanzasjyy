@@ -129,14 +129,14 @@ export function EntitiesPage() {
           {entities.map((entity) => {
             const status = statusById.get(entity.id);
             return (
-              <div key={entity.id} className="rounded-lg border border-slate-800 p-3">
+              <div key={entity.id} className="rounded-lg border border-border-soft p-3">
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
-                    <p className="text-sm font-medium text-slate-100">{entity.name}</p>
-                    <p className="mt-0.5 text-xs text-slate-400">
+                    <p className="text-sm font-medium text-ink">{entity.name}</p>
+                    <p className="mt-0.5 text-xs text-muted">
                       {entity.code} · {TYPES.find((row) => row.value === entity.type)?.label ?? entity.type} · {entity.currency}
                     </p>
-                    {entity.description ? <p className="mt-1 text-xs text-slate-500">{entity.description}</p> : null}
+                    {entity.description ? <p className="mt-1 text-xs text-faint">{entity.description}</p> : null}
                   </div>
                   <div className="shrink-0 text-right">
                     <Badge tone={entity.isActive ? 'positive' : 'neutral'}>{entity.isActive ? 'Activa' : 'Inactiva'}</Badge>
@@ -152,7 +152,7 @@ export function EntitiesPage() {
                     <Badge tone="neutral">{status.loans} deuda(s)</Badge>
                     <Badge tone="neutral">{status.closings} cierre(s)</Badge>
                     {status.accounts === 0 ? (
-                      <a href={`/organizar`} className="text-amber-300 underline">
+                      <a href={`/organizar`} className="text-warning underline">
                         Registrar su dinero
                       </a>
                     ) : null}
@@ -162,11 +162,11 @@ export function EntitiesPage() {
                 <div className="mt-2 flex flex-wrap gap-2">
                   <a
                     href={`/?entityId=${entity.id}`}
-                    className="rounded-lg bg-slate-800 px-3 py-1.5 text-xs text-slate-100 hover:bg-slate-700"
+                    className="rounded-lg bg-surface-3 px-3 py-1.5 text-xs text-ink hover:bg-surface-3"
                   >
                     Ver su panel
                   </a>
-                  <button type="button" className="text-xs text-slate-400 underline" onClick={() => void toggleActive(entity)}>
+                  <button type="button" className="text-xs text-muted underline" onClick={() => void toggleActive(entity)}>
                     {entity.isActive ? 'Desactivar' : 'Activar'}
                   </button>
                 </div>
@@ -199,7 +199,7 @@ export function EntitiesPage() {
         </Button>
       </Card>
 
-      <p className="pb-4 text-center text-xs text-slate-600">
+      <p className="pb-4 text-center text-xs text-faint">
         Después de crearla, registre su dinero en «Organizar mi dinero» para que la unidad deje de estar a ciegas.
       </p>
     </div>

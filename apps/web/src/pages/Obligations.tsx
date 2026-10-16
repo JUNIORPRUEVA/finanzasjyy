@@ -251,7 +251,7 @@ export function ObligationsPage() {
   };
 
   const renderSettleForm = (kind: 'receivables' | 'payables' | 'recurring', row: ObligationRow | RecurringRow) => (
-    <div className="mt-2 space-y-2 rounded-lg border border-slate-700 p-3">
+    <div className="mt-2 space-y-2 rounded-lg border border-border-soft p-3">
       <MoneyInput
         label={kind === 'receivables' ? 'Importe cobrado' : 'Importe pagado'}
         value={amount}
@@ -306,20 +306,20 @@ export function ObligationsPage() {
             ) : null}
             <div className="space-y-2">
               {recurrings.map((row) => (
-                <div key={row.id} className="rounded-lg border border-slate-800 p-3">
+                <div key={row.id} className="rounded-lg border border-border-soft p-3">
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
-                      <p className="truncate text-sm font-medium text-slate-100">{row.name}</p>
+                      <p className="truncate text-sm font-medium text-ink">{row.name}</p>
                       <div className="mt-1 flex flex-wrap items-center gap-2">
                         <Badge tone={row.status === 'ACTIVE' ? 'positive' : 'neutral'}>{STATUS_LABELS[row.status] ?? row.status}</Badge>
                         <Badge tone="neutral">{FREQUENCY_LABELS[row.frequency] ?? row.frequency}</Badge>
                         {row.daysToDue <= 0 ? <Badge tone="critical">Vence hoy o ya venció</Badge> : null}
                       </div>
-                      <p className="mt-1 text-xs text-slate-400">
+                      <p className="mt-1 text-xs text-muted">
                         Vence el {formatBusinessDate(row.nextDueDate)} · {row.daysToDue} día(s)
                       </p>
                     </div>
-                    <span className="shrink-0 text-sm text-slate-100">{formatMoney(row.amount, row.currency)}</span>
+                    <span className="shrink-0 text-sm text-ink">{formatMoney(row.amount, row.currency)}</span>
                   </div>
                   {activeId === row.id ? (
                     renderSettleForm('recurring', row)
@@ -373,10 +373,10 @@ export function ObligationsPage() {
             {(tab === 'receivables' ? receivablesQuery.isLoading : payablesQuery.isLoading) ? <Spinner /> : null}
             <div className="space-y-2">
               {(tab === 'receivables' ? receivables : payables).map((row) => (
-                <div key={row.id} className="rounded-lg border border-slate-800 p-3">
+                <div key={row.id} className="rounded-lg border border-border-soft p-3">
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
-                      <p className="truncate text-sm font-medium text-slate-100">{row.description}</p>
+                      <p className="truncate text-sm font-medium text-ink">{row.description}</p>
                       <div className="mt-1 flex flex-wrap items-center gap-2">
                         <Badge
                           tone={row.status === 'SETTLED' ? 'positive' : row.isOverdue ? 'critical' : row.status === 'PARTIAL' ? 'warning' : 'neutral'}
@@ -386,15 +386,15 @@ export function ObligationsPage() {
                         {row.entity?.name ? <Badge tone="neutral">{row.entity.name}</Badge> : null}
                         {row.isOverdue ? <Badge tone="critical">Vencida</Badge> : null}
                       </div>
-                      <p className="mt-1 text-xs text-slate-400">
+                      <p className="mt-1 text-xs text-muted">
                         Total {formatMoney(row.originalAmount, row.currency)} · abonado{' '}
                         {formatMoney(row.settledAmount, row.currency)}
                         {row.dueDate ? ` · vence ${formatBusinessDate(row.dueDate)}` : ''}
                       </p>
                     </div>
                     <div className="shrink-0 text-right">
-                      <p className="text-xs text-slate-500">Pendiente</p>
-                      <p className="text-sm text-slate-100">{formatMoney(row.pendingAmount, row.currency)}</p>
+                      <p className="text-xs text-faint">Pendiente</p>
+                      <p className="text-sm text-ink">{formatMoney(row.pendingAmount, row.currency)}</p>
                     </div>
                   </div>
                   {row.status !== 'SETTLED' && row.status !== 'CANCELLED' ? (
@@ -453,38 +453,38 @@ export function ObligationsPage() {
           {upcomingQuery.data ? (
             <div className="space-y-4">
               <div>
-                <p className="mb-1 text-xs uppercase text-slate-400">Compromisos del mes</p>
+                <p className="mb-1 text-xs uppercase text-muted">Compromisos del mes</p>
                 {(upcomingQuery.data.recurrings ?? []).length === 0 ? (
-                  <p className="text-xs text-slate-500">Nada en este período.</p>
+                  <p className="text-xs text-faint">Nada en este período.</p>
                 ) : null}
                 {(upcomingQuery.data.recurrings ?? []).map((row) => (
-                  <div key={row.id} className="flex items-center justify-between border-b border-slate-900 py-2 text-sm">
-                    <span className="text-slate-200">{row.name}</span>
-                    <span className="text-slate-400">
+                  <div key={row.id} className="flex items-center justify-between border-b border-border-soft py-2 text-sm">
+                    <span className="text-ink">{row.name}</span>
+                    <span className="text-muted">
                       {formatBusinessDate(row.nextDueDate)} · {formatMoney(row.amount, currency)}
                     </span>
                   </div>
                 ))}
               </div>
               <div>
-                <p className="mb-1 text-xs uppercase text-slate-400">Cuotas de préstamos</p>
-                {(upcomingQuery.data.loans ?? []).length === 0 ? <p className="text-xs text-slate-500">Nada en este período.</p> : null}
+                <p className="mb-1 text-xs uppercase text-muted">Cuotas de préstamos</p>
+                {(upcomingQuery.data.loans ?? []).length === 0 ? <p className="text-xs text-faint">Nada en este período.</p> : null}
                 {(upcomingQuery.data.loans ?? []).map((row) => (
-                  <div key={row.id} className="flex items-center justify-between border-b border-slate-900 py-2 text-sm">
-                    <span className="text-slate-200">{row.name}</span>
-                    <span className="text-slate-400">
+                  <div key={row.id} className="flex items-center justify-between border-b border-border-soft py-2 text-sm">
+                    <span className="text-ink">{row.name}</span>
+                    <span className="text-muted">
                       {row.dueDate ? formatBusinessDate(row.dueDate) : 'sin fecha'} · {formatMoney(row.amount, currency)}
                     </span>
                   </div>
                 ))}
               </div>
               <div>
-                <p className="mb-1 text-xs uppercase text-slate-400">Por pagar</p>
-                {(upcomingQuery.data.payables ?? []).length === 0 ? <p className="text-xs text-slate-500">Nada en este período.</p> : null}
+                <p className="mb-1 text-xs uppercase text-muted">Por pagar</p>
+                {(upcomingQuery.data.payables ?? []).length === 0 ? <p className="text-xs text-faint">Nada en este período.</p> : null}
                 {(upcomingQuery.data.payables ?? []).map((row) => (
-                  <div key={row.id} className="flex items-center justify-between border-b border-slate-900 py-2 text-sm">
-                    <span className="text-slate-200">{row.description}</span>
-                    <span className="text-slate-400">
+                  <div key={row.id} className="flex items-center justify-between border-b border-border-soft py-2 text-sm">
+                    <span className="text-ink">{row.description}</span>
+                    <span className="text-muted">
                       {row.dueDate ? formatBusinessDate(row.dueDate) : 'sin fecha'} · {formatMoney(row.pendingAmount, currency)}
                     </span>
                   </div>
@@ -495,7 +495,7 @@ export function ObligationsPage() {
         </Card>
       ) : null}
 
-      <p className="pb-4 text-center text-xs text-slate-600">
+      <p className="pb-4 text-center text-xs text-faint">
         Lo que le deben no es dinero disponible; lo que debe no es un gasto hasta que se paga.
       </p>
     </div>

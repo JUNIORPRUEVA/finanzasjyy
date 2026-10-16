@@ -125,6 +125,8 @@ Estas no están marcadas como pasadas porque requieren cosas que no dependen del
 | `test/integridad-financiera.e2e-spec.ts` | 28 | Las 14 reglas del dinero (transferencias que no inflan ganancias, retiros que no son gasto, préstamos que no son ingreso, capital frente a intereses, asientos cuadrados, idempotencia, saldos iniciales, cierres, ajustes, borrado imposible, aislamiento entre unidades) |
 | `test/notificaciones-push.e2e-spec.ts` | 9 | Configuración VAPID, suscripción sin duplicar, cancelación, envío con endpoint inválido sin romper nada e informe de entrega honesto |
 | `apps/web/src/lib/offline.test.ts` | 4 | Ciclo completo de 24 h sin conexión, con IndexedDB real: incluye cerrar y reabrir la aplicación, tiempo de espera agotado, reintento, duplicado, conflicto y caducidad de la ventana |
+| `apps/web/src/lib/session.test.ts` | 21 | **Sesión persistente**: entrar bien y mal, reabrir la aplicación, renovación automática, una sola renovación simultánea, 503 / sin red / tiempo agotado / 500 (que NO cierran la sesión), sesión caducada, revocada, inactividad, duración máxima, cierre de sesión y recuperación, y que la cola de movimientos pendientes sobrevive al cierre de sesión |
+| `apps/web/e2e/*.spec.ts` (Playwright) | 123 | Recorrido de las 17 pantallas en 5 tamaños, sin desbordamiento horizontal ni errores de consola; barra inferior y botón central; hojas y diálogos; **sesión en un navegador de verdad** (recargar, otra pestaña, 503, corte de red, caducidad explicada, movimiento sin conexión que sobrevive) |
 
 ### Defectos reales que destaparon
 
@@ -132,6 +134,10 @@ Estas no están marcadas como pasadas porque requieren cosas que no dependen del
 2. El asistente de conciliación **contaba dos veces** los saldos iniciales (50.000 se veían como 100.000). Corregido: una sola fuente de verdad.
 3. La sincronización respondía `APPLIED` a una operación repetida. Ahora responde `DUPLICATE`.
 4. Una petición colgada **esperaba indefinidamente**. Ahora hay límite de 20 s y la operación queda para reintentar.
+5. **La sesión se destruía ante un 503 o un corte de red**: el cliente borraba el token de refresco ante cualquier respuesta que no fuera correcta, así que un mal minuto del servidor obligaba a escribir la contraseña otra vez. Corregido: el token vive en una cookie `HttpOnly` y sólo los códigos `SESSION_*` cierran la sesión.
+6. **Sin conexión, React Query pausaba las operaciones**: el botón se quedaba en «Registrando…» indefinidamente y el movimiento **nunca llegaba a la cola** del dispositivo. Corregido con `networkMode: 'always'`.
+7. **Las cuentas y categorías no se guardaban** para el modo sin conexión: `getCachedAccounts()` se leía, pero nadie escribía esa copia, así que sin conexión la lista salía vacía y no se podía registrar nada. Corregido con `lib/cache-mirror.ts`.
+8. **La sesión caducada no explicaba nada**: la pantalla de acceso aparecía sin motivo. Ahora muestra el motivo que envía el servidor.
 
 ---
 
@@ -142,7 +148,9 @@ Estas no están marcadas como pasadas porque requieren cosas que no dependen del
 | **PASA (automático)** | 32 de 34 |
 | **PASA (manual)** | 2 de 34 |
 | **PENDIENTE** | 5 comprobaciones, todas dependientes de dispositivo real, claves de producción o ejecución manual de los scripts |
-| **Total de pruebas automatizadas del proyecto** | **204 en verde, 0 fallos** |
+| **Total de pruebas automatizadas del proyecto** | **225 de aplicación + 123 de navegador, en verde, 0 fallos** |
+
+Detalle del rediseño móvil y de la sesión persistente, con lo que **no** se ha probado: `docs/INFORME-MOVIL-Y-SESION.md`.
 
 **Ninguna prueba se ha marcado como pasada sin evidencia**, y ninguna afirma que una notificación haya
 llegado a un dispositivo.

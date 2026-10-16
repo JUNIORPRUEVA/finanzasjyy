@@ -64,9 +64,15 @@ export class RegisterUserDto extends DeviceInfoDto {
 }
 
 export class RefreshTokenDto extends DeviceInfoDto {
+  /**
+   * Opcional a propósito: en el modo «cookie» el refresh token viaja en una
+   * cookie HttpOnly y no en el cuerpo. Si no viene en el cuerpo, el controlador
+   * lo lee de la cookie. Si no viene en ninguno de los dos, la respuesta es 401.
+   */
+  @IsOptional()
   @IsString()
   @Length(20, 300)
-  refreshToken!: string;
+  refreshToken?: string;
 }
 
 export class ChangePasswordDto {

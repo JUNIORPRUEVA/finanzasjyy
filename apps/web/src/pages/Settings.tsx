@@ -217,12 +217,12 @@ export function SettingsPage() {
         <>
           <Card className="space-y-3">
             <SectionTitle title="Perfil" />
-            <p className="text-sm text-slate-300">
+            <p className="text-sm text-ink">
               {user?.name} · {user?.email}
             </p>
-            <p className="text-xs text-slate-500">Rol: {user?.role}</p>
+            <p className="text-xs text-faint">Rol: {user?.role}</p>
             <div>
-              <p className="mb-1 text-xs uppercase text-slate-400">Unidades financieras</p>
+              <p className="mb-1 text-xs uppercase text-muted">Unidades financieras</p>
               <div className="flex flex-wrap gap-2">
                 {entities.map((entity) => (
                   <Badge key={entity.id} tone="neutral">
@@ -339,7 +339,7 @@ export function SettingsPage() {
           {pushQuery.data && pushQuery.data.subscriptions.length > 0 ? (
             <div className="space-y-1">
               {pushQuery.data.subscriptions.map((subscription) => (
-                <div key={subscription.id} className="flex items-center justify-between text-xs text-slate-400">
+                <div key={subscription.id} className="flex items-center justify-between text-xs text-muted">
                   <span>{subscription.platform ?? 'dispositivo'}</span>
                   <span className="flex items-center gap-2">
                     {subscription.isActive ? <Badge tone="positive">activa</Badge> : <Badge tone="neutral">inactiva</Badge>}
@@ -351,7 +351,7 @@ export function SettingsPage() {
             </div>
           ) : null}
 
-          <p className="text-xs text-slate-500">
+          <p className="text-xs text-faint">
             En iPhone, las notificaciones web requieren iOS 16.4 o superior <strong>y</strong> tener FINANZA instalada
             en la pantalla de inicio. Si no se cumple, la app avisa igualmente dentro de su pantalla de tareas.
           </p>
@@ -383,10 +383,10 @@ export function SettingsPage() {
             {sessionsQuery.isLoading ? <Spinner /> : null}
             <div className="space-y-2">
               {sessionsQuery.data?.map((session) => (
-                <div key={session.id} className="flex items-start justify-between gap-2 rounded-lg border border-slate-800 p-2">
+                <div key={session.id} className="flex items-start justify-between gap-2 rounded-lg border border-border-soft p-2">
                   <div className="min-w-0">
-                    <p className="truncate text-sm text-slate-200">{session.deviceId ?? 'Sesión sin dispositivo'}</p>
-                    <p className="truncate text-xs text-slate-500">
+                    <p className="truncate text-sm text-ink">{session.deviceId ?? 'Sesión sin dispositivo'}</p>
+                    <p className="truncate text-xs text-faint">
                       Último uso: {session.lastUsedAt ? formatDateTime(session.lastUsedAt) : '—'} · IP {session.ip ?? '—'}
                     </p>
                   </div>
@@ -396,7 +396,7 @@ export function SettingsPage() {
                       <button
                         type="button"
                         onClick={() => revokeSessionMutation.mutate(session.id)}
-                        className="ml-2 text-xs text-rose-300 underline"
+                        className="ml-2 text-xs text-negative underline"
                       >
                         Cerrar
                       </button>
@@ -418,7 +418,7 @@ export function SettingsPage() {
             >
               Cerrar sesión en este dispositivo
             </Button>
-            <p className="mt-2 text-xs text-slate-500">
+            <p className="mt-2 text-xs text-faint">
               Los movimientos registrados sin conexión que aún no se han confirmado permanecen guardados en este
               dispositivo hasta que vuelva a entrar.
             </p>
@@ -427,7 +427,7 @@ export function SettingsPage() {
       ) : null}
 
       {sessionPreferences ? (
-        <p className="pb-4 text-center text-xs text-slate-600">
+        <p className="pb-4 text-center text-xs text-faint">
           Ventana sin conexión configurada: {sessionPreferences.offlineWindowHours} h
         </p>
       ) : null}
