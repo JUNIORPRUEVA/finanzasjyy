@@ -269,13 +269,16 @@ export function Select({
   label,
   value,
   onChange,
-  options,
+  options = [],
+  groups,
   placeholder,
 }: {
   label: string;
   value: string;
   onChange: (value: string) => void;
-  options: Array<{ value: string; label: string }>;
+  options?: Array<{ value: string; label: string }>;
+  /** Opciones agrupadas (por ejemplo, cuentas por unidad financiera). */
+  groups?: Array<{ label: string; options: Array<{ value: string; label: string }> }>;
   placeholder?: string;
 }) {
   return (
@@ -287,11 +290,21 @@ export function Select({
         className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none focus:border-emerald-500"
       >
         <option value="">{placeholder ?? '— Seleccione —'}</option>
-        {options.map((option) => (
-          <option key={option.value} value={option.value}>
-            {option.label}
-          </option>
-        ))}
+        {groups
+          ? groups.map((group) => (
+              <optgroup key={group.label} label={group.label}>
+                {group.options.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </optgroup>
+            ))
+          : options.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
       </select>
     </label>
   );

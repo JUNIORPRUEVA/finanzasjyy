@@ -1,6 +1,7 @@
 import type { Prisma } from '../generated/prisma/client.js';
 import { InvariantError, NotFoundError, ValidationError } from '../common/errors.js';
 import { add, dec, eq, gt, isZero, round2, sum, type DecimalInput } from '../domain/money.js';
+import { businessDateToIso } from '../domain/business-date.js';
 
 /**
  * NÚCLEO DEL LIBRO MAYOR (partida doble)
@@ -307,6 +308,72 @@ export async function accountBalance(
     totalCredit: totalCredit.toFixed(2),
     movementCount: rows.length,
   };
+}
+
+/**
+ * RESULTADO POR DÍA, CALCULADO DESDE EL LIBRO MAYOR
+ * ------------------------------------------------
+ * ¿Por qué no sumar los movimientos por su tipo? Porque el tipo describe la
+ * INTENCIÓN de la operación, no su efecto contable. Ejemplo real: el pago de una
+ * cuota de préstamo es un único movimiento de tipo LOAN_PAYMENT, pero su asiento
+ * lleva dos cosas distintas:
+ *
+ *     Intereses (7100)   gasto del período  ← tiene que aparecer en el resultado
+ *     Capital   (2200)   menos deuda        ← NO es gasto
+ *
+ * Sumando por tipo, los intereses pagados desaparecían del resultado del mes.
+ * Calculándolo desde los asientos, el resultado siempre coincide con el libro
+ * mayor: ingresos = cuentas de ingreso; gastos = cuentas de gasto.
+ *
+ * Queda bien resuelto por construcción el resto de casos: los traspasos mueven
+ * cuentas de activo (no afectan al resultado), los retiros del propietario van
+ * contra patrimonio (no son gasto) y el desembolso de un préstamo es un pasivo
+ * (no es ingreso).
+ */
+export async function ledgerResultByDay(
+  tx: Tx,
+  params: { entityIds: string[]; from: Date; to: Date },
+): Promise<Map<string, { entityId: string; income: ReturnType<typeof dec>; expense: ReturnType<typeof dec> }>> {
+  const result = new Map<string, { entityId: string; income: ReturnType<typeof dec>; expense: ReturnType<typeof dec> }>();
+
+  if (params.entityIds.length === 0) {
+    return result;
+  }
+
+  const lines = await tx.journalLine.findMany({
+    where: {
+      entry: {
+        entityId: { in: params.entityIds },
+        // Se incluyen los asientos REVERSED porque su inverso también está
+        // registrado: contarlos juntos es lo que los anula entre sí.
+        status: { in: ['POSTED', 'REVERSED'] },
+        businessDate: { gte: params.from, lte: params.to },
+      },
+      ledgerAccount: { type: { in: ['INCOME', 'EXPENSE'] } },
+    },
+    select: {
+      debit: true,
+      credit: true,
+      entry: { select: { entityId: true, businessDate: true } },
+      ledgerAccount: { select: { type: true } },
+    },
+  });
+
+  for (const line of lines) {
+    const dayIso = businessDateToIso(line.entry.businessDate);
+    const key = `${line.entry.entityId}|${dayIso}`;
+    const bucket = result.get(key) ?? { entityId: line.entry.entityId, income: dec(0), expense: dec(0) };
+
+    if (line.ledgerAccount.type === 'INCOME') {
+      bucket.income = bucket.income.plus(dec(line.credit).minus(dec(line.debit)));
+    } else {
+      bucket.expense = bucket.expense.plus(dec(line.debit).minus(dec(line.credit)));
+    }
+
+    result.set(key, bucket);
+  }
+
+  return result;
 }
 
 /** Saldos de varias cuentas en una sola consulta (dashboard y cierre diario). */

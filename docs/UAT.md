@@ -110,11 +110,28 @@ Estas no están marcadas como pasadas porque requieren cosas que no dependen del
 
 | Caso | Qué falta | Qué haría falta para cerrarlo |
 | --- | --- | --- |
-| Trabajar 24 h sin conexión en un móvil real (modo avión) | Un dispositivo físico y 24 h reales | Instalar la PWA, activar modo avión, registrar, cerrar la app, volver a conectarse y comprobar que se envía sin duplicar. **La lógica sí está probada**: 7 pruebas con IndexedDB real + 4 de extremo a extremo del protocolo de sincronización |
-| Entrega real de una notificación push | Claves VAPID | Generar claves, configurarlas y probar en Android y en iPhone instalado |
-| Instalación en iPhone y comportamiento de la PWA en iOS | Un iPhone | Instalar desde Safari y revisar que el service worker y la cola funcionan |
+| Trabajar 24 h sin conexión en un móvil real (modo avión) | Un dispositivo físico y 24 h reales | **La lógica sí está validada**: 4 pruebas con IndexedDB real recorren el ciclo completo (incluido cerrar y reabrir la app) y 4 de extremo a extremo del protocolo |
+| Entrega real de una notificación push | Un dispositivo y permiso del usuario | Las claves VAPID ya están generadas y el circuito está probado hasta el envío (9 pruebas). La prueba usa un dominio `.invalid` a propósito: **no se afirma que haya llegado nada** |
+| Instalación en iPhone y comportamiento de la PWA en iOS | Un iPhone | Instalar desde Safari y revisar el service worker y la cola |
 | Impresión y aspecto en pantallas grandes | Revisión visual del usuario | Probar en un monitor grande y ajustar si hiciera falta |
 | Copia de seguridad y restauración reales | Ejecutar los scripts | `.\scripts\backup-db.ps1` y `.\scripts\restore-test.ps1` (los scripts están listos y comprueban los asientos restaurados) |
+
+---
+
+## Suites automatizadas añadidas
+
+| Suite | Pruebas | Qué defiende |
+| --- | --- | --- |
+| `test/integridad-financiera.e2e-spec.ts` | 28 | Las 14 reglas del dinero (transferencias que no inflan ganancias, retiros que no son gasto, préstamos que no son ingreso, capital frente a intereses, asientos cuadrados, idempotencia, saldos iniciales, cierres, ajustes, borrado imposible, aislamiento entre unidades) |
+| `test/notificaciones-push.e2e-spec.ts` | 9 | Configuración VAPID, suscripción sin duplicar, cancelación, envío con endpoint inválido sin romper nada e informe de entrega honesto |
+| `apps/web/src/lib/offline.test.ts` | 4 | Ciclo completo de 24 h sin conexión, con IndexedDB real: incluye cerrar y reabrir la aplicación, tiempo de espera agotado, reintento, duplicado, conflicto y caducidad de la ventana |
+
+### Defectos reales que destaparon
+
+1. Los **intereses de un préstamo no contaban como gasto**: el resultado del mes salía inflado. Corregido calculando el resultado desde el libro mayor.
+2. El asistente de conciliación **contaba dos veces** los saldos iniciales (50.000 se veían como 100.000). Corregido: una sola fuente de verdad.
+3. La sincronización respondía `APPLIED` a una operación repetida. Ahora responde `DUPLICATE`.
+4. Una petición colgada **esperaba indefinidamente**. Ahora hay límite de 20 s y la operación queda para reintentar.
 
 ---
 
@@ -122,9 +139,10 @@ Estas no están marcadas como pasadas porque requieren cosas que no dependen del
 
 | Resultado | Casos |
 | --- | --- |
-| **PASA (automático)** | 28 de 30 |
-| **PASA (manual)** | 2 de 30 (UAT-01 y la revisión visual inicial) |
-| **PENDIENTE** | 5 comprobaciones adicionales, todas dependientes de dispositivo real, claves VAPID o ejecución manual de los scripts |
+| **PASA (automático)** | 32 de 34 |
+| **PASA (manual)** | 2 de 34 |
+| **PENDIENTE** | 5 comprobaciones, todas dependientes de dispositivo real, claves de producción o ejecución manual de los scripts |
+| **Total de pruebas automatizadas del proyecto** | **204 en verde, 0 fallos** |
 
-**Ninguna prueba se ha marcado como pasada sin evidencia.** Las que dependen de un dispositivo real
-quedan pendientes y así se informa.
+**Ninguna prueba se ha marcado como pasada sin evidencia**, y ninguna afirma que una notificación haya
+llegado a un dispositivo.

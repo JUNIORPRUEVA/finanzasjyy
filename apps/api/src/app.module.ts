@@ -13,6 +13,7 @@ import { BudgetsModule } from './budgets/budgets.module.js';
 import { CategoriesModule } from './categories/categories.module.js';
 import { ClosingsModule } from './closings/closings.module.js';
 import { CounterpartiesModule } from './counterparties/counterparties.module.js';
+import { DailyControlModule } from './daily-control/daily-control.module.js';
 import { DashboardModule } from './dashboard/dashboard.module.js';
 import { EntitiesModule } from './entities/entities.module.js';
 import { HealthModule } from './health/health.module.js';
@@ -23,6 +24,7 @@ import { ObligationsModule } from './obligations/obligations.module.js';
 import { PrismaModule } from './prisma/prisma.module.js';
 import { ReportsModule } from './reports/reports.module.js';
 import { SecurityModule } from './security/security.module.js';
+import { SetupModule } from './setup/setup.module.js';
 import { SyncModule } from './sync/sync.module.js';
 import { TransactionsModule } from './transactions/transactions.module.js';
 import { TransfersModule } from './transfers/transfers.module.js';
@@ -74,6 +76,10 @@ import { TransfersModule } from './transfers/transfers.module.js';
     SyncModule,
     NotificationsModule,
     AttachmentsModule,
+
+    // Puesta en marcha y disciplina diaria.
+    SetupModule,
+    DailyControlModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: ThrottlerGuard },

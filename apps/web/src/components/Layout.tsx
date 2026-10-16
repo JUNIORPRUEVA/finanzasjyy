@@ -16,7 +16,7 @@ interface PendingTasks {
 const NAV_ITEMS = [
   { to: '/', label: 'Panel', icon: '📊' },
   { to: '/registrar', label: 'Registrar', icon: '➕' },
-  { to: '/movimientos', label: 'Movimientos', icon: '🧾' },
+  { to: '/control', label: 'Control', icon: '🎯' },
   { to: '/cierres', label: 'Cierre', icon: '✅' },
   { to: '/mas', label: 'Más', icon: '⋯' },
 ];
@@ -31,7 +31,7 @@ const NAV_ITEMS = [
  *   nadie confunda datos locales con datos conciliados.
  */
 export function Layout({ children }: { children: React.ReactNode }) {
-  const { user, entities, logout } = useAuth();
+  const { user, entities, logout, offlineAllowedUntil } = useAuth();
   const location = useLocation();
   const queryClient = useQueryClient();
   const [isOnline, setIsOnline] = useState(navigator.onLine);
@@ -120,6 +120,18 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
   const mandatory = tasksQuery.data?.mandatoryCount ?? 0;
 
+  /**
+   * Autorización para trabajar sin conexión.
+   * Si se acerca su expiración se avisa con antelación: si caduca, la aplicación
+   * bloqueará nuevos registros hasta validar la sesión, y el usuario debe saberlo
+   * ANTES de quedarse sin cobertura.
+   */
+  const offlineHoursLeft = offlineAllowedUntil
+    ? (new Date(offlineAllowedUntil).getTime() - Date.now()) / 3_600_000
+    : null;
+  const offlineExpiringSoon = offlineHoursLeft !== null && offlineHoursLeft > 0 && offlineHoursLeft < 4;
+  const offlineExpired = offlineHoursLeft !== null && offlineHoursLeft <= 0;
+
   return (
     <div className="mx-auto flex min-h-screen w-full max-w-3xl flex-col">
       <header className="sticky top-0 z-20 border-b border-slate-800 bg-slate-950/95 px-4 py-3 backdrop-blur">
@@ -175,6 +187,20 @@ export function Layout({ children }: { children: React.ReactNode }) {
             </NavLink>
           ) : null}
 
+          {offlineExpiringSoon ? (
+            <NavLink to="/mas?tab=sincronizacion">
+              <Badge tone="warning">
+                Trabajo sin conexión: quedan {Math.max(1, Math.floor(offlineHoursLeft ?? 0))} h
+              </Badge>
+            </NavLink>
+          ) : null}
+
+          {offlineExpired ? (
+            <NavLink to="/mas?tab=sincronizacion">
+              <Badge tone="critical">Autorización offline caducada</Badge>
+            </NavLink>
+          ) : null}
+
           {syncing ? <Badge tone="neutral">Enviando…</Badge> : null}
         </div>
       </header>
@@ -191,6 +217,21 @@ export function Layout({ children }: { children: React.ReactNode }) {
             Está trabajando <strong>sin conexión</strong>. Los movimientos que registre se guardan en este dispositivo
             y se marcan como <strong>no confirmados</strong> hasta que el servidor los valide. Los saldos que ve son los
             últimos datos conocidos.
+            {offlineHoursLeft !== null && offlineHoursLeft > 0 ? (
+              <span className="mt-1 block">
+                Puede seguir registrando durante {Math.floor(offlineHoursLeft)} hora(s) más. Después será necesario
+                conectarse para confirmar su sesión.
+              </span>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
+
+      {offlineExpiringSoon && isOnline ? (
+        <div className="px-4 pt-3">
+          <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-xs text-amber-100">
+            Su autorización para trabajar sin conexión vence en menos de 4 horas. Conéctese un momento para renovarla
+            y no quedarse bloqueado si se va la cobertura.
           </div>
         </div>
       ) : null}

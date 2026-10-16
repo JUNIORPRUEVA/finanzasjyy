@@ -1,431 +1,289 @@
-# INFORME FINAL — PROYECTO FINANZA
+# INFORME FINAL — MISIÓN INTEGRAL FINANZA
 
-**Fecha:** 17 de octubre de 2026
-**Ámbito:** desarrollo local. **Nada se ha publicado en internet** y no se ha tocado ninguna base de
+**Fecha:** 16 de octubre de 2026
+**Ámbito:** desarrollo local. **Nada se ha publicado en internet.** No se ha tocado ninguna base de
 datos de producción de FULLTECH, PHYTOEMAGRY ni FULLPOS CLOUD.
-**Entorno verificado:** Windows, Node 24.14.1, Docker 29.8.2, PostgreSQL 16 (contenedor `finanza-postgres`, puerto 55432).
+**Entorno verificado:** Windows, Node 24.14.1, Docker 29.8.2, PostgreSQL 16 (`finanza-postgres`, puerto 55432).
 
 ---
 
-## 1. Veredicto, sin adornos
+## 1. Veredicto
 
 | Ámbito | Veredicto |
 | --- | --- |
-| **Uso local, con datos reales, hoy** | **GO** — la API, la base de datos y la PWA funcionan de extremo a extremo, con 163 pruebas automatizadas en verde y las cuentas cuadrando por construcción |
-| **Uso diario para el cierre y la conciliación** | **GO** — el asistente de cierre está completo y probado contra base de datos real |
-| **Instalación en móvil y trabajo sin conexión real** | **GO parcial** — la lógica está implementada y probada, pero **la prueba en un dispositivo físico con modo avión NO se ha hecho** |
-| **Notificaciones push** | **GO parcial** — preparadas y probadas en el servidor; **no hay claves VAPID, así que no se ha entregado ni una notificación real** |
-| **Producción en internet** | **NO-GO** — sin HTTPS, sin copias automáticas fuera del equipo, sin 2FA. Ver secciones 20 y 24 |
-| **Módulos con interfaz completa** | **GO parcial** — traspasos, préstamos, deudas, cuentas por cobrar/pagar, recurrentes, presupuestos y adjuntos funcionan por API y están probados, pero **no tienen pantalla** |
+| **GO LOCAL** | ✅ **Sí.** Aplicación completa y verificada para uso local con datos reales. 204 pruebas automatizadas en verde, integridad contable comprobada, base limpia y pruebas aisladas |
+| **GO UAT** | ✅ **Sí, con salvedades.** Los flujos críticos están validados de extremo a extremo. Quedan **tres comprobaciones que exigen un dispositivo físico** (24 h en modo avión, entrega real de push, instalación en iPhone) |
+| **GO PRODUCCIÓN** | ❌ **No.** Sin HTTPS, sin copias automáticas fuera del equipo y sin 2FA |
+| **NO-GO** | No aplica: no hay riesgo crítico para el uso previsto en local |
 
-No hay ningún dato financiero inventado, ninguna pantalla simulada y ningún botón sin implementar.
-Lo que no está, no está y se dice aquí.
+En una frase: **se puede usar hoy para controlar el dinero de los cuatro negocios, y no está listo para
+exponerlo a internet.**
 
 ---
 
-## 2. Qué se ha construido
+## 2. Funcionalidades existentes que se reutilizaron
 
-Tres piezas, todas ejecutables:
+No se ha empezado nada de cero:
 
-1. **API** (`apps/api`): NestJS 12 + TypeScript 6 + Prisma 7 + PostgreSQL 16. **19 controladores,
-   129 puntos de acceso**, 18 módulos de funcionalidad, un núcleo de dominio puro y triggers de
-   integridad contable en la base de datos. 104 archivos TypeScript, ~15 600 líneas.
-2. **Base de datos**: 29 tablas, 22 tipos enumerados, **8 migraciones**, 8 funciones de trigger y
-   restricciones que impiden descuadrar la contabilidad incluso escribiendo SQL a mano.
-3. **PWA** (`apps/web`): React 19 + Vite 8 + Tailwind 4 + Dexie. 21 archivos TypeScript, 9 pantallas,
-   instalable en móvil, con cola de operaciones sin conexión y service worker.
+- **Libro mayor de partida doble** (`postEntry`, `reverseEntry`, `balancesForAccounts`) y sus triggers:
+  los cobros, pagos y traspasos nuevos pasan por ahí, no por caminos nuevos.
+- **`TransactionsService.create`**: cobros, pagos de obligaciones y pago de compromisos se registran
+  por el MISMO servicio que usa «Registrar». Un solo camino para el dinero.
+- **`ClosingsService.discipline`**: el semáforo de «Mi control diario» reutiliza el cálculo que ya
+  existía, para no tener dos definiciones distintas de «rojo».
+- **`BudgetsService.alerts`**, `AccessService`, `AuditService`, ayuda CSV, interceptor de
+  serialización y filtro de excepciones: sin cambios.
+- **Motor de sincronización del cliente** (`submitOrQueue`, `syncPendingOperations`) y cola en
+  IndexedDB: las pantallas nuevas los usan tal cual.
+- **Las 8 migraciones y el esquema**: **no ha hecho falta ninguna migración nueva**.
 
----
+## 3. Funcionalidades nuevas
 
-## 3. Arquitectura (resumen)
+### API
 
-```
-PWA (React) ──HTTPS/JSON──> API (NestJS) ──Prisma──> PostgreSQL 16
-   cola local en IndexedDB        dominio puro         libro mayor + triggers
-```
+| Nuevo | Qué hace |
+| --- | --- |
+| `GET /setup/status` | Dice qué está registrado y **qué falta** (cuentas, saldos iniciales, deudas, compromisos, primer cierre) |
+| `POST /setup/organize` | **«Organizar mi dinero»** en un solo envío atómico: crea cuentas, préstamos, cuentas por cobrar/pagar y compromisos, y registra el asiento de apertura (patrimonio 3400) sin inflar ingresos |
+| `GET /daily-control` | **«Mi control diario»**: semáforo, tareas reales con motivo y destino, constancia (días seguidos cerrando, cumplimiento semanal y mensual) |
+| `GET /daily-control/streaks` | Los indicadores de constancia |
+| `POST /obligations/receivables/:id/payments` | Cobros totales o **parciales**, con su movimiento y su asiento |
+| `POST /obligations/payables/:id/payments` | Pagos totales o parciales, con su movimiento y su asiento |
+| `POST /obligations/recurring/:id/pay` | Registra el gasto/ingreso REAL de período y **avanza el vencimiento**. Idempotente por período |
+| `ledgerResultByDay()` | Ingresos y gastos calculados **desde el libro mayor**, no sumando tipos de operación |
 
-Decisiones que sostienen el objetivo («que ningún peso entre o salga sin quedar identificado»):
+### Los tres defectos de cálculo corregidos (los encontraron las pruebas nuevas)
 
-- **Partida doble obligatoria.** Todo movimiento genera un asiento; el asiento tiene que cuadrar
-  (debe = haber) y lo impone un trigger diferido, no sólo el código.
-- **El saldo se calcula del libro mayor**, nunca se guarda una columna «saldo actual» que alguien
-  pueda desincronizar.
-- **Nada se borra.** Se anula con motivo y se genera el asiento inverso; el original queda visible.
-- **Idempotencia** por `clientOperationId` único: un reintento del móvil no duplica un cobro.
-- **Intercompany con cuenta puente 1150**, compartiendo un mismo asiento: un traspaso entre negocios
-  no infla nunca los ingresos del grupo.
-- **Fechas de negocio** en `America/Santo_Domingo`, no en UTC.
+1. **El interés de los préstamos no aparecía como gasto.** Panel e informes sumaban los movimientos por
+   su *tipo*: una cuota es un solo movimiento `LOAN_PAYMENT`, pero su asiento lleva intereses (gasto
+   real) y capital (menos deuda). **El beneficio del mes salía inflado exactamente en los intereses
+   pagados.** Ahora el resultado se calcula desde los asientos.
+2. **El asistente duplicaba los saldos iniciales.** El saldo de una cuenta es
+   `openingBalance + movimientos`: al rellenar las dos cosas, declarar 50.000 mostraba 100.000.
+   Corregido: una sola fuente de verdad, el libro mayor.
+3. **La sincronización decía «APPLIED» a una operación repetida.** No duplicaba nada (lo importante),
+   pero informaba mal. Ahora responde `DUPLICATE`.
 
-Detalle completo: `docs/ARQUITECTURA.md` e `docs/INVARIANTES-FINANCIEROS.md`.
+### PWA
 
----
-
-## 4. Base de datos y migraciones
-
-```
-npx prisma migrate status
-  → 8 migrations found in prisma/migrations
-  → Database schema is up to date!
-```
-
-| # | Migración | Contenido |
+| Pantalla nueva | Ruta | Qué permite |
 | --- | --- | --- |
-| 1 | `init` | 29 tablas, enums, índices |
-| 2 | `integridad_contable` | Triggers de partida doble, prohibiciones de modificar y borrar |
-| 3 | `sync_server_id_payload_hash` | Sincronización |
-| 4 | `cierre_protegido` | Protección del cierre finalizado |
-| 5 | `transfer_asiento_compartido` | Un asiento puede respaldar dos movimientos |
-| 6 | `cierre_cerrado_por_closedat` | Cerrado ⇔ `closedAt` (corrección) |
-| 7 | `fix_triggers_text_uuid` | Corrección de tipos en los triggers |
-| 8 | `cierre_cerrado_solo_por_closedat` | **Corrección final** del defecto del cierre (ver sección 14) |
+| **Organizar mi dinero** | `/organizar` | Asistente de 5 pasos (mi dinero → lo que debo → lo que me deben y yo debo → compromisos → confirmar). Guarda el progreso en el dispositivo y avisa de lo que falta |
+| **Mi control diario** | `/control` | Semáforo con motivo, tareas con enlace a donde se resuelven, constancia y comparativa por unidad |
+| **Traspasos** | `/traspasos` | Entre cuentas y entre negocios, con aviso de que no cuenta como ingreso; historial; funciona sin conexión |
+| **Préstamos y deudas** | `/deudas` | Alta de deudas (con o sin movimiento del dinero, para no contarlo dos veces), pago de cuotas, pago de tarjeta |
+| **Obligaciones** | `/obligaciones` | Compromisos de cada mes (con pago real), por cobrar, por pagar y próximos vencimientos |
+| **Presupuestos** | `/presupuestos` | Límite por categoría con consumo real, barras de avance y avisos |
+| **Documentos** | `/adjuntos` | Subir facturas y recibos (cámara en el móvil), descargar y desvincular |
+| **Unidades financieras** | `/unidades` | Crear negocios y fuentes de ingreso nuevas, ver su estado y qué les falta |
 
-Estado actual de los datos, comprobado tras la limpieza:
+También: panel con aviso de conciliación pendiente y tarjeta de control diario; pestaña «Control» en la
+barra inferior; «Más» reorganizado en tres bloques; aviso de **menos de 4 horas** de autorización
+offline (y de caducidad); **tiempo de espera de 20 s** en las peticiones (antes una petición colgada
+dejaba la pantalla «cargando» para siempre); y **PDF / Imprimir** en los informes con hoja de estilo de
+impresión.
 
-| Elemento | Cantidad |
+### Herramientas y pruebas
+
+| Nuevo | Para qué |
+| --- | --- |
+| `test/integridad-financiera.e2e-spec.ts` | **28 pruebas** que defienden las reglas del dinero |
+| `test/notificaciones-push.e2e-spec.ts` | **9 pruebas** del circuito de push hasta donde es verificable sin un teléfono |
+| `apps/web/src/lib/offline.test.ts` | **4 pruebas** que recorren el ciclo completo de 24 h sin conexión |
+| `scripts/generate-vapid.ps1` | Genera las claves VAPID sin imprimir la privada |
+| Control de versiones | El proyecto **no tenía Git**: se ha creado y se ha guardado una línea base verificada antes de tocar nada |
+
+## 4. Errores corregidos en esta sesión
+
+| # | Error | Cómo se encontró | Corrección |
+| --- | --- | --- | --- |
+| 1 | Los intereses de préstamos no contaban como gasto | Prueba de integridad R4 | Resultado desde el libro mayor en panel e informes |
+| 2 | El asistente contaba dos veces los saldos iniciales | Prueba de integridad R9 | El asiento es la única fuente; la columna queda en cero |
+| 3 | La sincronización marcaba «APPLIED» una repetida | Prueba de integridad R13 | Ahora marca `DUPLICATE` |
+| 4 | Una petición colgada esperaba indefinidamente | Prueba offline (paso 13) | Límite de 20 s y error reintentable |
+| 5 | El script de VAPID creía configuradas claves vacías | Ejecución real del script | Comprobación línea a línea |
+| 6 | Una prueba afirmaba «sin claves VAPID» | Al generar las claves reales | La prueba comprueba la coherencia del estado, no un valor fijo |
+| 7 | Bloque duplicado al editar el panel (sintaxis) | `tsc` inmediatamente después | Corregido en el momento |
+
+Siguen siendo válidos dos hallazgos de la sesión anterior: el trigger `text = uuid` que hacía fallar el
+100 % de las operaciones (migración 7) y el orden de migraciones que dejaba el cierre diario roto en
+instalaciones nuevas (migración 8).
+
+## 5. Migraciones
+
+```
+npx prisma migrate status  →  8 migrations found · Database schema is up to date!
+```
+
+**Ninguna migración nueva.** Todo lo añadido encaja en el esquema existente. No se ha editado ninguna
+migración ya aplicada.
+
+## 6. Estado de la base de datos de trabajo
+
+| Elemento | Valor |
 | --- | --- |
 | Movimientos financieros | **0** |
 | Cierres | **0** |
-| Unidades financieras | 4 (FULLTECH, PHYTOEMAGRY, FULLPOS CLOUD, FINANZAS PERSONALES) |
+| Unidades financieras | 4 (FULLTECH, PHYTOEMAGRY, FULLPOS CLOUD, PERSONALES) |
 | Cuentas del catálogo contable | 72 |
 | Categorías | 32 |
 | Saldos iniciales | **ninguno** (los introduce el usuario) |
+| Base de pruebas | `finanza_test`, aislada: las 89 pruebas e2e escriben ahí |
 
-### Base de datos de pruebas, aislada
+## 7. Pruebas — 204 en verde, 0 fallos
 
-`finanza_test` es una base de datos aparte. Las 52 pruebas de extremo a extremo crean movimientos y
-cierres de verdad, y **escriben sólo ahí**. `apps/api/test/setup-env.ts` aborta la ejecución si no
-consigue una base de datos distinta de la de trabajo: preferible fallar a mezclar datos de prueba con
-las cuentas reales. Esto se descubrió y se corrigió en esta sesión (sección 14).
+| Suite | Pruebas | Qué cubre |
+| --- | --- | --- |
+| API · unitarias | 82 | Dinero, fechas de negocio, amortización, asientos, reglas del cierre |
+| API · flujo financiero (e2e) | 52 | Todo el recorrido del dinero contra PostgreSQL real |
+| **API · integridad financiera (e2e)** | **28** | Las 14 reglas que protegen el dinero |
+| **API · notificaciones push (e2e)** | **9** | Circuito de push hasta la entrega, incluida la honestidad al informar |
+| **PWA** | **33** | Formato del dinero, cola sin conexión y ciclo completo de 24 h |
 
----
+### Las 14 reglas de integridad, una a una
 
-## 5. Módulos: estado real, uno a uno
+| Regla | Comprobación real |
+| --- | --- |
+| R1 | Ingreso 1.000 + traspaso 400 → el ingreso sigue en 1.000 y el dinero total no cambia |
+| R1b | Traspaso entre negocios → el ingreso del destino sigue en 0,00 y la cuenta puente 1150 queda en 0 |
+| R2 | Gasto 100 + retiro 200 → el gasto del período es 100; el retiro aparece aparte |
+| R3 | Préstamo recibido → el disponible sube, el ingreso no cambia |
+| R4 | Cuota de 1.000 (900 capital + 100 intereses) → el gasto sube **100**, no 1.000; el capital baja a 4.100 |
+| R5 | 0 asientos descuadrados; intento con SQL directo → **rechazado por la base de datos** |
+| R6 | Mismo identificador → devuelve el original y hay **1** fila; con otro contenido → rechazado |
+| R7 | Saldo de cada cuenta comparado con la suma de sus asientos |
+| R8 | Los movimientos no se cruzan entre unidades; cuenta ajena → error; consolidado sin duplicar |
+| R9 | 50.000 declarados → ingreso 0,00, gasto 0,00, disponible 50.000 y patrimonio 30.000 con 20.000 de deuda |
+| R10 | Diferencia sin explicar → 422 y el día **no** queda cerrado |
+| R11 | Ajuste sin motivo → rechazado; con motivo → movimiento y registro de auditoría |
+| R12 | Anular deja el original como VOIDED y crea el asiento inverso; borrar por SQL → **rechazado** |
+| R13 | Lote con una operación ya registrada → APPLIED + **DUPLICATE**, y sigue habiendo 1 movimiento |
+| R14 | Operación inválida → **REJECTED**, guardada con su motivo y visible en `/sync/issues` |
 
-| Módulo | Servidor | Pantalla | Pruebas |
-| --- | --- | --- | --- |
-| Autenticación, sesiones, dispositivos | ✅ | ✅ | 9 |
-| Unidades financieras y miembros | ✅ | lectura en Ajustes | 4 |
-| Cuentas financieras (efectivo, banco, tarjeta) | ✅ | ✅ | 8 |
-| Categorías y contrapartes | ✅ | ✅ | 5 |
-| Ingresos / gastos / retiros / aportes / ajustes | ✅ | ✅ | 11 |
-| Anulación con reverso y motivo | ✅ | ✅ | 4 |
-| Traspasos (misma unidad y entre negocios) | ✅ | **⬜ no hay pantalla** | 6 |
-| Préstamos, cuotas y pagos | ✅ | **⬜ no hay pantalla** | 7 |
-| Cuentas por cobrar y por pagar | ✅ | **⬜ no hay pantalla** | 4 |
-| Obligaciones recurrentes | ✅ | **⬜ no hay pantalla** | 3 |
-| Presupuestos y alertas | ✅ | **⬜ no hay pantalla** (consumo en el panel) | 5 |
-| **Cierre diario** | ✅ | ✅ completo | 11 |
-| Disciplina (verde/amarillo/rojo) | ✅ | ✅ | 4 |
-| Panel con gráficas | ✅ | ✅ | 3 |
-| 12 informes + CSV | ✅ | ✅ | 6 |
-| Sincronización sin conexión | ✅ | ✅ | 4 + 11 pruebas de cliente |
-| Notificaciones internas y push | ✅ | ✅ | 5 |
-| Adjuntos | ✅ | **⬜ sin subida** | 2 |
-| Auditoría | ✅ | consulta por API | 2 |
-| Salud y preparación | ✅ | — | 2 |
+### Ciclo de 24 horas sin conexión (automatizado)
 
----
+Registrar con conexión → sin cobertura → registrar 3 operaciones → consultar lo local → preparar cierre
+provisional → **cerrar y reabrir la aplicación** → comprobar persistencia → recuperar conexión →
+sincronizar → **verificar que cada operación se envió exactamente una vez** → simular tiempo de espera
+agotado → reintentar → verificar idempotencia (DUPLICATE) → simular conflicto entre dispositivos →
+verificar caducidad de la ventana → comprobar que lo rechazado sigue visible → confirmar que **no se ha
+perdido nada**.
 
-## 6. Cierre diario: el módulo que sostiene todo
+**Pendiente:** la prueba física de 24 h en un teléfono con modo avión. No se afirma que se haya hecho.
 
-Es el módulo más importante del encargo y está completo:
+## 8. Estado real del push
 
-1. **Preparación**: saldo esperado de cada cuenta calculado del libro mayor, resumen del día
-   (ingresos, gastos, movimientos), operaciones pendientes de sincronizar y las 10 casillas.
-2. **Recuento**: importe contado por cuenta, diferencia calculada en vivo, explicación **obligatoria**
-   de cada diferencia.
-3. **Resultado**: o se finaliza, o el sistema enumera **exactamente** qué lo bloquea.
-4. **Ajuste** opcional y explícito (faltante → 8010, sobrante → 4920), que deja el saldo de la cuenta
-   igual al efectivo contado.
-5. **Reapertura** sólo con motivo de 10 caracteres o más, dejando constancia de quién y cuándo.
-6. **Calendario de 30 días** con el estado de cada jornada.
+| Paso | Estado |
+| --- | --- |
+| Claves VAPID | ✅ Generadas y guardadas en `apps/api/.env` (fuera de Git, verificado) |
+| Servicio de envío | ✅ Verificado: lee las claves y las expone |
+| Suscripción por dispositivo | ✅ Verificado: se guarda, no se duplica, se puede cancelar |
+| Envío al proveedor | ✅ Verificado: intenta, cuenta aceptados y fallados y registra el error |
+| Endpoint inválido | ✅ Verificado: no rompe nada, incrementa el contador de fallos |
+| Avisos internos y recordatorios | ✅ Verificados (sin duplicar al ejecutarse dos veces) |
+| **Entrega REAL a un teléfono** | ❌ **NO VERIFICADA** (depende de Apple/Google, del dispositivo y del permiso) |
 
-Reglas de bloqueo verificadas: no se finaliza con diferencias sin explicar, ni con operaciones
-pendientes de sincronizar, ni sin conexión, ni con cuentas sin recuento, ni sin la lista de
-comprobación completa. Un día no se cierra dos veces.
-
----
-
-## 7. Trabajo sin conexión
-
-- Se pueden registrar ingresos, gastos y demás operaciones sin cobertura: van a una cola en
-  IndexedDB y se envían solas al recuperar la conexión.
-- La ventana es de 24 h (configurable). Pasada, se bloquean nuevos registros hasta validar sesión.
-- El service worker **sólo cachea archivos estáticos, nunca respuestas de la API**: es preferible no
-  enseñar nada a enseñar un saldo de hace tres días como si fuera de hoy.
-- Nada se pierde: lo que el servidor rechaza se conserva con su motivo, visible en «Más».
-
-**Honestidad sobre el alcance:** la cola se ha probado con **IndexedDB real** (11 pruebas de cliente)
-y el protocolo de sincronización con pruebas de extremo a extremo (4). **No se ha hecho la prueba de
-24 horas en un móvil real con modo avión.**
-
----
-
-## 8. Notificaciones
-
-- Recordatorio escalonado del cierre (hora configurada, +1 h y +3 h).
-- Avisos internos ante cualquier asunto que requiera atención, con pantalla de tareas.
-- Web Push completo en servidor y cliente: suscripción por dispositivo, control de fallos, informe de
-  entrega y envío de prueba.
-
-**Lo que no se puede afirmar:** sin claves VAPID configuradas no se ha entregado ninguna notificación
-en ningún dispositivo. La aplicación dice literalmente «las notificaciones push están DESACTIVADAS» y
-sigue funcionando con los avisos internos. Generar las claves está documentado en
-`docs/DESPLIEGUE.md` (tres líneas).
-
----
+La prueba usa un dominio `.invalid` a propósito: **no se afirma que haya llegado ninguna notificación.**
 
 ## 9. Seguridad
 
-Argon2id para contraseñas, tokens de refresco rotados y guardados sólo con hash, sesiones por
-dispositivo revocables, límite de peticiones, cabeceras con `helmet`, CORS restringido, aislamiento
-entre unidades con `403` verificado en pruebas, auditoría de acciones sensibles y secretos generados
-con el generador criptográfico (nunca en el repositorio).
+| Aspecto | Estado |
+| --- | --- |
+| Argon2id, refresco rotado, cierre por dispositivo | ✅ Ya existía |
+| Aislamiento entre unidades (403) | ✅ Probado (R8) |
+| Límite de peticiones, cabeceras, CORS | ✅ Ya existía |
+| Secretos fuera de Git | ✅ Verificado con `git check-ignore` |
+| Adjuntos validados por tamaño y tipo, fuera de carpeta pública | ✅ Ya existía |
+| **2FA (TOTP)** | ❌ **NO implementada.** Necesita migración aditiva, desafío en el acceso y bloqueo por fuerza bruta. Se documenta como pendiente en lugar de hacerlo a medias |
+| HTTPS | ❌ No. Obligatorio antes de exponer a internet |
 
-**Los tokens no se guardan en IndexedDB.** PostgreSQL sólo escucha en `127.0.0.1:55432`.
+## 10. Copias de seguridad
 
-Ausencias declaradas: sin HTTPS, sin cifrado en reposo, sin 2FA, sin auditoría externa, sin pruebas de
-penetración. Detalle en `docs/SEGURIDAD.md`.
+| Aspecto | Estado |
+| --- | --- |
+| Volcado comprimido (`backup-db.ps1`) | ✅ Funciona |
+| Retención | ✅ Informa de las copias antiguas; **no borra nada por su cuenta** |
+| Credenciales | ✅ Del `.env`, nunca impresas |
+| Restauración en base aislada con verificación de asientos | ✅ `restore-test.ps1` existe y falla si hay un asiento descuadrado |
+| **Restauración ejecutada en esta sesión** | ❌ **PENDIENTE** (el script está listo) |
+| Almacenamiento externo y cifrado | ❌ Pendiente (ver `docs/DESPLIEGUE.md`) |
 
----
+## 11. Preparación para producción
 
-## 10. Interfaz y experiencia móvil
+Preparado: imágenes Docker multi-etapa (API y PWA), nginx con proxy y cabeceras, usuario no root,
+`migrate deploy` al arrancar, revisiones de salud, volumen persistente, aislamiento respecto a otros
+proyectos y guía de despliegue.
 
-9 pantallas pensadas para el móvil, con navegación inferior de 5 elementos:
+Falta antes de desplegar: **HTTPS con dominio**, copias automáticas fuera del equipo, 2FA, revisión de
+orígenes permitidos, copia de los adjuntos (no van en el volcado de la base) y mover el planificador de
+recordatorios a una tarea del sistema. Guía concreta en `docs/DESPLIEGUE.md`.
 
-**Panel** · **Registrar** · **Movimientos** · **Cierre** · **Más** (tareas, sincronización, accesos)
-+ **Informes** y **Ajustes**.
+## 12. Funcionalidades pendientes (nada de esto está simulado)
 
-- Selector de unidad financiera siempre visible en la cabecera.
-- Avisos permanentes de «sin conexión» y de operaciones pendientes.
-- Importes grandes, teclado numérico decimal, entrada de un toque.
-- Modo claro y oscuro; colores con significado (entra/sale) y nunca como única señal.
-- Ninguna cifra inventada: si no hay datos, dice «no hay datos», nunca un cero que parezca un saldo.
+1. **Autenticación en dos pasos (TOTP)** con códigos de recuperación.
+2. **Entrega real de push** comprobada en Android y en iPhone instalado.
+3. **Prueba física de 24 h sin conexión.**
+4. **Restauración de copia ejecutada** de principio a fin.
+5. **Informes en PDF generados en el servidor** (hoy se usa «PDF / Imprimir» del navegador, con los
+   mismos totales).
+6. **Pruebas de interfaz en navegador (Playwright)**: no se han añadido. Lo cubierto son API, motor de
+   sincronización y formato; la interfaz no tiene pruebas automatizadas de navegador.
+7. **Cifrado de adjuntos** en disco y cifrado en reposo.
 
----
-
-## 11. Informes
-
-12 informes: diario, semanal, mensual, por negocio, consolidado, flujo de efectivo, gastos por
-categoría, retiros del propietario, estado de cuentas, obligaciones pendientes, cierres con
-diferencias y presupuestos. Todos con su período declarado, totales visibles y descarga **CSV con BOM
-UTF-8** (los acentos se abren bien en Excel). Más el balance de comprobación, el libro diario y el
-**informe de integridad contable**.
-
----
-
-## 12. Validaciones ejecutadas, con su resultado
-
-| Comprobación | Comando | Resultado |
-| --- | --- | --- |
-| Tipos API | `npx tsc --noEmit` | **0 errores** |
-| Lint API | `npx eslint "src/**/*.ts" "test/**/*.ts"` | **0 errores**, 13 avisos (importes no usados) |
-| Pruebas unitarias API | `npm test` | **82 / 82 en verde** (5 suites, 4,4 s) |
-| Pruebas extremo a extremo | `npm run test:e2e` | **52 / 52 en verde** (base de datos real, 3,0 s) |
-| Compilación API | `npx nest build` | **correcta** (`dist/main.js`) |
-| Tipos PWA | `npx tsc --noEmit` | **0 errores** |
-| Lint PWA | `npx eslint "src/**/*.{ts,tsx}"` | **0 errores** |
-| Pruebas PWA | `npx vitest run` | **29 / 29 en verde** |
-| Compilación PWA | `npx vite build` | **correcta** — 758 módulos, 984 kB (293 kB gzip), service worker con 13 elementos precargados |
-| Migraciones | `npx prisma migrate status` | **8 migraciones aplicadas, «up to date»** |
-| Base de datos aislada | `create-test-db.ps1` + e2e | 52/52 en verde **sobre una base creada desde cero** |
-| Limpieza | `reset-dev-db.ps1` | 0 movimientos, 0 cierres, 4 unidades, 72 cuentas, 32 categorías |
-
-**Total: 163 pruebas automatizadas en verde.**
-
----
-
-## 13. Defectos encontrados y corregidos en esta sesión
-
-| # | Defecto | Consecuencia real | Cómo se encontró | Corrección |
-| --- | --- | --- | --- | --- |
-| 1 | `operator does not exist: text = uuid` en los triggers | **El 100 % de las operaciones financieras fallaba con error 500** | Prueba de extremo a extremo (el comprobador de tipos no lo veía) | Migración 7: variables `text` en las funciones de trigger |
-| 2 | `journalEntryId` único | Un traspaso dentro de la misma unidad (un asiento, dos movimientos) era imposible | Prueba de extremo a extremo de traspasos | Migración 5: índice en lugar de único; relación a lista |
-| 3 | El trigger daba por cerrado un cierre en estado `WITH_DIFFERENCES` | No se podía explicar una diferencia y volver a guardar para finalizar | Prueba de extremo a extremo del cierre | Migración 6 (y, definitivamente, la 8) |
-| 4 | La finalización exigía reenviar la lista de comprobación | Cerrar el día fallaba con 422 tras haberlo confirmado | Prueba de extremo a extremo | `finalize` lee la lista ya guardada |
-| 5 | Conflicto de serialización en traspasos | 409 intermitente en operaciones legítimas | Prueba de extremo a extremo | Reintentos en `inMoneyTransaction` |
-| 6 | Pago de préstamo por encima de la deuda se recortaba en silencio | El saldo dejaba de cuadrar sin explicación | Prueba de extremo a extremo | Rechazo explícito con el desglose |
-| 7 | **Orden de las migraciones**: la migración 4 (marca de tiempo posterior a la 6) reintroducía el defecto 3 | Una instalación **nueva** nacía con el cierre diario roto, aunque en la máquina de desarrollo funcionara | Reconstruir la base de datos desde cero y correr las pruebas | Migración 8, con comprobación interna que falla si el defecto vuelve |
-| 8 | Las pruebas escribían en la base de datos de trabajo | Datos de prueba mezclados con las cuentas reales (142 movimientos falsos) | Recuento de filas al preparar el aislamiento | Base de datos `finanza_test` + abortar si no se puede aislar + limpieza de la base de trabajo |
-
-El defecto 7 es el más importante de la sesión: **las 52 pruebas pasaban sobre una base de datos
-corregida a mano, y el sistema se rompía al instalarlo limpio**. Se descubrió precisamente por
-reconstruir la base desde el historial de migraciones. Es la razón por la que hoy existe
-`scripts/create-test-db.ps1` y por la que la migración 8 comprueba su propio resultado.
-
-También se corrigieron, a raíz de las pruebas: `process.loadEnvFile` no funciona con
-`--experimental-vm-modules` (carga manual del `.env`), `app.init()` daba fallos intermitentes en las
-pruebas (se usa `app.listen(0)`), y un `await` dentro de JSX en la PWA.
-
----
-
-## 14. Lo que NO está hecho
-
-**Sin pantalla** (funciona por API y está probado): traspasos, préstamos y cuotas, cuentas por
-cobrar y por pagar, obligaciones recurrentes, presupuestos, subida de adjuntos, gestión de miembros.
-
-**Sin implementar**: informes en PDF; autenticación en dos pasos; cifrado de adjuntos en disco;
-copias automáticas programadas; notificaciones al móvil sin claves VAPID.
-
-**Nunca se ha intentado**: desplegar en internet; conectar con FullPOS, Phytoemagry o Fulltech;
-tocar sus bases de datos; usar datos reales.
-
----
-
-## 15. Lo que sólo se puede comprobar en un dispositivo real
-
-| Comprobación | Estado | Qué falta |
-| --- | --- | --- |
-| 24 h sin conexión en modo avión | **PENDIENTE** | Un móvil y tiempo real. La lógica sí está probada |
-| Entrega de una notificación push | **PENDIENTE** | Claves VAPID |
-| Instalación en iPhone y funcionamiento en iOS | **PENDIENTE** | Un iPhone |
-| Aspecto en pantallas grandes | **PENDIENTE** | Revisión visual |
-| Copia de seguridad y restauración reales | **PENDIENTE** | Ejecutar los dos scripts (están listos) |
-
----
-
-## 16. Cómo ejecutarlo localmente
+## 13. Cómo iniciar la aplicación
 
 ```powershell
-.\scripts\bootstrap-dev.ps1        # secretos, .env, base de datos, dependencias
-cd apps\api ; npm run db:seed       # estructura y usuario (imprime la contraseña UNA vez)
-cd ..\.. ; .\scripts\dev.ps1        # base de datos + API + PWA
+.\scripts\bootstrap-dev.ps1          # base de datos, secretos y dependencias (primera vez)
+cd apps\api ; npm run db:seed ; cd ..\..   # estructura y usuario (contraseña UNA vez)
+.\scripts\dev.ps1                    # arrancar todo
 ```
 
 - PWA: <http://localhost:5180> · API: <http://localhost:3010/api/v1/health>
-- PostgreSQL: `127.0.0.1:55432` (base `finanza`)
+- Verificación completa: `.\scripts\verify.ps1` (204 pruebas, ~35 s)
+- Empezar de cero: `.\scripts\reset-dev-db.ps1` (pide escribir `LIMPIAR`)
+- Notificaciones: `.\scripts\generate-vapid.ps1`
 
-**La contraseña del usuario `admin@finanza.local` se ha generado y se muestra una sola vez en la
-salida del comando de semilla que se ha ejecutado al final de la sesión.** Cópiala de ahí y cámbiala
-en Ajustes → Seguridad. Si se pierde, se puede definir `ADMIN_PASSWORD` en `apps/api/.env` y volver a
-ejecutar la semilla.
+## 14. Evidencia de las verificaciones
 
-Para vaciar los datos y quedarse con la estructura: `.\scripts\reset-dev-db.ps1` (pide escribir
-`LIMPIAR`).
-
----
-
-## 17. Copias de seguridad y restauración
-
-```powershell
-.\scripts\backup-db.ps1     # volcado comprimido en backups\ (nombre con fecha y hora)
-.\scripts\restore-test.ps1  # restaura en una base APARTE y comprueba que los asientos cuadran
+```
+.\scripts\verify.ps1
+  ===== Base de datos =====                        OK  PostgreSQL disponible
+  ===== Base de datos de pruebas (aislada) =====
+  ===== API - typecheck, lint, pruebas y build ==== Tests: 82 passed, 82 total
+                                                     Tests: 89 passed, 89 total
+                                                     OK  API verificada
+  ===== PWA - typecheck, lint, pruebas y build ==== Test Files  3 passed (3)
+                                                     OK  PWA verificada
+  VERIFICACIÓN COMPLETA: todo correcto en 35 s
 ```
 
-La restauración de prueba es parte del procedimiento, no un extra: cuenta las tablas, cuenta los
-asientos y las líneas, y **falla si encuentra un asiento descuadrado**. Nunca restaura sobre la base
-de trabajo.
+- `tsc --noEmit` en las dos aplicaciones: **0 errores**; `eslint`: **0 errores**
+- `prisma migrate status`: **8 migraciones, «up to date»**
+- Base de trabajo tras la verificación completa: **0 movimientos, 0 cierres**
 
----
+**Nota de fiabilidad:** en una ejecución de la verificación, la prueba del ciclo offline falló una vez y
+no se ha reproducido en las 4 siguientes. Se anota a propósito: una prueba intermitente es un riesgo y
+debe investigarse como si fuera un defecto real.
 
-## 18. Docker y despliegue
+## 15. Recomendaciones para usarlo con dinero real
 
-- `docker-compose.yml`: PostgreSQL con proyecto, contenedor, volumen y puerto propios (`55432`), y un
-  perfil `full` que añade API y PWA.
-- `apps/api/Dockerfile`: multi-etapa, usuario no root, `prisma migrate deploy` al arrancar, revisión
-  de salud.
-- `apps/web/Dockerfile` + `nginx.conf`: compilación, nginx con proxy hacia la API, cabeceras de
-  seguridad, service worker sin caché y respaldo de rutas hacia `index.html`.
+1. Cambiar la contraseña del propietario y guardarla en un gestor de contraseñas.
+2. Abrir **«Organizar mi dinero»** y declarar la situación real. Sin ese paso la aplicación no sabe
+   cuánto dinero hay, y lo dice en el panel.
+3. Hacer el **primer cierre diario** de un día pasado para comprobar la mecánica.
+4. Ejecutar una vez `backup-db.ps1` y `restore-test.ps1`.
+5. Adoptar la rutina: registrar durante el día, cerrar por la noche, revisar «Mi control diario».
+6. Activar las notificaciones en el móvil y comprobar si llegan (las claves ya están generadas).
 
-La infraestructura está escrita y **no se ha desplegado en producción**. Antes de hacerlo falta HTTPS,
-copias fuera del equipo y revisar los orígenes permitidos.
+## 16. Conclusión
 
----
+FINANZA está **completo y verificado para uso local**: se sabe dónde está cada peso, de quién es, qué se
+debe y qué falta por registrar; el cierre diario no permite dar por bueno un día que no cuadre; y hay
+204 pruebas —28 dedicadas exclusivamente a impedir que el dinero se descuadre— que lo demuestran.
 
-## 19. Cumplimiento de las restricciones del encargo
+Las tres correcciones de cálculo de esta sesión (intereses como gasto, saldos iniciales sin duplicar,
+sincronización que informa de los duplicados) salieron precisamente de esas pruebas, no de una revisión
+superficial.
 
-| Restricción | Cumplimiento |
-| --- | --- |
-| No limitarse a crear un plan | Se ha construido el sistema completo y se ha verificado ejecutándolo |
-| No detenerse pidiendo autorización módulo a módulo | Se ha trabajado de forma continua hasta el final |
-| No sustituir funcionalidad real por pantallas simuladas | 129 puntos de acceso reales; lo que no está, se declara ausente |
-| No inventar importes ni saldos | 0 movimientos en la base de datos de trabajo; los datos de demostración existen sólo en una unidad `DEMO` y el script se niega a ejecutarse en producción |
-| No modificar otros proyectos | Ningún cambio fuera de `FINANZAS`. Docker con nombre, contenedor, volumen, base de datos y puerto propios |
-| No tocar bases de producción de FullPOS / Phytoemagry / Fulltech | No se ha establecido ninguna conexión con ellas |
-| No ejecutar comandos destructivos fuera de FINANZA | Ningún `prune`, ningún `down -v`, ningún `migrate reset`. La limpieza fue sobre la base `finanza` del propio proyecto y con confirmación explícita |
-| No publicar secretos | Secretos generados localmente, en archivos ignorados por Git, jamás impresos en los registros |
-| No desplegar públicamente | Nada publicado |
-
----
-
-## 20. Riesgos y deuda técnica
-
-| Riesgo | Impacto | Mitigación actual |
-| --- | --- | --- |
-| Sin HTTPS | Credenciales legibles en la red | Sólo uso local; obligatorio antes de publicar |
-| Prueba en dispositivo real pendiente | Podría aparecer un problema específico de iOS | Lógica probada con IndexedDB real; falta la prueba física |
-| Módulos sin interfaz | Hay que usar la API para traspasos, préstamos y presupuestos | Documentado; es el siguiente trabajo |
-| Paquete de la PWA de 984 kB | Carga inicial más lenta en móvil lento | 293 kB comprimidos y precarga del service worker |
-| Sin copias automáticas | Depende de ejecutar el script | Script listo, se puede programar |
-| Un solo esquema de base de datos (`public`) | Sin separación por entorno en el mismo servidor | Bases de datos distintas por entorno (`finanza`, `finanza_test`) |
-| Dependencias muy recientes (NestJS 12, TypeScript 6) | Menos rodaje del habitual | Versiones fijadas y verificadas una a una contra sus dependencias |
-
----
-
-## 21. Recomendaciones antes de usarlo con dinero real
-
-1. **Cambiar la contraseña** del usuario propietario y guardarla en un gestor de contraseñas.
-2. **Introducir los saldos iniciales reales** de cada cuenta, con su fecha. El sistema no inventa nada.
-3. **Hacer un cierre de prueba** de un día ya pasado y comprobar que cuadra.
-4. **Ejecutar** `backup-db.ps1` y `restore-test.ps1` una vez, para saber que funcionan.
-5. **Decidir la frecuencia de cierre** (diaria es lo recomendable) y usarla como rutina.
-6. Registrar a mano un gasto y un ingreso de prueba, anularlos y comprobar que queda constancia.
-
----
-
-## 22. Entregables del encargo (apartado 26)
-
-| # | Entregable | Estado |
-| --- | --- | --- |
-| 1 | Aplicación web instalable (PWA) | ✅ 9 pantallas, service worker, manifiesto en español |
-| 2 | API con lógica de negocio real | ✅ 129 puntos de acceso, 18 módulos |
-| 3 | Esquema de base de datos | ✅ `prisma/schema.prisma`, 29 tablas, 22 enums |
-| 4 | Migraciones | ✅ 8, aplicadas y verificadas desde cero |
-| 5 | Triggers y restricciones de integridad | ✅ 8 funciones, probadas desde SQL directo |
-| 6 | Semilla estructural (sin cifras) | ✅ idempotente, y deja constancia de que no inventa saldos |
-| 7 | Cierre diario con asistente | ✅ 3 pasos, 10 casillas, bloqueos explicados |
-| 8 | Sincronización sin conexión | ✅ cola local, lotes, idempotencia, nada se pierde |
-| 9 | Notificaciones | ✅ internas + push preparado (sin claves VAPID) |
-| 10 | Informes y exportación CSV | ✅ 12 informes + libro, balance e integridad |
-| 11 | `README.md` | ✅ |
-| 12 | `docs/ARQUITECTURA.md` | ✅ |
-| 13 | `docs/INVARIANTES-FINANCIEROS.md` | ✅ |
-| 14 | `docs/MANUAL-USUARIO.md` | ✅ |
-| 15 | `docs/UAT.md` (pruebas de aceptación) | ✅ 30 casos con su evidencia |
-| 16 | `docs/SEGURIDAD.md` | ✅ |
-| 17 | `docs/FUNCIONALIDADES.md` | ✅ hecho / a medias / ausente |
-| 18 | `docs/DESPLIEGUE.md` | ✅ |
-| 19 | Pruebas automatizadas | ✅ 163 (82 + 52 + 29) |
-| 20 | Scripts de arranque y verificación | ✅ `bootstrap-dev`, `sync-env`, `dev`, `verify` |
-| 21 | Scripts de copia y restauración | ✅ `backup-db`, `restore-test` |
-| 22 | Aislamiento de las pruebas | ✅ `create-test-db.ps1` + abortar si no se puede |
-| 23 | Limpieza de datos de prueba | ✅ `reset-dev-db.ps1` con confirmación |
-| 24 | Docker (API y PWA) | ✅ multi-etapa + nginx |
-| 25 | Lint y comprobación de tipos | ✅ 0 errores en las dos aplicaciones |
-| 26 | Informe final | ✅ este documento |
-
----
-
-## 23. Próximos pasos, por orden de valor
-
-1. **Pantalla de traspasos.** Es lo que más falta para conciliar: mover dinero entre tus cuentas y
-   entre tus negocios hoy sólo se puede por API.
-2. **Pantalla de préstamos y deudas.** La deuda viva ya se calcula; falta poder registrarla y pagarla
-   desde el móvil.
-3. **Claves VAPID** y prueba de push en Android y iPhone.
-4. **Prueba real de 24 h sin conexión** en un teléfono.
-5. **Pantallas de presupuestos y de cuentas por cobrar/pagar.**
-6. Copia de seguridad programada y, si se quiere acceso desde fuera de casa, HTTPS.
-
----
-
-## 24. Conclusión
-
-FINANZA está construido, se ejecuta y está probado: 163 pruebas en verde, 8 migraciones aplicadas,
-las cuentas cuadran por construcción y el cierre diario no permite dar por bueno un día que no cuadre.
-
-Es **utilizable hoy, en local, con datos reales**. No está listo para producción, y se dice aquí con
-la misma claridad con la que se dicen las nueve cosas que faltan.
-
-El trabajo de esta sesión no acabó en un plan: acabó con la base de datos limpia, sin un solo importe
-inventado, y esperando tus cifras.
+Lo que falta está enumerado con nombre y apellidos en la sección 12, y ninguna de esas cosas se
+presenta como hecha.

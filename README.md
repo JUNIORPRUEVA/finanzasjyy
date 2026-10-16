@@ -58,8 +58,12 @@ Ejecuta, sin preguntar nada:
 | --------------------- | ------------------ | ------------------ |
 | Tipos (`tsc`)         | ✅                 | ✅                 |
 | Lint (ESLint)         | ✅ 0 errores       | ✅ 0 errores       |
-| Pruebas               | 82 unitarias + 52 e2e | 29 unitarias    |
+| Pruebas               | 82 unitarias + 89 e2e | 33                |
 | Compilación producción | ✅ `nest build`   | ✅ `vite build` + service worker |
+
+**204 pruebas automatizadas** en total. De ellas, **28 defienden las reglas del dinero**
+(`apps/api/test/integridad-financiera.e2e-spec.ts`) y 4 recorren el ciclo completo de 24 h sin
+conexión (`apps/web/src/lib/offline.test.ts`).
 
 Las pruebas de extremo a extremo **no escriben en la base de datos de trabajo**: se ejecutan contra
 `finanza_test`, que el propio script prepara. Ver `docs/UAT.md`.
@@ -72,6 +76,7 @@ Las pruebas de extremo a extremo **no escriben en la base de datos de trabajo**:
 | `scripts\sync-env.ps1` | Propaga los `.env` sin imprimir secretos |
 | `scripts\dev.ps1` | Arranca base de datos + API + PWA |
 | `scripts\verify.ps1` | Verificación completa de las dos aplicaciones |
+| `scripts\generate-vapid.ps1` | Genera las claves de las notificaciones push |
 | `scripts\create-test-db.ps1` | Prepara `finanza_test` (aislada): migra y siembra |
 | `scripts\reset-dev-db.ps1` | Deja limpia la base de trabajo (pide escribir `LIMPIAR`) |
 | `scripts\backup-db.ps1` | Copia de seguridad comprimida |
@@ -125,6 +130,6 @@ sean los suyos, y ninguno hace `prune`, `down -v` ni `migrate reset`.
 - **Local:** funciona de extremo a extremo, verificado contra PostgreSQL real.
 - **Producción:** no desplegado. No se ha publicado nada en internet ni se ha tocado ninguna base
   de datos de producción de FULLTECH, PHYTOEMAGRY o FULLPOS CLOUD.
-- **Notificaciones push:** implementadas y probadas en el servidor, pero **no validadas en un
-  dispositivo real** porque no hay claves VAPID configuradas. La aplicación lo dice tal cual.
+- **Notificaciones push:** el servidor tiene claves VAPID y el circuito está probado hasta el envío.
+  **La llegada a un dispositivo real no está verificada.**
 - **Informe completo:** [docs/INFORME-FINAL.md](docs/INFORME-FINAL.md)

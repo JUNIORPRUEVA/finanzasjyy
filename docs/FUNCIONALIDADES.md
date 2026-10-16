@@ -48,7 +48,7 @@ Leyenda: ✅ hecho y probado · 🟡 hecho en el servidor, sin interfaz todavía
 | Anulación de un movimiento con motivo obligatorio | ✅ | Genera asiento inverso; el original queda visible |
 | Importe exacto (Decimal, sin errores de céntimos) | ✅ | 13 pruebas de dinero |
 | Cifras negativas o con más de 2 decimales rechazadas | ✅ | Mensaje claro al usuario |
-| Adjuntar comprobantes (imagen/PDF) a un movimiento | 🟡 | Módulo `attachments` con API y almacenamiento en disco; sin interfaz de subida |
+| Adjuntar comprobantes (imagen/PDF) a un movimiento | ✅ | Módulo `attachments` + pantalla `/adjuntos` (cámara en el móvil, descarga y desvinculación; el archivo se conserva para auditoría) |
 
 ## 4. Traspasos entre cuentas y entre negocios
 
@@ -58,7 +58,7 @@ Leyenda: ✅ hecho y probado · 🟡 hecho en el servidor, sin interfaz todavía
 | Traspaso entre unidades (intercompany) | ✅ | Cuenta puente 1150, mismo asiento: no infla ingresos |
 | El traspaso exige cuenta origen ≠ destino | ✅ | Rechazado con mensaje claro |
 | Informe de comprobación intercompany | ✅ | `/transfers/intercompany-check`: el saldo de 1150 debe ser 0 |
-| Pantalla para hacer traspasos | ⬜ | **No existe.** Hoy se hace por API (`POST /transfers`) |
+| Pantalla para hacer traspasos | ✅ | `/traspasos`: cuentas agrupadas por unidad, aviso de traspaso entre negocios y aviso si el importe supera el saldo |
 
 ## 5. Deudas y préstamos
 
@@ -71,7 +71,7 @@ Leyenda: ✅ hecho y probado · 🟡 hecho en el servidor, sin interfaz todavía
 | Cuentas por cobrar y por pagar | ✅ | API completa |
 | Obligaciones recurrentes (alquiler, suscripciones, nómina) | ✅ | Incluye «avanzar período» |
 | Resumen de deuda para el panel | ✅ | `/loans/summary` |
-| Pantallas de préstamos, cuentas por cobrar/pagar y recurrentes | ⬜ | **No existen.** Sólo lectura en el panel (deuda total viva) |
+| Pantallas de préstamos, cuentas por cobrar/pagar y recurrentes | ✅ | `/deudas` (préstamos, cuotas y tarjetas) y `/obligaciones` (compromisos, por cobrar y por pagar, con cobros y pagos parciales) |
 
 ## 6. Presupuestos
 
@@ -81,7 +81,7 @@ Leyenda: ✅ hecho y probado · 🟡 hecho en el servidor, sin interfaz todavía
 | Alertas al acercarse y al superar el umbral | ✅ | Umbrales configurables (80 % aviso / 100 % alerta) |
 | Superar un presupuesto **no bloquea** el gasto | ✅ | Avisa, no impide: la realidad manda |
 | Gasto de cada presupuesto calculado del libro | ✅ | Con porcentaje y lo que queda |
-| Pantalla para definir presupuestos | ⬜ | **No existe.** El consumo se ve en el panel |
+| Pantalla para definir presupuestos | ✅ | `/presupuestos`: creación con varias categorías, barras de consumo y avisos al acercarse o superar |
 
 ## 7. Cierre diario — el módulo central
 
@@ -148,7 +148,22 @@ Leyenda: ✅ hecho y probado · 🟡 hecho en el servidor, sin interfaz todavía
 | Avisos internos ante cualquier problema (asiento descuadrado, fallo de sincronización, diferencia de cierre) | ✅ | Tabla `Notification` + pantalla de tareas |
 | Web Push (VAPID) con suscripción por dispositivo | ✅ en el servidor | Cliente y servidor listos; **sin claves VAPID configuradas no se envía nada y la app lo dice** |
 | Informe de entrega de notificaciones | 🟡 | `/notifications/push/delivery-report` |
-| Entrega real comprobada en un dispositivo | ⬜ | **No verificada.** Ver `docs/UAT.md`, caso UAT-26 |
+| Entrega real comprobada en un dispositivo | ❌ | **No verificada.** Claves VAPID generadas y circuito probado hasta el envío, con dominio `.invalid` a propósito |
+
+## 11 bis. Puesta en marcha y disciplina diaria (nuevo)
+
+| Función | Estado | Detalle |
+| --- | --- | --- |
+| Asistente **«Organizar mi dinero»** | ✅ | `/organizar`: 5 pasos (dinero, deudas, por cobrar/pagar, compromisos, confirmar), guarda el progreso en el dispositivo, avisa de lo que falta y registra el asiento de apertura |
+| Los saldos iniciales no inflan los ingresos | ✅ | Se contabilizan contra el patrimonio (3400): comprobado en la prueba R9 |
+| **«Mi control diario»** | ✅ | `/control`: semáforo con motivo, tareas reales con enlace a su pantalla, constancia (días seguidos, cumplimiento semanal y mensual) |
+| Tareas derivadas de datos reales | ✅ | Cierres pendientes y atrasados, deudas y cobros que vencen, gastos sin categoría, diferencias de caja, operaciones sin confirmar y presupuestos excedidos |
+| El control diario NO bloquea nada | ✅ | Informa y ordena; nunca impide registrar dinero |
+| Crear unidades financieras desde la interfaz | ✅ | `/unidades`: alta de negocios y fuentes de ingreso, con su estado y lo que les falta |
+| Exportar informes a PDF | ✅ | «PDF / Imprimir» en informes, con hoja de estilo de impresión (vía diálogo del navegador) |
+| Tiempo de espera en las peticiones | ✅ | 20 s (`VITE_API_TIMEOUT_MS`): una petición colgada ya no deja la pantalla cargando |
+| Autenticación en dos pasos (TOTP) | ⬜ | **No implementada.** Requiere migración aditiva y flujo de desafío |
+| Pruebas de interfaz en navegador | ⬜ | **No añadidas.** Lo cubierto son API, sincronización y formato |
 
 ## 12. Seguridad y control
 
@@ -167,9 +182,12 @@ Leyenda: ✅ hecho y probado · 🟡 hecho en el servidor, sin interfaz todavía
 
 ## Lo que falta, en una frase
 
-Lo que no está hecho es, sobre todo, **interfaz** para funciones que ya existen y están probadas en
-el servidor: traspasos, préstamos y deudas, cuentas por cobrar/pagar, obligaciones recurrentes,
-presupuestos y adjuntos. Y faltan las comprobaciones que **sólo se pueden hacer en un dispositivo
-real**: la prueba de modo avión, la entrega de push y la instalación en iPhone.
+Falta poco para lo esencial y todo está enumerado:
+
+1. **Autenticación en dos pasos (TOTP)** y HTTPS, antes de exponer a internet.
+2. Las comprobaciones que **sólo se pueden hacer en un dispositivo real**: 24 h en modo avión, entrega
+   real de push e instalación en iPhone.
+3. **Pruebas de interfaz en navegador** (Playwright): la interfaz no tiene pruebas automatizadas.
+4. Restauración de copia ejecutada de principio a fin.
 
 Nada de lo que falta está simulado: simplemente no está, y la aplicación no finge que esté.

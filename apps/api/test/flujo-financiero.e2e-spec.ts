@@ -1022,13 +1022,22 @@ describe('FINANZA — flujo financiero completo (e2e)', () => {
       expect(['GREEN', 'YELLOW', 'RED']).toContain(response.body.level);
     });
 
-    it('informa con honestidad si el push está desactivado', async () => {
+    it('informa con honestidad del estado real del push (con o sin claves VAPID)', async () => {
       const response = await http.get('/api/v1/notifications/push/status').set(auth()).expect(200);
-      expect(response.body.pushEnabledOnServer).toBe(false); // sin claves VAPID en las pruebas
-      expect(response.body.publicKey).toBeNull();
+
+      // El estado NO se inventa: si hay claves, dice que sí y publica la clave
+      // pública; si no las hay, lo dice y explica que está desactivado. La prueba
+      // comprueba esa COHERENCIA, no un valor concreto, porque el resultado
+      // depende de la configuración del entorno en el que se ejecute.
+      if (response.body.pushEnabledOnServer) {
+        expect(typeof response.body.publicKey).toBe('string');
+        expect(response.body.publicKey.length).toBeGreaterThan(60);
+      } else {
+        expect(response.body.publicKey).toBeNull();
+      }
 
       const test = await http.post('/api/v1/notifications/push/test').set(auth()).expect(201);
-      expect(test.body.message).toMatch(/DESACTIVADO/);
+      expect(test.body.message).toMatch(response.body.pushEnabledOnServer ? /No hay dispositivos suscritos|envió a/i : /DESACTIVADO/);
     });
   });
 

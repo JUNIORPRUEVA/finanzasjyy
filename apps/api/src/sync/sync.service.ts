@@ -171,10 +171,15 @@ export class SyncService {
     try {
       const applied = await this.dispatch(user, clientOperationId, item, meta);
 
+      // Una operación repetida NO se marca como «aplicada de nuevo»: se marca
+      // como duplicada. Es lo que espera el dispositivo para limpiar su cola, y
+      // lo que permite auditar que el reintento no creó dinero.
+      const appliedStatus: SyncOperationStatus = applied.duplicate ? 'DUPLICATE' : 'APPLIED';
+
       await this.prisma.syncOperation.update({
         where: { id: syncRow.id },
         data: {
-          status: 'APPLIED',
+          status: appliedStatus,
           appliedAt: new Date(),
           entityId: applied.entityId,
           serverId: applied.serverId,
@@ -192,10 +197,13 @@ export class SyncService {
 
       return {
         clientOperationId,
-        status: 'APPLIED',
+        status: appliedStatus,
         serverId: applied.serverId,
         entityId: applied.entityId,
         result: applied.result,
+        ...(applied.duplicate
+          ? { error: 'Esta operación ya estaba registrada: no se ha duplicado.' }
+          : {}),
       };
     } catch (error) {
       const isDomain = isDomainError(error);
@@ -230,7 +238,7 @@ export class SyncService {
     clientOperationId: string,
     item: SyncPushInput['operations'][number],
     meta: RequestMetaInfo,
-  ): Promise<{ serverId: string | null; entityId: string | null; result?: unknown; transactionId?: string }> {
+  ): Promise<{ serverId: string | null; entityId: string | null; result?: unknown; transactionId?: string; duplicate?: boolean }> {
     switch (item.operation.type) {
       case 'TRANSACTION': {
         const payload = item.operation.payload;
@@ -249,6 +257,7 @@ export class SyncService {
           entityId: payload.entityId,
           result,
           transactionId: clientOperationId,
+          duplicate: result.duplicate === true,
         };
       }
 

@@ -9,6 +9,7 @@ import {
   ListObligationsQuery,
   UpdateObligationDto,
 } from './obligations.dto.js';
+import { PayRecurringDto, SettleObligationDto } from './obligations.payments.dto.js';
 import { ObligationsService } from './obligations.service.js';
 
 const FREQUENCIES = ['ONE_TIME', 'WEEKLY', 'BIWEEKLY', 'MONTHLY', 'QUARTERLY', 'SEMIANNUAL', 'ANNUAL'] as const;
@@ -82,6 +83,17 @@ export class ObligationsController {
     return this.obligations.updateReceivable(user, id, dto, meta);
   }
 
+  /** Cobra (total o parcialmente). Genera el movimiento y su asiento. */
+  @Post('receivables/:id/payments')
+  settleReceivable(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+    @Body() dto: SettleObligationDto,
+    @RequestMeta() meta: RequestMetaInfo,
+  ) {
+    return this.obligations.settleReceivable(user, id, dto, meta);
+  }
+
   // ------------------------- Cuentas por pagar --------------------------
 
   @Get('payables')
@@ -108,6 +120,17 @@ export class ObligationsController {
     return this.obligations.updatePayable(user, id, dto, meta);
   }
 
+  /** Paga (total o parcialmente). Genera el movimiento y su asiento. */
+  @Post('payables/:id/payments')
+  settlePayable(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+    @Body() dto: SettleObligationDto,
+    @RequestMeta() meta: RequestMetaInfo,
+  ) {
+    return this.obligations.settlePayable(user, id, dto, meta);
+  }
+
   // --------------------- Obligaciones recurrentes -----------------------
 
   @Get('recurring')
@@ -132,6 +155,20 @@ export class ObligationsController {
     @RequestMeta() meta: RequestMetaInfo,
   ) {
     return this.obligations.updateRecurring(user, id, dto, meta);
+  }
+
+  /**
+   * Registra el pago/cobro REAL del período en curso y avanza el vencimiento.
+   * Es la vía normal: deja el gasto o ingreso en el libro mayor.
+   */
+  @Post('recurring/:id/pay')
+  payRecurring(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+    @Body() dto: PayRecurringDto,
+    @RequestMeta() meta: RequestMetaInfo,
+  ) {
+    return this.obligations.payRecurring(user, id, dto, meta);
   }
 
   /** Marca la obligación como cumplida y pasa al siguiente período. */

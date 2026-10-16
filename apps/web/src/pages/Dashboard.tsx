@@ -105,6 +105,34 @@ export function DashboardPage() {
     [chartsQuery.data],
   );
 
+  /**
+   * Dos consultas que convierten el panel en una herramienta de trabajo:
+   *  · ¿está ya registrado cuánto dinero hay? (si no, se avisa arriba)
+   *  · ¿qué tareas tengo hoy? (semáforo y contador)
+   */
+  const setupQuery = useQuery<{ needsSetup: boolean; pending: string[] }>({
+    queryKey: ['setup-status'],
+    queryFn: () => api.get<{ needsSetup: boolean; pending: string[] }>('/setup/status'),
+  });
+
+  const controlQuery = useQuery<{
+    level: 'GREEN' | 'YELLOW' | 'RED';
+    headline: string;
+    counts: { critical: number; warning: number; info: number; total: number };
+    streaks: { consecutiveClosedDays: number };
+  }>({
+    queryKey: ['daily-control'],
+    queryFn: () =>
+      api.get<{
+        level: 'GREEN' | 'YELLOW' | 'RED';
+        headline: string;
+        counts: { critical: number; warning: number; info: number; total: number };
+        streaks: { consecutiveClosedDays: number };
+      }>('/daily-control'),
+    refetchInterval: 120_000,
+    enabled: navigator.onLine,
+  });
+
   if (summaryQuery.isLoading) {
     return <Spinner label="Cargando el panel…" />;
   }
@@ -121,6 +149,62 @@ export function DashboardPage() {
 
   return (
     <div className="space-y-4">
+      {setupQuery.data?.needsSetup ? (
+        <Card className="border-amber-500/40 bg-amber-500/10">
+          <SectionTitle title="Falta lo más importante: ¿cuánto dinero hay y de quién es?" />
+          <p className="text-sm text-amber-100">
+            Sin esta información, FINANZA no puede decirle dónde está su dinero ni si los saldos cuadran. Es un
+            asistente de cinco pasos y no hay ningún importe precargado: todas las cifras las escribe usted.
+          </p>
+          <div className="mt-3">
+            <a
+              href="/organizar"
+              className="inline-block rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-500"
+            >
+              Organizar mi dinero
+            </a>
+          </div>
+        </Card>
+      ) : null}
+
+      {controlQuery.data ? (
+        <Card className="border-slate-700">
+          <SectionTitle
+            title="Mi control diario"
+            hint={controlQuery.data.headline}
+            right={
+              <Badge
+                tone={
+                  controlQuery.data.level === 'RED'
+                    ? 'critical'
+                    : controlQuery.data.level === 'YELLOW'
+                      ? 'warning'
+                      : 'positive'
+                }
+              >
+                {controlQuery.data.level === 'RED' ? 'ROJO' : controlQuery.data.level === 'YELLOW' ? 'AMARILLO' : 'VERDE'}
+              </Badge>
+            }
+          />
+          <p className="text-xs text-slate-400">
+            {controlQuery.data.counts.total} tarea(s): {controlQuery.data.counts.critical} urgente(s),{' '}
+            {controlQuery.data.counts.warning} pendiente(s). Lleva{' '}
+            {controlQuery.data.streaks.consecutiveClosedDays} día(s) seguido(s) cerrando.
+          </p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <a
+              href="/control"
+              className="rounded-lg bg-slate-800 px-3 py-1.5 text-xs text-slate-100 hover:bg-slate-700"
+            >
+              Ver mis tareas
+            </a>
+            <a href="/cierres" className="rounded-lg bg-slate-800 px-3 py-1.5 text-xs text-slate-100 hover:bg-slate-700">
+              Cerrar el día
+            </a>
+          </div>
+        </Card>
+      ) : null}
+
       <Tabs
         tabs={[
           { id: 'TODAY' as Preset, label: 'Hoy' },

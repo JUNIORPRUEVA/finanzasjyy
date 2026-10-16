@@ -9,7 +9,8 @@ import { PrismaService } from '../prisma/prisma.service.js';
 import { AccessService } from '../security/access.service.js';
 import { addBusinessDays, businessToday, toBusinessDate } from '../domain/business-date.js';
 import { addPeriods } from '../domain/amortization.js';
-import { dec, round2, validateMoney, type DecimalInput } from '../domain/money.js';
+import { dec, gt, gte, min, round2, validateMoney, type DecimalInput } from '../domain/money.js';
+import { TransactionsService } from '../transactions/transactions.service.js';
 import {
   CreatePayableDto,
   CreateReceivableDto,
@@ -17,6 +18,7 @@ import {
   ListObligationsQuery,
   UpdateObligationDto,
 } from './obligations.dto.js';
+import { PayRecurringDto, SettleObligationDto } from './obligations.payments.dto.js';
 
 /**
  * OBLIGACIONES
@@ -38,6 +40,7 @@ export class ObligationsService {
     private readonly prisma: PrismaService,
     private readonly access: AccessService,
     private readonly audit: AuditService,
+    private readonly transactions: TransactionsService,
   ) {}
 
   // -------------------------------------------------------------------------
@@ -505,6 +508,301 @@ export class ObligationsService {
       }),
     ]);
     return { receivables: receivables.count, payables: payables.count };
+  }
+
+  // -------------------------------------------------------------------------
+  // Cobros y pagos: SIEMPRE por el servicio de movimientos
+  // -------------------------------------------------------------------------
+
+  /**
+   * Cobra una cuenta por cobrar (total o parcialmente).
+   *
+   * El dinero entra por la cuenta indicada y se registra como movimiento
+   * financiero normal: eso garantiza el asiento de partida doble, la
+   * idempotencia y la auditoría. El saldo pendiente NO se resta a mano: se
+   * recalcula sumando los cobros registrados, de modo que anular un cobro
+   * devuelve la deuda a su sitio automáticamente.
+   */
+  async settleReceivable(
+    user: AuthenticatedUser,
+    id: string,
+    dto: SettleObligationDto,
+    meta: RequestMetaInfo,
+  ) {
+    const receivable = await this.prisma.receivable.findUnique({ where: { id } });
+    if (!receivable) {
+      throw new NotFoundError('Cuenta por cobrar', id);
+    }
+    await this.access.assertCanWrite(user.userId, receivable.entityId);
+    if (receivable.status === 'CANCELLED') {
+      throw new ConflictError('Esta cuenta por cobrar está anulada y no admite cobros');
+    }
+
+    const amount = validateMoney(dto.amount, { field: 'importe del cobro' });
+    const alreadySettled = await this.settledTotal('RECEIVABLE', id);
+    const pending = round2(dec(receivable.originalAmount).minus(alreadySettled));
+    if (gt(amount, pending)) {
+      throw new ValidationError(
+        `El cobro de ${amount.toFixed(2)} supera lo pendiente (${pending.toFixed(2)}) de «${receivable.description}». ` +
+          'Corrija el importe o ajuste el importe original de la cuenta por cobrar.',
+      );
+    }
+
+    const movement = await this.transactions.create(
+      user,
+      {
+        clientOperationId: dto.clientOperationId,
+        entityId: receivable.entityId,
+        kind: 'RECEIVABLE_SETTLEMENT',
+        accountId: dto.accountId,
+        counterpartyId: receivable.counterpartyId ?? undefined,
+        amount: amount.toFixed(2),
+        businessDate: dto.businessDate,
+        description: dto.description?.trim() || `Cobro: ${receivable.description}`,
+        method: dto.method,
+        reference: dto.reference,
+        attachmentId: dto.attachmentId,
+        receivableId: receivable.id,
+      },
+      meta,
+    );
+
+    const updated = await this.syncObligationState('RECEIVABLE', id);
+
+    await this.audit.record({
+      userId: user.userId,
+      action: 'receivable.settled',
+      entityType: 'Receivable',
+      entityId: id,
+      after: { amount: amount.toFixed(2), settledAmount: dec(updated.settledAmount).toFixed(2), status: updated.status },
+      ip: meta.ip,
+      userAgent: meta.userAgent,
+    });
+
+    return {
+      ...this.presentReceivable(updated),
+      transaction: movement,
+      message: (movement as { duplicate?: boolean }).duplicate
+        ? 'Este cobro ya estaba registrado: no se ha duplicado.'
+        : `Cobro registrado. Pendiente: ${round2(dec(updated.originalAmount).minus(dec(updated.settledAmount))).toFixed(2)}.`,
+    };
+  }
+
+  /** Paga una cuenta por pagar (total o parcialmente). El dinero sale de la cuenta indicada. */
+  async settlePayable(
+    user: AuthenticatedUser,
+    id: string,
+    dto: SettleObligationDto,
+    meta: RequestMetaInfo,
+  ) {
+    const payable = await this.prisma.payable.findUnique({ where: { id } });
+    if (!payable) {
+      throw new NotFoundError('Cuenta por pagar', id);
+    }
+    await this.access.assertCanWrite(user.userId, payable.entityId);
+    if (payable.status === 'CANCELLED') {
+      throw new ConflictError('Esta cuenta por pagar está anulada y no admite pagos');
+    }
+
+    const amount = validateMoney(dto.amount, { field: 'importe del pago' });
+    const alreadySettled = await this.settledTotal('PAYABLE', id);
+    const pending = round2(dec(payable.originalAmount).minus(alreadySettled));
+    if (gt(amount, pending)) {
+      throw new ValidationError(
+        `El pago de ${amount.toFixed(2)} supera lo pendiente (${pending.toFixed(2)}) de «${payable.description}».`,
+      );
+    }
+
+    const movement = await this.transactions.create(
+      user,
+      {
+        clientOperationId: dto.clientOperationId,
+        entityId: payable.entityId,
+        kind: 'PAYABLE_SETTLEMENT',
+        accountId: dto.accountId,
+        counterpartyId: payable.counterpartyId ?? undefined,
+        amount: amount.toFixed(2),
+        businessDate: dto.businessDate,
+        description: dto.description?.trim() || `Pago: ${payable.description}`,
+        method: dto.method,
+        reference: dto.reference,
+        attachmentId: dto.attachmentId,
+        payableId: payable.id,
+      },
+      meta,
+    );
+
+    const updated = await this.syncObligationState('PAYABLE', id);
+
+    await this.audit.record({
+      userId: user.userId,
+      action: 'payable.settled',
+      entityType: 'Payable',
+      entityId: id,
+      after: { amount: amount.toFixed(2), settledAmount: dec(updated.settledAmount).toFixed(2), status: updated.status },
+      ip: meta.ip,
+      userAgent: meta.userAgent,
+    });
+
+    return {
+      ...this.presentPayable(updated),
+      transaction: movement,
+      message: (movement as { duplicate?: boolean }).duplicate
+        ? 'Este pago ya estaba registrado: no se ha duplicado.'
+        : `Pago registrado. Pendiente: ${round2(dec(updated.originalAmount).minus(dec(updated.settledAmount))).toFixed(2)}.`,
+    };
+  }
+
+  /**
+   * Marca una obligación recurrente como cumplida por el período en curso:
+   * registra el movimiento REAL (gasto o ingreso) y avanza el vencimiento.
+   *
+   * El identificador de operación es determinista por obligación y período
+   * (`recurring_<id>_<vencimiento>`), así que pulsar dos veces —o reintentar sin
+   * conexión— no crea dos gastos. Si ya estaba registrado, se devuelve el
+   * movimiento existente sin volver a avanzar el período.
+   */
+  async payRecurring(
+    user: AuthenticatedUser,
+    id: string,
+    dto: PayRecurringDto,
+    meta: RequestMetaInfo,
+  ) {
+    const recurring = await this.prisma.recurringObligation.findUnique({ where: { id } });
+    if (!recurring) {
+      throw new NotFoundError('Obligación recurrente', id);
+    }
+    await this.access.assertCanWrite(user.userId, recurring.entityId);
+    if (recurring.status === 'ENDED') {
+      throw new ConflictError('Esta obligación está finalizada. Reactívela antes de registrar el pago.');
+    }
+
+    const dueIso = recurring.nextDueDate.toISOString().slice(0, 10);
+    const amount = dto.amount ? validateMoney(dto.amount, { field: 'importe pagado' }) : dec(recurring.amount);
+    const clientOperationId = dto.clientOperationId ?? `recurring_${recurring.id}_${dueIso}`;
+
+    const alreadyPaid = await this.prisma.financialTransaction.findUnique({
+      where: { clientOperationId },
+      select: { id: true },
+    });
+
+    const movement = await this.transactions.create(
+      user,
+      {
+        clientOperationId,
+        entityId: recurring.entityId,
+        kind: recurring.direction === 'PAYABLE' ? 'EXPENSE' : 'INCOME',
+        accountId: dto.accountId,
+        categoryId: dto.categoryId ?? recurring.categoryId ?? undefined,
+        counterpartyId: recurring.counterpartyId ?? undefined,
+        amount: amount.toFixed(2),
+        businessDate: dto.businessDate ?? dueIso,
+        description:
+          dto.description?.trim() ||
+          `${recurring.direction === 'PAYABLE' ? 'Pago' : 'Cobro'}: ${recurring.name} (${dueIso})`,
+        method: dto.method,
+        attachmentId: dto.attachmentId,
+      },
+      meta,
+    );
+
+    // El período avanza SÓLO si el movimiento es nuevo: si ya estaba registrado
+    // (duplicado), avanzar otra vez dejaría saltarse un mes.
+    let advanced: { nextDueDate: Date; status: string } | null = null;
+    if (!alreadyPaid) {
+      const nextDueDate = addPeriods(recurring.nextDueDate, recurring.frequency, 1);
+      const updated = await this.prisma.recurringObligation.update({
+        where: { id },
+        data: { nextDueDate, status: recurring.status === 'PAUSED' ? 'PAUSED' : 'ACTIVE' },
+      });
+      advanced = { nextDueDate: updated.nextDueDate, status: updated.status };
+    }
+
+    await this.audit.record({
+      userId: user.userId,
+      action: alreadyPaid ? 'recurring.pay_duplicate' : 'recurring.paid',
+      entityType: 'RecurringObligation',
+      entityId: id,
+      after: {
+        periodDue: dueIso,
+        amount: amount.toFixed(2),
+        nextDueDate: advanced ? advanced.nextDueDate.toISOString().slice(0, 10) : null,
+      },
+      ip: meta.ip,
+      userAgent: meta.userAgent,
+    });
+
+    const current = await this.prisma.recurringObligation.findUniqueOrThrow({
+      where: { id },
+      include: { counterparty: { select: { id: true, name: true, type: true } } },
+    });
+
+    return {
+      ...this.presentRecurring(current),
+      transaction: movement,
+      paidPeriod: dueIso,
+      alreadyPaid: Boolean(alreadyPaid),
+      message: alreadyPaid
+        ? `El período ${dueIso} ya estaba registrado: no se ha duplicado.`
+        : `Registrado el ${dueIso}. El próximo vencimiento es el ${current.nextDueDate.toISOString().slice(0, 10)}.`,
+    };
+  }
+
+  /**
+   * Suma de los cobros (o pagos) realmente registrados sobre una obligación.
+   * Se calcula desde los movimientos: es la única fuente de verdad.
+   */
+  private async settledTotal(kind: 'RECEIVABLE' | 'PAYABLE', obligationId: string) {
+    const result = await this.prisma.financialTransaction.aggregate({
+      where:
+        kind === 'RECEIVABLE'
+          ? { receivableId: obligationId, status: 'POSTED', voidedAt: null }
+          : { payableId: obligationId, status: 'POSTED', voidedAt: null },
+      _sum: { amount: true },
+    });
+    return dec(result._sum.amount ?? 0);
+  }
+
+  /**
+   * Deja el estado guardado de la obligación igual a lo que dicen los
+   * movimientos (saldo y estado). Nunca inventa: si no hay cobros, pendiente.
+   */
+  private async syncObligationState(kind: 'RECEIVABLE' | 'PAYABLE', obligationId: string) {
+    if (kind === 'RECEIVABLE') {
+      const row = await this.prisma.receivable.findUniqueOrThrow({ where: { id: obligationId } });
+      // Se acota al importe original: dos envíos simultáneos del mismo cobro no
+      // pueden dejar «pagado» más de lo que se debía.
+      const settled = min(await this.settledTotal('RECEIVABLE', obligationId), dec(row.originalAmount));
+      const original = dec(row.originalAmount);
+      const status =
+        row.status === 'CANCELLED'
+          ? 'CANCELLED'
+          : gte(settled, original)
+            ? 'SETTLED'
+            : gt(settled, 0)
+              ? 'PARTIAL'
+              : 'PENDING';
+      return this.prisma.receivable.update({
+        where: { id: obligationId },
+        data: { settledAmount: settled, status },
+      });
+    }
+
+    const row = await this.prisma.payable.findUniqueOrThrow({ where: { id: obligationId } });
+    const settled = min(await this.settledTotal('PAYABLE', obligationId), dec(row.originalAmount));
+    const original = dec(row.originalAmount);
+    const status =
+      row.status === 'CANCELLED'
+        ? 'CANCELLED'
+        : gte(settled, original)
+          ? 'SETTLED'
+          : gt(settled, 0)
+            ? 'PARTIAL'
+            : 'PENDING';
+    return this.prisma.payable.update({
+      where: { id: obligationId },
+      data: { settledAmount: settled, status },
+    });
   }
 
   private presentReceivable(row: {

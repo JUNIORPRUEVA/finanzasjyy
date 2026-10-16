@@ -58,6 +58,62 @@ html[data-theme='light'] body {
   letter-spacing: -0.01em;
 }
 
+/**
+ * IMPRESIÓN Y PDF
+ * ---------------
+ * «PDF / Imprimir» en los informes usa el diálogo del navegador, que permite
+ * guardar como PDF. Para que el papel sirva de algo: fondo blanco, texto negro,
+ * sin navegación ni botones, y la tabla completa (sin scroll horizontal).
+ */
+@media print {
+  :root {
+    color-scheme: light;
+  }
+
+  html,
+  body {
+    background: #ffffff !important;
+    color: #000000 !important;
+  }
+
+  /* Fuera todo lo que no es el informe: barra superior, menú inferior y botones. */
+  header,
+  nav,
+  button {
+    display: none !important;
+  }
+
+  main {
+    padding: 0 !important;
+    max-width: none !important;
+  }
+
+  a[href]::after {
+    content: none !important;
+  }
+
+  /* Los contenedores oscuros pasan a papel blanco con líneas visibles. */
+  div,
+  table,
+  td,
+  th,
+  tr {
+    background: transparent !important;
+    color: #000000 !important;
+    border-color: #94a3b8 !important;
+  }
+
+  /* Las tablas largas no se cortan: se imprimen completas. */
+  .overflow-x-auto {
+    overflow: visible !important;
+  }
+
+  table {
+    width: 100% !important;
+    font-size: 10pt;
+  }
+}
+
 /* Un número grande se lee mejor sin saltos de línea raros. */
 .money {
   white-space: nowrap;

@@ -13,7 +13,7 @@ import {
   addBusinessMonths,
 } from '../domain/business-date.js';
 import { dec, percentOf, round2, sum } from '../domain/money.js';
-import { balancesForAccounts } from '../ledger/ledger-core.js';
+import { balancesForAccounts, ledgerResultByDay } from '../ledger/ledger-core.js';
 import { closingStatusLabel } from '../closings/closing-rules.js';
 
 export const REPORT_TYPES = [
@@ -161,6 +161,24 @@ export class ReportsService {
         let totalExpense = dec(0);
         let totalWithdrawals = dec(0);
 
+        // Ingresos y gastos REALES por unidad, tomados del libro mayor: así el
+        // informe coincide con la contabilidad (incluye, por ejemplo, los
+        // intereses de un préstamo, que son gasto aunque el movimiento sea de
+        // tipo LOAN_PAYMENT).
+        const ledgerRows = await ledgerResultByDay(this.prisma, {
+          entityIds: entities.map((entity) => entity.id),
+          from: range.from,
+          to: range.to,
+        });
+        const ledgerByEntity = new Map<string, { income: ReturnType<typeof dec>; expense: ReturnType<typeof dec> }>();
+        for (const [key, row] of ledgerRows.entries()) {
+          const entityKey = key.split('|')[0];
+          const bucket = ledgerByEntity.get(entityKey) ?? { income: dec(0), expense: dec(0) };
+          bucket.income = bucket.income.plus(row.income);
+          bucket.expense = bucket.expense.plus(row.expense);
+          ledgerByEntity.set(entityKey, bucket);
+        }
+
         for (const entity of entities) {
           const grouped = await this.prisma.financialTransaction.groupBy({
             by: ['kind'],
@@ -172,8 +190,8 @@ export class ReportsService {
             _sum: { amount: true },
           });
 
-          const income = dec(grouped.find((row) => row.kind === 'INCOME')?._sum.amount ?? 0);
-          const expense = dec(grouped.find((row) => row.kind === 'EXPENSE')?._sum.amount ?? 0);
+          const income = ledgerByEntity.get(entity.id)?.income ?? dec(0);
+          const expense = ledgerByEntity.get(entity.id)?.expense ?? dec(0);
           const withdrawals = dec(grouped.find((row) => row.kind === 'OWNER_WITHDRAWAL')?._sum.amount ?? 0);
 
           totalIncome = totalIncome.plus(income);
@@ -628,17 +646,21 @@ export class ReportsService {
       buckets.set(businessDateToIso(addBusinessDays(from, index)), { income: dec(0), expense: dec(0), count: 0 });
     }
 
+    // Ingresos y gastos reales por día, desde el libro mayor.
+    const ledgerRows = await ledgerResultByDay(this.prisma, { entityIds, from, to });
+    for (const [key, row] of ledgerRows.entries()) {
+      const bucket = buckets.get(key.split('|')[1]);
+      if (bucket) {
+        bucket.income = bucket.income.plus(row.income);
+        bucket.expense = bucket.expense.plus(row.expense);
+      }
+    }
+
     for (const transaction of transactions) {
       const bucket = buckets.get(businessDateToIso(transaction.businessDate));
-      if (!bucket) {
-        continue;
+      if (bucket) {
+        bucket.count += 1;
       }
-      if (transaction.kind === 'INCOME') {
-        bucket.income = bucket.income.plus(transaction.amount);
-      } else if (transaction.kind === 'EXPENSE') {
-        bucket.expense = bucket.expense.plus(transaction.amount);
-      }
-      bucket.count += 1;
     }
 
     return [...buckets.entries()]
@@ -661,13 +683,15 @@ export class ReportsService {
     for (let offset = months - 1; offset >= 0; offset -= 1) {
       const start = startOfBusinessMonth(addBusinessMonths(today, -offset));
       const end = addBusinessMonths(start, 1);
-      const grouped = await this.prisma.financialTransaction.groupBy({
-        by: ['kind'],
-        where: { entityId: { in: entityIds }, status: 'POSTED', businessDate: { gte: start, lt: end } },
-        _sum: { amount: true },
+
+      // Desde el libro mayor: el resultado del mes es el de la contabilidad.
+      const ledgerRows = await ledgerResultByDay(this.prisma, {
+        entityIds,
+        from: start,
+        to: addBusinessDays(end, -1),
       });
-      const income = dec(grouped.find((row) => row.kind === 'INCOME')?._sum.amount ?? 0);
-      const expense = dec(grouped.find((row) => row.kind === 'EXPENSE')?._sum.amount ?? 0);
+      const income = sum([...ledgerRows.values()].map((row) => row.income));
+      const expense = sum([...ledgerRows.values()].map((row) => row.expense));
       result.push({
         month: businessDateToIso(start).slice(0, 7),
         income: income.toFixed(2),

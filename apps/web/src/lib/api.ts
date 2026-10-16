@@ -161,18 +161,44 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
   }
 
   let response: Response;
+  // TIEMPO DE ESPERA: en un móvil con cobertura mala, una petición puede quedarse
+  // colgada indefinidamente. Sin límite, la pantalla se queda «cargando» para
+  // siempre y el usuario no sabe si el movimiento se registró. Con límite, falla
+  // rápido, se conserva en la cola y se reintenta.
+  const timeoutMs = Number((import.meta as { env?: Record<string, string> }).env?.VITE_API_TIMEOUT_MS ?? 20_000);
+  const controller = signal ? null : new AbortController();
+  const effectiveSignal = signal ?? controller?.signal;
+  let timedOut = false;
+  const timer = controller
+    ? setTimeout(() => {
+        timedOut = true;
+        controller.abort();
+      }, timeoutMs)
+    : null;
+
   try {
     response = await fetch(`${API_URL}${path}`, {
       method,
       headers,
       body: body === undefined ? undefined : JSON.stringify(body),
-      signal,
+      signal: effectiveSignal,
     });
   } catch (error) {
+    if (timedOut) {
+      throw new ApiError(
+        408,
+        'TIMEOUT',
+        'El servidor tardó demasiado en responder. El movimiento no se ha perdido: se reintentará.',
+      );
+    }
     if (error instanceof DOMException && error.name === 'AbortError') {
       throw error;
     }
     throw new OfflineError();
+  } finally {
+    if (timer) {
+      clearTimeout(timer);
+    }
   }
 
   if (response.status === 401 && !skipRefresh) {

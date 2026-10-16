@@ -68,10 +68,23 @@ Cubre el caso real de la red móvil: la respuesta se pierde, el móvil reintenta
 
 ## D5 — Los saldos se calculan, no se guardan
 
-El saldo de una cuenta y de una unidad financiera se **deriva** siempre del libro mayor
-(`accountBalance`, `balancesForAccounts`). No existe una columna «saldo actual» que alguien pueda
-actualizar mal. El saldo inicial documentado (`openingBalance`) se registra como asiento de apertura
-contra la cuenta 3400 y a partir de ahí todo sale de los asientos.
+El saldo de una cuenta financiera se calcula **siempre** así:
+
+```
+saldo = saldo inicial documentado + (debe − haber) de sus asientos
+```
+
+Y el de una unidad financiera, sumando los saldos de sus cuentas.
+
+**Consecuencia importante (defecto corregido):** el saldo inicial NO puede estar a la vez en la columna
+`openingBalance` y en un asiento, porque contaría **dos veces**. La regla que sigue el sistema es:
+
+- una cuenta creada a mano documenta su saldo inicial en la columna (`openingBalance`), y ese dinero
+  **no** genera asiento;
+- la conciliación inicial («Organizar mi dinero») registra **un asiento de apertura** contra el
+  patrimonio (3400) y deja la columna en cero.
+
+En los dos casos el saldo mostrado es el correcto y sólo hay una fuente de verdad para cada cifra.
 
 Consecuencia: si el libro cuadra, los saldos cuadran. No hay dos verdades.
 
@@ -145,6 +158,27 @@ Los mismos datos producen el mismo informe, siempre, con su período declarado.
 - Los datos de demostración viven en una unidad aparte marcada `DEMO`, con movimientos descritos
   como `[DEMO]`, y el script se niega a ejecutarse en producción o si no se confirma expresamente.
 - Las pantallas sin datos dicen «no hay datos», nunca muestran un cero que parezca un saldo real.
+
+---
+
+## D12 — El resultado se toma del libro, no del tipo de operación
+
+El tipo de una operación describe su *intención*, no su efecto contable. Una cuota de préstamo es un
+solo movimiento (`LOAN_PAYMENT`), pero su asiento lleva **intereses** (gasto real, cuenta 7100) y
+**capital** (menos deuda, cuenta 2200).
+
+Sumar los movimientos por su tipo hacía que los intereses pagados **desaparecieran del resultado del
+mes** y el beneficio saliera inflado exactamente en esa cantidad. Por eso:
+
+- **Ingresos** = haber − debe de las cuentas de tipo `INCOME`.
+- **Gastos** = debe − haber de las cuentas de tipo `EXPENSE`.
+
+Lo calcula `ledgerResultByDay()` (libro mayor) y lo usan el panel y los informes. Queda bien resuelto
+por construcción el resto: los traspasos mueven cuentas de activo, los retiros van contra patrimonio
+y el desembolso de un préstamo es un pasivo: **ninguno afecta al resultado**.
+
+El panel, además, avisa cuando el libro incluye partidas que no son movimientos de ingreso ni gasto
+(por ejemplo, intereses), en lugar de esconder la diferencia.
 
 ---
 

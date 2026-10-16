@@ -13,7 +13,7 @@ import {
   type RangePreset,
 } from '../domain/business-date.js';
 import { dec, percentOf, round2, sum } from '../domain/money.js';
-import { balancesForAccounts } from '../ledger/ledger-core.js';
+import { balancesForAccounts, ledgerResultByDay } from '../ledger/ledger-core.js';
 
 /**
  * DASHBOARD FINANCIERO
@@ -129,8 +129,37 @@ export class DashboardService {
     const todayExpense = dec(todayGroups.find((row) => row.kind === 'EXPENSE')?._sum.amount ?? 0);
     const todayCount = todayGroups.reduce((acc, row) => acc + row._count._all, 0);
 
-    const rangeIncome = dec(rangeGroups.find((row) => row.kind === 'INCOME')?._sum.amount ?? 0);
-    const rangeExpense = dec(rangeGroups.find((row) => row.kind === 'EXPENSE')?._sum.amount ?? 0);
+    /**
+     * El resultado del período se toma del LIBRO MAYOR, no de sumar movimientos
+     * por su tipo. Motivo comprobado en las pruebas de integridad: el pago de una
+     * cuota de préstamo es un solo movimiento, pero su asiento lleva intereses
+     * (gasto real) y capital (menos deuda). Sumando por tipo, los intereses
+     * desaparecían del resultado del mes y el beneficio salía inflado.
+     */
+    const ledgerResult = await ledgerResultByDay(this.prisma, {
+      entityIds,
+      from: range.from,
+      to: range.to,
+    });
+    const todayIso = businessDateToIso(today);
+    const rangeIncome = sum([...ledgerResult.values()].map((row) => row.income));
+    const rangeExpense = sum([...ledgerResult.values()].map((row) => row.expense));
+    const todayLedgerRows = [...ledgerResult.entries()]
+      .filter(([key]) => key.endsWith(`|${todayIso}`))
+      .map(([, row]) => row);
+    const ledgerTodayIncome = sum(todayLedgerRows.map((row) => row.income));
+    const ledgerTodayExpense = sum(todayLedgerRows.map((row) => row.expense));
+
+    // Si el resultado del libro no coincide con la suma por tipo, se deja dicho
+    // en lugar de esconderlo: significa que hay operaciones cuyo asiento tiene
+    // más efecto que su tipo (el caso típico: intereses de un préstamo).
+    const resultDifference = round2(
+      sum([...ledgerResult.values()].map((row) => row.income.minus(row.expense))).minus(
+        dec(rangeGroups.find((row) => row.kind === 'INCOME')?._sum.amount ?? 0).minus(
+          dec(rangeGroups.find((row) => row.kind === 'EXPENSE')?._sum.amount ?? 0),
+        ),
+      ),
+    );
 
     const withdrawals = dec(monthGroups.find((row) => row.kind === 'OWNER_WITHDRAWAL')?._sum.amount ?? 0);
     const contributions = dec(monthGroups.find((row) => row.kind === 'OWNER_CONTRIBUTION')?._sum.amount ?? 0);
@@ -210,9 +239,9 @@ export class DashboardService {
     return {
       range: { from: businessDateToIso(range.from), to: businessDateToIso(range.to), preset: params.preset ?? 'TODAY' },
       today: {
-        income: todayIncome.toFixed(2),
-        expense: todayExpense.toFixed(2),
-        result: round2(todayIncome.minus(todayExpense)).toFixed(2),
+        income: ledgerTodayIncome.toFixed(2),
+        expense: ledgerTodayExpense.toFixed(2),
+        result: round2(ledgerTodayIncome.minus(ledgerTodayExpense)).toFixed(2),
         movementCount: todayCount,
       },
       period: {
@@ -261,7 +290,16 @@ export class DashboardService {
         })),
         pendingDays: pendingClosingsCount,
       },
-      dataQuality,
+      dataQuality: {
+        ...dataQuality,
+        /** El libro y la suma por tipo deberían coincidir; si no, se dice. */
+        resultFromLedger: round2(rangeIncome.minus(rangeExpense)).toFixed(2),
+        resultDifference: resultDifference.toFixed(2),
+        resultNote:
+          resultDifference.isZero()
+            ? 'El resultado del período coincide con el libro mayor.'
+            : `El libro incluye ${resultDifference.abs().toFixed(2)} que no son movimientos de ingreso ni gasto (intereses de préstamos, ajustes de gasto, etc.). El resultado mostrado YA los incluye.`,
+      },
     };
   }
 
@@ -298,6 +336,9 @@ export class DashboardService {
     const categoryName = new Map(categories.map((category) => [category.id, category.name]));
     const entityName = new Map(entities.map((entity) => [entity.id, entity.name]));
 
+    // Ingresos y gastos REALES por día y por unidad, tomados del libro mayor.
+    const ledgerSeries = await ledgerResultByDay(this.prisma, { entityIds, from, to: today });
+
     // Serie diaria (se rellenan los días sin movimientos con 0).
     const dailySeries: Array<{ date: string; income: string; expense: string; result: string; movements: number }> = [];
     const dayMap = new Map<string, { income: ReturnType<typeof dec>; expense: ReturnType<typeof dec>; count: number }>();
@@ -306,18 +347,20 @@ export class DashboardService {
       dayMap.set(businessDateToIso(addBusinessDays(from, index)), { income: dec(0), expense: dec(0), count: 0 });
     }
 
+    for (const [key, row] of ledgerSeries.entries()) {
+      const bucket = dayMap.get(key.split('|')[1]);
+      if (bucket) {
+        bucket.income = bucket.income.plus(row.income);
+        bucket.expense = bucket.expense.plus(row.expense);
+      }
+    }
+
+    // El contador de movimientos sí sale de los movimientos (es un dato físico).
     for (const transaction of transactions) {
-      const key = businessDateToIso(transaction.businessDate);
-      const bucket = dayMap.get(key);
-      if (!bucket) {
-        continue;
+      const bucket = dayMap.get(businessDateToIso(transaction.businessDate));
+      if (bucket) {
+        bucket.count += 1;
       }
-      if (transaction.kind === 'INCOME') {
-        bucket.income = bucket.income.plus(transaction.amount);
-      } else if (transaction.kind === 'EXPENSE') {
-        bucket.expense = bucket.expense.plus(transaction.amount);
-      }
-      bucket.count += 1;
     }
 
     for (const [date, bucket] of [...dayMap.entries()].sort(([a], [b]) => a.localeCompare(b))) {
@@ -330,7 +373,7 @@ export class DashboardService {
       });
     }
 
-    // Gastos por categoría.
+    // Gastos por categoría (detalle de los movimientos de gasto registrados).
     const byCategory = new Map<string, ReturnType<typeof dec>>();
     for (const transaction of transactions) {
       if (transaction.kind !== 'EXPENSE' || !transaction.categoryId) {
@@ -338,10 +381,24 @@ export class DashboardService {
       }
       byCategory.set(transaction.categoryId, (byCategory.get(transaction.categoryId) ?? dec(0)).plus(transaction.amount));
     }
+
+    // El gasto del libro puede incluir partidas SIN movimiento de tipo gasto
+    // (intereses de préstamos, sobre todo). Se añaden como partida propia para
+    // que el desglose sume EXACTAMENTE lo mismo que el indicador de gastos.
+    const ledgerExpenseTotal = sum([...ledgerSeries.values()].map((row) => row.expense));
+    const categorizedTotal = sum([...byCategory.values()]);
+    const uncategorizedByLedger = round2(ledgerExpenseTotal.minus(categorizedTotal));
+    if (uncategorizedByLedger.greaterThan(0)) {
+      byCategory.set('__ledger_other__', uncategorizedByLedger);
+    }
+
     const expenseByCategory = [...byCategory.entries()]
       .map(([categoryId, amount]) => ({
         categoryId,
-        categoryName: categoryName.get(categoryId) ?? 'Sin categoría',
+        categoryName:
+          categoryId === '__ledger_other__'
+            ? 'Intereses y otros gastos financieros'
+            : (categoryName.get(categoryId) ?? 'Sin categoría'),
         amount: amount.toFixed(2),
         share: percentOf(amount, sum([...byCategory.values()])).toFixed(2),
       }))
@@ -352,16 +409,19 @@ export class DashboardService {
     for (const entity of entities) {
       byEntity.set(entity.id, { income: dec(0), expense: dec(0), withdrawals: dec(0) });
     }
+    for (const [key, row] of ledgerSeries.entries()) {
+      const bucket = byEntity.get(key.split('|')[0]);
+      if (bucket) {
+        bucket.income = bucket.income.plus(row.income);
+        bucket.expense = bucket.expense.plus(row.expense);
+      }
+    }
     for (const transaction of transactions) {
       const bucket = byEntity.get(transaction.entityId);
       if (!bucket) {
         continue;
       }
-      if (transaction.kind === 'INCOME') {
-        bucket.income = bucket.income.plus(transaction.amount);
-      } else if (transaction.kind === 'EXPENSE') {
-        bucket.expense = bucket.expense.plus(transaction.amount);
-      } else if (transaction.kind === 'OWNER_WITHDRAWAL') {
+      if (transaction.kind === 'OWNER_WITHDRAWAL') {
         bucket.withdrawals = bucket.withdrawals.plus(transaction.amount);
       }
     }

@@ -58,8 +58,18 @@ Además hay triggers que **prohíben**:
 
 No es rigidez por gusto: es lo que permite auditar meses después por qué un saldo es el que es.
 
-### 2.3 Los errores se corrigen anulando, no borrando
+### 2.2 bis El resultado se calcula desde el libro, no desde el tipo de operación
 
+El tipo de un movimiento dice qué *quiso* hacer el usuario; el asiento dice qué pasó de verdad. La
+cuota de un préstamo es un solo movimiento, pero su asiento lleva intereses (gasto) y capital (menos
+deuda). Sumando por tipo, los intereses **desaparecían del resultado del mes**.
+
+`ledgerResultByDay()` calcula ingresos y gastos sumando las cuentas de ingreso y de gasto del libro
+mayor. Se usa en el panel y en los informes. Los traspasos (activo), los retiros (patrimonio) y el
+desembolso de un préstamo (pasivo) quedan fuera del resultado **por construcción**, no por una lista
+de excepciones que alguien pueda olvidar actualizar.
+
+### 2.3 Los errores se corrigen anulando, no borrando
 Si un movimiento se registró mal, se **anula** con motivo obligatorio (mínimo 5 caracteres). Anular
 genera un **asiento inverso** y deja el original marcado como `REVERSED`. Nada desaparece del libro.
 El usuario ve ambos y el porqué.
@@ -149,6 +159,8 @@ src/
 ├── common/          errores, filtro de excepciones, interceptor, validadores, CSV
 ├── prisma/          servicio Prisma con transacciones y reintentos
 ├── security/        control de acceso por unidad
+├── setup/           «Organizar mi dinero»: conciliación inicial atómica
+├── daily-control/   «Mi control diario»: tareas, semáforo y constancia
 └── <18 módulos>     auth, entities, accounts, categories, counterparties, ledger,
                      transactions, transfers, loans, obligations, budgets, closings,
                      dashboard, reports, sync, notifications, attachments, audit, health

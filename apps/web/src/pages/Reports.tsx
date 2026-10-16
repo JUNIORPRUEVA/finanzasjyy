@@ -144,9 +144,18 @@ export function ReportsPage() {
             title={reportQuery.data.title}
             hint={`Del ${formatBusinessDate(reportQuery.data.period.from)} al ${formatBusinessDate(reportQuery.data.period.to)}`}
             right={
-              <Button variant="secondary" disabled={downloading} onClick={() => void handleDownload()}>
-                {downloading ? 'Generando…' : 'Descargar CSV'}
-              </Button>
+              <div className="flex shrink-0 gap-2">
+                <Button
+                  variant="secondary"
+                  onClick={() => window.print()}
+                  title="Imprimir o guardar el informe como PDF con el diálogo del navegador"
+                >
+                  PDF / Imprimir
+                </Button>
+                <Button variant="secondary" disabled={downloading} onClick={() => void handleDownload()}>
+                  {downloading ? 'Generando…' : 'Descargar CSV'}
+                </Button>
+              </div>
             }
           />
 
@@ -213,7 +222,8 @@ export function ReportsPage() {
 
           <p className="mt-3 text-xs text-slate-500">
             Informe generado el {formatBusinessDate(reportQuery.data.generatedAt)}. Reproducible: los mismos datos
-            producen el mismo informe.
+            producen el mismo informe. «PDF / Imprimir» abre el diálogo del navegador, desde donde se puede guardar
+            como PDF con los mismos totales que ve aquí.
           </p>
         </Card>
       ) : null}

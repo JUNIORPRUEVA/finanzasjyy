@@ -332,30 +332,71 @@ export function MorePage() {
       ) : null}
 
       {tab === 'accesos' ? (
-        <Card>
-          <SectionTitle title="Todo lo demás" />
-          <div className="grid grid-cols-2 gap-2">
-            {[
-              { to: '/cuentas', label: 'Cuentas', hint: 'Dónde está el dinero' },
-              { to: '/informes', label: 'Informes', hint: 'Y exportación CSV' },
-              { to: '/ajustes', label: 'Ajustes', hint: 'Preferencias y seguridad' },
-              { to: '/cierres', label: 'Cierre del día', hint: 'Asistente guiado' },
-            ].map((item) => (
-              <Link
-                key={item.to}
-                to={item.to}
-                className="rounded-lg border border-slate-800 p-3 transition hover:border-slate-600"
-              >
-                <p className="text-sm font-medium text-slate-200">{item.label}</p>
-                <p className="text-xs text-slate-500">{item.hint}</p>
-              </Link>
-            ))}
-          </div>
-          <p className="mt-3 text-xs text-slate-500">
-            Obligaciones, préstamos y presupuestos están disponibles en «Informes» y en el panel principal, donde
-            aparecen los vencimientos de los próximos días.
-          </p>
-        </Card>
+        <>
+          <Card>
+            <SectionTitle title="Poner orden" hint="Lo que hace que las cuentas cuadren" />
+            <div className="grid grid-cols-2 gap-2">
+              {[
+                { to: '/organizar', label: 'Organizar mi dinero', hint: 'Cuánto hay y de quién es' },
+                { to: '/control', label: 'Mi control diario', hint: 'Tareas, semáforo y constancia' },
+                { to: '/traspasos', label: 'Traspasos', hint: 'Mover dinero entre cuentas y negocios' },
+                { to: '/cierres', label: 'Cierre del día', hint: 'Asistente guiado' },
+              ].map((item) => (
+                <Link
+                  key={item.to}
+                  to={item.to}
+                  className="rounded-lg border border-slate-800 p-3 transition hover:border-slate-600"
+                >
+                  <p className="text-sm font-medium text-slate-200">{item.label}</p>
+                  <p className="text-xs text-slate-500">{item.hint}</p>
+                </Link>
+              ))}
+            </div>
+          </Card>
+
+          <Card>
+            <SectionTitle title="Deudas y compromisos" hint="Lo que se paga cada mes y lo que está pendiente" />
+            <div className="grid grid-cols-2 gap-2">
+              {[
+                { to: '/deudas', label: 'Préstamos y deudas', hint: 'Cuotas, tarjetas e intereses' },
+                { to: '/obligaciones', label: 'Obligaciones', hint: 'Por cobrar, por pagar y recurrentes' },
+                { to: '/presupuestos', label: 'Presupuestos', hint: 'Límites por categoría' },
+                { to: '/adjuntos', label: 'Documentos', hint: 'Facturas y comprobantes' },
+              ].map((item) => (
+                <Link
+                  key={item.to}
+                  to={item.to}
+                  className="rounded-lg border border-slate-800 p-3 transition hover:border-slate-600"
+                >
+                  <p className="text-sm font-medium text-slate-200">{item.label}</p>
+                  <p className="text-xs text-slate-500">{item.hint}</p>
+                </Link>
+              ))}
+            </div>
+          </Card>
+
+          <Card>
+            <SectionTitle title="Todo lo demás" />
+            <div className="grid grid-cols-2 gap-2">
+              {[
+                { to: '/cuentas', label: 'Cuentas', hint: 'Dónde está el dinero' },
+                { to: '/movimientos', label: 'Movimientos', hint: 'Historial y anulaciones' },
+                { to: '/unidades', label: 'Unidades financieras', hint: 'Negocios e ingresos futuros' },
+                { to: '/informes', label: 'Informes', hint: 'Y exportación CSV' },
+                { to: '/ajustes', label: 'Ajustes', hint: 'Preferencias y seguridad' },
+              ].map((item) => (
+                <Link
+                  key={item.to}
+                  to={item.to}
+                  className="rounded-lg border border-slate-800 p-3 transition hover:border-slate-600"
+                >
+                  <p className="text-sm font-medium text-slate-200">{item.label}</p>
+                  <p className="text-xs text-slate-500">{item.hint}</p>
+                </Link>
+              ))}
+            </div>
+          </Card>
+        </>
       ) : null}
 
       <p className="pb-4 text-center text-xs text-slate-600">

@@ -11,6 +11,14 @@ import { ClosingPage } from './pages/Closing';
 import { MorePage } from './pages/More';
 import { ReportsPage } from './pages/Reports';
 import { SettingsPage } from './pages/Settings';
+import { SetupPage } from './pages/Setup';
+import { DailyControlPage } from './pages/DailyControl';
+import { TransfersPage } from './pages/Transfers';
+import { DebtsPage } from './pages/Debts';
+import { ObligationsPage } from './pages/Obligations';
+import { BudgetsPage } from './pages/Budgets';
+import { AttachmentsPage } from './pages/Attachments';
+import { EntitiesPage } from './pages/Entities';
 
 /**
  * RUTAS DE FINANZA
@@ -44,6 +52,14 @@ export default function App() {
         <Route path="/mas" element={<MorePage />} />
         <Route path="/informes" element={<ReportsPage />} />
         <Route path="/ajustes" element={<SettingsPage />} />
+        <Route path="/organizar" element={<SetupPage />} />
+        <Route path="/control" element={<DailyControlPage />} />
+        <Route path="/traspasos" element={<TransfersPage />} />
+        <Route path="/deudas" element={<DebtsPage />} />
+        <Route path="/obligaciones" element={<ObligationsPage />} />
+        <Route path="/presupuestos" element={<BudgetsPage />} />
+        <Route path="/adjuntos" element={<AttachmentsPage />} />
+        <Route path="/unidades" element={<EntitiesPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </Layout>
