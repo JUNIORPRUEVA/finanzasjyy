@@ -1,0 +1,193 @@
+- generic [ref=f1e3]:
+  - banner [ref=f1e4]:
+    - generic [ref=f1e5]:
+      - generic [ref=f1e6]:
+        - paragraph [ref=f1e7]: FINANZA
+        - button "Todas las unidades ▾" [ref=f1e8]:
+          - generic [ref=f1e13]: Todas las unidades
+          - generic [ref=f1e14]: ▾
+      - button "Actualizar estado de la sesión" [ref=f1e15]
+    - generic [ref=f1e21]: Sesión activa
+  - main [ref=f1e25]:
+    - generic [ref=f1e26]:
+      - generic [ref=f1e27]:
+        - generic [ref=f1e28]:
+          - paragraph [ref=f1e29]: ¿Dónde está mi dinero?
+          - link "Ver cuentas" [ref=f1e30] [cursor=pointer]:
+            - /url: /cuentas
+        - generic [ref=f1e32]:
+          - paragraph [ref=f1e33]:
+            - generic [ref=f1e34]: RD$
+            - generic [ref=f1e35]:
+              - text: "0"
+              - generic [ref=f1e36]: ".00"
+          - paragraph [ref=f1e37]: El dinero disponible NO incluye tarjetas de crédito ni cuentas por cobrar.
+        - generic [ref=f1e38]:
+          - generic [ref=f1e39]:
+            - paragraph [ref=f1e40]: En efectivo
+            - paragraph [ref=f1e41]:
+              - generic [ref=f1e42]: RD$ 0.00
+          - generic [ref=f1e43]:
+            - paragraph [ref=f1e44]: En bancos
+            - paragraph [ref=f1e45]:
+              - generic [ref=f1e46]: RD$ 0.00
+        - paragraph [ref=f1e48]: Cifras conciliadas con el libro mayor.
+      - generic [ref=f1e49]:
+        - 'heading "Falta lo más importante: ¿cuánto dinero hay y de quién es?" [level=2] [ref=f1e52]'
+        - paragraph [ref=f1e53]: "Sin esta información, FINANZA no puede decirle dónde está su dinero ni si los saldos cuadran. Es un asistente de cinco pasos y no hay ningún importe precargado: todas las cifras las escribe usted."
+        - link [ref=f1e54] [cursor=pointer]:
+          - /url: /organizar
+          - button "Organizar mi dinero" [ref=f1e55]
+      - generic [ref=f1e56]:
+        - generic [ref=f1e57]:
+          - paragraph [ref=f1e58]: Ingresos de hoy
+          - paragraph [ref=f1e59]:
+            - generic [ref=f1e60]: RD$ 0.00
+        - generic [ref=f1e61]:
+          - paragraph [ref=f1e62]: Gastos de hoy
+          - paragraph [ref=f1e63]:
+            - generic [ref=f1e64]: RD$ 0.00
+        - generic [ref=f1e65]:
+          - paragraph [ref=f1e66]: Resultado de hoy
+          - paragraph [ref=f1e67]:
+            - generic [ref=f1e68]: RD$ 0.00
+          - paragraph [ref=f1e69]: 0 movimiento(s)
+        - generic [ref=f1e70]:
+          - paragraph [ref=f1e71]: Resultado del período
+          - paragraph [ref=f1e72]:
+            - generic [ref=f1e73]: RD$ 0.00
+          - paragraph [ref=f1e74]: Margen 0.00% · hoy
+      - generic [ref=f1e75]:
+        - link [ref=f1e76] [cursor=pointer]:
+          - /url: /registrar?kind=INCOME
+          - button "Registrar ingreso" [ref=f1e77]
+        - link [ref=f1e78] [cursor=pointer]:
+          - /url: /registrar?kind=EXPENSE
+          - button "Registrar gasto" [ref=f1e79]
+      - generic [ref=f1e80]:
+        - generic [ref=f1e81]:
+          - generic [ref=f1e82]:
+            - heading "Mi control diario" [level=2] [ref=f1e83]
+            - paragraph [ref=f1e84]: Todo al día. No hay tareas pendientes.
+          - generic [ref=f1e85]: VERDE
+        - paragraph [ref=f1e87]: "0 tarea(s): 0 urgente(s), 0 pendiente(s). Lleva 0 día(s) seguido(s) cerrando."
+        - generic [ref=f1e88]:
+          - link [ref=f1e89] [cursor=pointer]:
+            - /url: /control
+            - button "Ver mis tareas" [ref=f1e90]
+          - link [ref=f1e94] [cursor=pointer]:
+            - /url: /cierres
+            - button "Cerrar el día" [ref=f1e95]
+      - generic [ref=f1e96]:
+        - button "Hoy" [pressed] [ref=f1e97]
+        - button "Ayer" [ref=f1e98]
+        - button "Semana" [ref=f1e99]
+        - button "Mes" [ref=f1e100]
+        - button "30 días" [ref=f1e101]
+      - generic [ref=f1e102]:
+        - generic [ref=f1e104]:
+          - heading "Resumen hoy" [level=2] [ref=f1e105]
+          - paragraph [ref=f1e106]: Del 2026-10-16 al 2026-10-16
+        - generic [ref=f1e107]:
+          - generic [ref=f1e108]:
+            - paragraph [ref=f1e109]: Entró
+            - paragraph [ref=f1e110]:
+              - generic [ref=f1e111]: RD$ 0.00
+          - generic [ref=f1e112]:
+            - paragraph [ref=f1e113]: Salió
+            - paragraph [ref=f1e114]:
+              - generic [ref=f1e115]: RD$ 0.00
+          - generic [ref=f1e116]:
+            - paragraph [ref=f1e117]: Resultado
+            - paragraph [ref=f1e118]:
+              - generic [ref=f1e119]: RD$ 0.00
+      - generic [ref=f1e120]:
+        - heading "Lo que debo y lo que me deben" [level=2] [ref=f1e123]
+        - generic [ref=f1e124]:
+          - generic [ref=f1e125]:
+            - paragraph [ref=f1e126]: Deuda total
+            - paragraph [ref=f1e127]:
+              - generic [ref=f1e128]: RD$ 0.00
+          - generic [ref=f1e129]:
+            - paragraph [ref=f1e130]: Cuentas por cobrar
+            - paragraph [ref=f1e131]:
+              - generic [ref=f1e132]: RD$ 0.00
+          - generic [ref=f1e133]:
+            - paragraph [ref=f1e134]: Préstamos por pagar
+            - paragraph [ref=f1e135]:
+              - generic [ref=f1e136]: RD$ 0.00
+          - generic [ref=f1e137]:
+            - paragraph [ref=f1e138]: Tarjetas de crédito
+            - paragraph [ref=f1e139]:
+              - generic [ref=f1e140]: RD$ 0.00
+      - generic [ref=f1e141]:
+        - generic [ref=f1e143]:
+          - heading "Presupuesto del mes" [level=2] [ref=f1e144]
+          - paragraph [ref=f1e145]: Consumido 0.00%
+        - paragraph [ref=f1e147]:
+          - text: Gastado RD$ 0.00 de RD$ 0.00. Quedan
+          - strong [ref=f1e148]: RD$ 0.00
+          - text: .
+        - generic [ref=f1e149]:
+          - generic [ref=f1e150]:
+            - paragraph [ref=f1e151]: Retirado por mí este mes
+            - paragraph [ref=f1e152]:
+              - generic [ref=f1e153]: RD$ 0.00
+          - generic [ref=f1e154]:
+            - paragraph [ref=f1e155]: Aporté este mes
+            - paragraph [ref=f1e156]:
+              - generic [ref=f1e157]: RD$ 0.00
+        - link [ref=f1e158] [cursor=pointer]:
+          - /url: /presupuestos
+          - button "Ajustar presupuesto" [ref=f1e159]
+      - generic [ref=f1e162]:
+        - heading "Cierres de hoy" [level=2] [ref=f1e165]
+        - generic [ref=f1e166]:
+          - paragraph [ref=f1e167]: Todavía no hay cierre de hoy
+          - paragraph [ref=f1e168]: Vaya a «Cierre» para revisar el día, contar el efectivo y confirmar.
+      - generic [ref=f1e169]:
+        - generic [ref=f1e171]:
+          - heading "Comparación entre unidades" [level=2] [ref=f1e172]
+          - paragraph [ref=f1e173]: "Ventas no son ganancias: aquí se ve el resultado real"
+        - generic [ref=f1e174]:
+          - generic [ref=f1e175]:
+            - generic [ref=f1e176]: FULLTECH
+            - generic [ref=f1e177]:
+              - generic [ref=f1e178]: RD$ 0.00
+              - generic [ref=f1e179]: RD$ 0.00
+          - generic [ref=f1e180]:
+            - generic [ref=f1e181]: PHYTOEMAGRY
+            - generic [ref=f1e182]:
+              - generic [ref=f1e183]: RD$ 0.00
+              - generic [ref=f1e184]: RD$ 0.00
+          - generic [ref=f1e185]:
+            - generic [ref=f1e186]: FULLPOS CLOUD
+            - generic [ref=f1e187]:
+              - generic [ref=f1e188]: RD$ 0.00
+              - generic [ref=f1e189]: RD$ 0.00
+          - generic [ref=f1e190]:
+            - generic [ref=f1e191]: FINANZAS PERSONALES
+            - generic [ref=f1e192]:
+              - generic [ref=f1e193]: RD$ 0.00
+              - generic [ref=f1e194]: RD$ 0.00
+        - paragraph [ref=f1e195]: Resultado de cada unidad disponible en «Informes», con el detalle del período.
+      - generic [ref=f1e196]:
+        - generic [ref=f1e198]:
+          - heading "Transferencias" [level=2] [ref=f1e199]
+          - paragraph [ref=f1e200]: "Las transferencias no son ingresos: sólo cambian el dinero de sitio."
+        - generic [ref=f1e201]:
+          - generic [ref=f1e202]: 0 transferencia(s), 0 interna(s)
+          - generic [ref=f1e203]: RD$ 0.00
+      - button "Ver gráficos del período" [ref=f1e204]
+  - navigation [ref=f1e205]:
+    - generic [ref=f1e206]:
+      - link "Inicio" [ref=f1e207] [cursor=pointer]:
+        - /url: /
+      - link "Movimientos" [ref=f1e212] [cursor=pointer]:
+        - /url: /movimientos
+      - button "Añadir movimiento" [ref=f1e218]:
+        - generic [ref=f1e222]: Añadir
+      - link "Control" [ref=f1e223] [cursor=pointer]:
+        - /url: /control
+      - link "Más" [ref=f1e227] [cursor=pointer]:
+        - /url: /mas

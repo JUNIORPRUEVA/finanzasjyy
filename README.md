@@ -58,10 +58,10 @@ Ejecuta, sin preguntar nada:
 | --------------------- | ------------------ | ------------------ |
 | Tipos (`tsc`)         | ✅                 | ✅                 |
 | Lint (ESLint)         | ✅ 0 errores       | ✅ 0 errores       |
-| Pruebas               | 82 unitarias + 89 e2e | 54 (formato, sin conexión, sincronización y **sesión**) |
+| Pruebas               | 82 unitarias + 92 e2e | 54 (formato, sin conexión, sincronización y **sesión**) |
 | Compilación producción | ✅ `nest build`   | ✅ `vite build` + service worker |
 
-**225 pruebas automatizadas** de aplicación, más **123 pruebas de navegador** (Playwright) en cinco
+**228 pruebas automatizadas** de aplicación, más **123 pruebas de navegador** (Playwright) en cinco
 tamaños de móvil y escritorio. De ellas, **28 defienden las reglas del dinero**
 (`apps/api/test/integridad-financiera.e2e-spec.ts`) y 4 recorren el ciclo completo de 24 h sin
 conexión (`apps/web/src/lib/offline.test.ts`).

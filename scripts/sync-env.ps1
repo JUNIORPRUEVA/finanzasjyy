@@ -63,7 +63,19 @@ MAX_ATTACHMENT_MB=8
 
 $webEnv = @"
 # Generado por scripts/sync-env.ps1 a partir del .env raíz — NO versionar.
-VITE_API_URL=http://localhost:3010/api/v1
+#
+# La PWA habla con la API por la MISMA dirección desde la que se sirve, usando la
+# ruta relativa. En desarrollo la reenvía el servidor de Vite (vite.config.ts) y
+# en producción nginx (apps/web/nginx.conf). Así no hay peticiones entre orígenes
+# distintos: las cookies de sesión viajan sin problemas y no hacen falta reglas
+# de CORS.
+#
+# NO ponga aquí la dirección absoluta de la API (http://localhost:3010/...)
+# salvo que sirva la PWA y la API en dominios distintos: obligaría al navegador a
+# hacer «preflight» de CORS en cada petición, y si la API no autoriza alguna
+# cabecera propia (X-Session-Mode, X-CSRF-Token) BLOQUEARÍA el acceso con un
+# error que en la pantalla se ve como «no se pudo contactar con el servidor».
+VITE_API_URL=/api/v1
 VITE_OFFLINE_WINDOW_HOURS=24
 "@
 

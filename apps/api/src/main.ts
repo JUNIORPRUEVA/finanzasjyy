@@ -5,18 +5,7 @@ import helmet from 'helmet';
 import { AppModule } from './app.module.js';
 import { AllExceptionsFilter } from './common/all-exceptions.filter.js';
 import { SerializationInterceptor } from './common/serialization.interceptor.js';
-
-function parseCorsOrigins(): string[] | boolean {
-  const raw = process.env.CORS_ORIGINS;
-  if (!raw || raw.trim() === '*') {
-    // En desarrollo se permite cualquier origen local; en producción se exige lista explícita.
-    return process.env.NODE_ENV === 'production' ? false : true;
-  }
-  return raw
-    .split(',')
-    .map((origin) => origin.trim())
-    .filter((origin) => origin.length > 0);
-}
+import { buildCorsOptions } from './common/cors.js';
 
 async function bootstrap(): Promise<void> {
   const logger = new Logger('Bootstrap');
@@ -42,13 +31,7 @@ async function bootstrap(): Promise<void> {
     }),
   );
 
-  app.enableCors({
-    origin: parseCorsOrigins(),
-    credentials: true,
-    methods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Device-Id', 'X-Client-Operation-Id'],
-    maxAge: 600,
-  });
+  app.enableCors(buildCorsOptions());
 
   app.useGlobalPipes(
     new ValidationPipe({

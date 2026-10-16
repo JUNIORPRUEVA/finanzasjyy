@@ -1,0 +1,27 @@
+- generic [ref=e9]:
+  - generic [ref=e10]:
+    - heading "FINANZA" [level=1] [ref=e15]
+    - paragraph [ref=e16]: Tu dinero, bajo control.
+  - generic [ref=e40]:
+    - paragraph [ref=e41]: No se pudo entrar
+    - generic [ref=e42]: No se pudo contactar con el servidor. Revise su conexión e inténtelo de nuevo.
+  - generic [ref=e17]:
+    - generic [ref=e18]:
+      - generic [ref=e19]: Correo electrónico
+      - textbox "Correo electrónico" [ref=e20]:
+        - /placeholder: usted@ejemplo.com
+        - text: admin@finanza.local
+    - generic [ref=e21]:
+      - generic [ref=e22]: Contraseña
+      - generic [ref=e23]:
+        - textbox "Contraseña" [ref=e24]: BdwRyC33FNLvVV*Tq+NwBdwRyC33FNLvVV*Tq+Nw
+        - button "Ocultar contraseña" [ref=e43]
+    - button "Entrar" [ref=e29]
+    - paragraph [ref=e30]:
+      - text: Este dispositivo quedará autorizado para registrar movimientos sin conexión durante la ventana configurada (24 h por defecto). Cerrar la aplicación
+      - strong [ref=e31]: "no"
+      - text: cierra su sesión.
+    - paragraph [ref=e33]:
+      - generic [ref=e37]:
+        - strong [ref=e38]: "Recuperación de contraseña: pendiente."
+        - text: Todavía no existe un mecanismo de recuperación automática. Si olvida la contraseña, hay que restablecerla desde la administración del sistema; por eso esta pantalla no ofrece un enlace que no llevaría a ningún sitio.

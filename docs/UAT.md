@@ -127,6 +127,7 @@ Estas no están marcadas como pasadas porque requieren cosas que no dependen del
 | `apps/web/src/lib/offline.test.ts` | 4 | Ciclo completo de 24 h sin conexión, con IndexedDB real: incluye cerrar y reabrir la aplicación, tiempo de espera agotado, reintento, duplicado, conflicto y caducidad de la ventana |
 | `apps/web/src/lib/session.test.ts` | 21 | **Sesión persistente**: entrar bien y mal, reabrir la aplicación, renovación automática, una sola renovación simultánea, 503 / sin red / tiempo agotado / 500 (que NO cierran la sesión), sesión caducada, revocada, inactividad, duración máxima, cierre de sesión y recuperación, y que la cola de movimientos pendientes sobrevive al cierre de sesión |
 | `apps/web/e2e/*.spec.ts` (Playwright) | 123 | Recorrido de las 17 pantallas en 5 tamaños, sin desbordamiento horizontal ni errores de consola; barra inferior y botón central; hojas y diálogos; **sesión en un navegador de verdad** (recargar, otra pestaña, 503, corte de red, caducidad explicada, movimiento sin conexión que sobrevive) |
+| `test/cors-sesion.e2e-spec.ts` | 3 | **Las cabeceras que la PWA envía están autorizadas por la API** (preflight de CORS). Nace del fallo real que hizo imposible iniciar sesión en el navegador |
 
 ### Defectos reales que destaparon
 
@@ -138,6 +139,7 @@ Estas no están marcadas como pasadas porque requieren cosas que no dependen del
 6. **Sin conexión, React Query pausaba las operaciones**: el botón se quedaba en «Registrando…» indefinidamente y el movimiento **nunca llegaba a la cola** del dispositivo. Corregido con `networkMode: 'always'`.
 7. **Las cuentas y categorías no se guardaban** para el modo sin conexión: `getCachedAccounts()` se leía, pero nadie escribía esa copia, así que sin conexión la lista salía vacía y no se podía registrar nada. Corregido con `lib/cache-mirror.ts`.
 8. **La sesión caducada no explicaba nada**: la pantalla de acceso aparecía sin motivo. Ahora muestra el motivo que envía el servidor.
+9. **No se podía iniciar sesión en el navegador (CORS)**, y las 123 pruebas de navegador no lo vieron porque se ejecutan en el mismo origen que la API. La API no autorizaba sus propias cabeceras de sesión (`X-Session-Mode`, `X-CSRF-Token`), así que el navegador bloqueaba la petición y la pantalla decía «no se pudo contactar con el servidor». Corregido en un único sitio (`src/common/cors.ts`), con prueba que falla si se quita una cabecera (`test/cors-sesion.e2e-spec.ts`), y la PWA pasa a usar la ruta relativa `/api/v1` (mismo camino que producción).
 
 ---
 
@@ -148,7 +150,7 @@ Estas no están marcadas como pasadas porque requieren cosas que no dependen del
 | **PASA (automático)** | 32 de 34 |
 | **PASA (manual)** | 2 de 34 |
 | **PENDIENTE** | 5 comprobaciones, todas dependientes de dispositivo real, claves de producción o ejecución manual de los scripts |
-| **Total de pruebas automatizadas del proyecto** | **225 de aplicación + 123 de navegador, en verde, 0 fallos** |
+| **Total de pruebas automatizadas del proyecto** | **228 de aplicación + 123 de navegador, en verde, 0 fallos** |
 
 Detalle del rediseño móvil y de la sesión persistente, con lo que **no** se ha probado: `docs/INFORME-MOVIL-Y-SESION.md`.
 

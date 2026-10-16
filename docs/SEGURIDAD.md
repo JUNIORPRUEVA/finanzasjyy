@@ -58,6 +58,13 @@ datos de lectura (cuentas y categorías confirmadas por el servidor), pero nunca
 abren muchos navegadores seguidos). No son variables del archivo `.env`, de modo que la aplicación
 real siempre usa 5 y 60. Está explicado en `auth.controller.ts`.
 
+**Cabeceras propias y CORS (fallo real corregido):** la PWA envía `X-Session-Mode`, `X-CSRF-Token`,
+`X-Device-Id` y `X-Client-Operation-Id`. El navegador pregunta antes («preflight») si la API las
+autoriza; si alguna falta, **bloquea la petición sin llegar a enviarla** y en la pantalla aparece
+«no se pudo contactar con el servidor». Es decir: un error de configuración disfrazado de problema de
+red. La lista está en un único sitio (`src/common/cors.ts`) y `test/cors-sesion.e2e-spec.ts` falla si
+se quita una cabecera necesaria.
+
 ---
 
 ## 4. Aislamiento entre unidades financieras
@@ -94,7 +101,7 @@ La seguridad no es sólo «quién entra», también «qué se puede estropear»:
 | --- | --- |
 | PostgreSQL | Publicado **sólo** en `127.0.0.1:55432` (no accesible desde la red local) |
 | API | Escucha en local; pensada para publicarse detrás de un proxy con TLS |
-| CORS | Restringido al origen configurado de la PWA |
+| CORS | Origen restringido al configurado y **lista explícita de cabeceras propias**, incluidas `X-Session-Mode` y `X-CSRF-Token`. Si falta una, el NAVEGADOR bloquea la petición y el usuario ve un error de conexión que no es tal. La lista vive en `src/common/cors.ts` y hay una prueba que la vigila (`test/cors-sesion.e2e-spec.ts`) |
 | Límite de peticiones | Global y más estricto en inicio de sesión y registro |
 | Cabeceras | `helmet` (nosniff, frame-deny, referrer-policy y demás) |
 | Tamaño de cuerpo | Limitado; los adjuntos también |

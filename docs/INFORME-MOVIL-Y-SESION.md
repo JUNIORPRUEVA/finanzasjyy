@@ -158,6 +158,37 @@ guarda el motivo que envía el servidor y se muestra («Su sesión ha caducado p
 Vuelva a identificarse.»). Sólo el caso «no hay sesión» (primera visita) se muestra sin aviso,
 porque no hay nada que explicar.
 
+### 5.4. No se podía iniciar sesión en el navegador (CORS) — encontrado al usar la aplicación de verdad
+
+Las 123 pruebas de navegador pasaban y, sin embargo, **entrar desde el navegador real era
+imposible**. El navegador lo dijo con precisión:
+
+> Access to fetch at `http://localhost:3010/api/v1/auth/login` from origin `http://localhost:5180`
+> has been blocked by CORS policy: Request header field **x-session-mode** is not allowed by
+> Access-Control-Allow-Headers in preflight response.
+
+Dos causas, las dos corregidas:
+
+1. **La API no autorizaba sus propias cabeceras.** `enableCors({ allowedHeaders: [...] })` tenía una
+   lista fija a la que no se añadieron `X-Session-Mode` ni `X-CSRF-Token`, que son parte del diseño
+   de sesión por cookie. El navegador bloquea la petición ANTES de enviarla: el servidor nunca se
+   entera y el usuario ve un error de conexión. Ahora la lista vive en un único sitio
+   (`src/common/cors.ts`) y **`test/cors-sesion.e2e-spec.ts` falla si se quita una cabecera
+   necesaria** (comprobado quitándola a propósito: 2 de 3 pruebas en rojo).
+2. **La PWA hablaba con la API por una dirección absoluta** (`VITE_API_URL=http://localhost:3010/api/v1`),
+   lo que convertía cada petición en «entre orígenes» y obligaba a un preflight constante. Ahora usa
+   la ruta relativa `/api/v1`: en desarrollo la reenvía Vite y en producción nginx
+   (`apps/web/nginx.conf` ya lo hacía), así que no hay cambio de origen y las cookies viajan sin
+   fricción. La dirección absoluta sólo tiene sentido si se sirven la PWA y la API en dominios
+   distintos, y queda documentado en el propio `.env`.
+
+**Por qué las pruebas no lo vieron, y qué se ha hecho:** las pruebas de navegador se ejecutan en el
+MISMO origen que la API (por el proxy del servidor de desarrollo), y sin cambio de origen no hay
+preflight. La lección es que un conjunto de pruebas verde no sustituye a **usar la aplicación**. Se
+ha cerrado el hueco por dos vías: la prueba de CORS en la API (con el fallo reproducido para
+verificar que la prueba lo detecta) y la corrección de la configuración de desarrollo, que ahora usa
+el mismo camino que producción.
+
 ---
 
 ## 6. Pruebas
