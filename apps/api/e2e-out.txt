@@ -1,0 +1,24 @@
+
+> finanza-api@1.0.0 test:e2e
+> node --experimental-vm-modules node_modules/jest/bin/jest.js --config test/jest-e2e.json --runInBand
+
+(node:2656) ExperimentalWarning: VM Modules is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+  console.log
+    prisma:error 
+    Invalid `prisma.financialTransaction.delete()` invocation in
+    C:\Users\pc\DEV\PROYECTOS\INTERNO\FINANZAS\apps\api\test\flujo-financiero.e2e-spec.ts:919:43
+    
+      916 });
+      917 
+      918 await expect(
+    ÔåÆ 919   prisma.financialTransaction.delete(
+    Database error. Code: `23514`. Message: `Prohibido borrar el movimiento financiero POSTED 689f2fef-fc3c-49ed-973a-6ac97ec507aa. Anulelo con un movimiento de anulacion.`
+
+      at Object.Vu (node_modules/@prisma/internals/src/logger.ts:13:11)
+
+Test Suites: 1 passed, 1 total
+Tests:       52 passed, 52 total
+Snapshots:   0 total
+Time:        3.374 s
+Ran all test suites.

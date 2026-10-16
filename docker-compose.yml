@@ -1,0 +1,74 @@
+# FINANZA — infraestructura local aislada
+# IMPORTANTE: este proyecto convive con otros proyectos (fullpos, appyra, daleventas)
+# en la misma máquina. Por eso usa SIEMPRE:
+#   - nombre de proyecto propio ("finanza")
+#   - contenedor propio (finanza-postgres)
+#   - volumen propio (finanza_pgdata)
+#   - puerto propio en el host (55432) para no chocar con el 5432/5442/55433 en uso.
+# NUNCA ejecutar `docker system prune`, `docker volume prune` ni `docker compose down -v`
+# fuera de este directorio.
+
+name: finanza
+
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: finanza-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${FINANZA_DB_USER:?define FINANZA_DB_USER en .env}
+      POSTGRES_PASSWORD: ${FINANZA_DB_PASSWORD:?define FINANZA_DB_PASSWORD en .env}
+      POSTGRES_DB: ${FINANZA_DB_NAME:-finanza}
+      # Zona horaria de negocio: Santo Domingo (UTC-4, sin DST).
+      TZ: America/Santo_Domingo
+      PGTZ: America/Santo_Domingo
+    ports:
+      # Sólo accesible desde localhost, jamás expuesto a la red local.
+      - "127.0.0.1:${FINANZA_DB_PORT:-55432}:5432"
+    volumes:
+      - finanza_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${FINANZA_DB_USER} -d ${FINANZA_DB_NAME:-finanza}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+
+  # Los servicios api/web se levantan de forma nativa en desarrollo (npm run dev).
+  # Se incluyen aquí, tras el perfil "full", para poder desplegar el sistema completo
+  # en un solo comando sin afectar al flujo de desarrollo diario.
+  api:
+    profiles: ["full"]
+    build:
+      context: ./apps/api
+      dockerfile: Dockerfile
+    container_name: finanza-api
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: 3010
+      DATABASE_URL: postgresql://${FINANZA_DB_USER}:${FINANZA_DB_PASSWORD}@db:5432/${FINANZA_DB_NAME:-finanza}?schema=public
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:?define JWT_ACCESS_SECRET en .env}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:?define JWT_REFRESH_SECRET en .env}
+      TZ: America/Santo_Domingo
+    ports:
+      - "127.0.0.1:${FINANZA_API_PORT:-3010}:3010"
+
+  web:
+    profiles: ["full"]
+    build:
+      context: ./apps/web
+      dockerfile: Dockerfile
+    container_name: finanza-web
+    restart: unless-stopped
+    depends_on:
+      - api
+    ports:
+      - "127.0.0.1:${FINANZA_WEB_PORT:-5180}:80"
+
+volumes:
+  finanza_pgdata:
+    name: finanza_pgdata

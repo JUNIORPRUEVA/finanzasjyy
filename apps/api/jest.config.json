@@ -1,0 +1,16 @@
+{
+  "moduleFileExtensions": ["js", "json", "ts"],
+  "rootDir": "src",
+  "testEnvironment": "node",
+  "testRegex": ".*\\.spec\\.ts$",
+  "transform": {
+    "^.+\\.(t|j)s$": ["ts-jest", {}]
+  },
+  "collectCoverageFrom": ["**/*.(t|j)s", "!**/generated/**"],
+  "coverageDirectory": "../coverage",
+  "moduleNameMapper": {
+    "^(\\.{1,2}/.*)\\.js$": "$1"
+  },
+  "setupFiles": ["<rootDir>/../test/setup-env.ts"],
+  "testPathIgnorePatterns": ["/node_modules/", "/generated/"]
+}

@@ -1,0 +1,1042 @@
+// ============================================================================
+// FINANZA — Esquema de datos (PostgreSQL)
+// ----------------------------------------------------------------------------
+// Principios:
+//  1. TODO el dinero se guarda como Decimal(18,2) en la moneda de la cuenta.
+//     Nunca se usan números flotantes para importes (ver docs/INVARIANTES-FINANCIEROS.md).
+//  2. Contabilidad por partida doble: JournalEntry + JournalLine. Cada asiento
+//     debe cuadrar (suma debe == suma haber) — garantizado por trigger SQL.
+//  3. Los asientos POSTED son INMUTABLES: se corrigen por reverso, nunca por UPDATE.
+//  4. Toda operación pertenece a una unidad financiera (FinancialEntity).
+//     Las transferencias entre unidades usan la cuenta puente 1150 para que la
+//     consolidación no infle ingresos ni resultados.
+//  5. Idempotencia de sincronización: clientOperationId UNIQUE en cada operación.
+// ============================================================================
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ============================================================================
+// ENUMS
+// ============================================================================
+
+enum UserRole {
+  OWNER
+  ADMIN
+  MEMBER
+  VIEWER
+}
+
+enum EntityMemberRole {
+  OWNER
+  ADMIN
+  OPERATOR
+  VIEWER
+}
+
+/// Tipo de unidad financiera: negocio, finanzas personales, alquiler, etc.
+enum EntityType {
+  BUSINESS
+  PERSONAL
+  RENTAL
+  SERVICE
+  INVESTMENT
+  OTHER
+}
+
+enum AccountType {
+  CASH
+  BUSINESS_CASH
+  BANK
+  SAVINGS
+  CHECKING
+  DIGITAL_WALLET
+  MERCHANT
+  CREDIT_CARD
+  OTHER
+}
+
+enum AccountStatus {
+  ACTIVE
+  INACTIVE
+  CLOSED
+}
+
+enum CategoryKind {
+  INCOME
+  EXPENSE
+}
+
+enum LedgerAccountType {
+  ASSET
+  LIABILITY
+  EQUITY
+  INCOME
+  EXPENSE
+}
+
+enum NormalBalance {
+  DEBIT
+  CREDIT
+}
+
+enum JournalEntryStatus {
+  POSTED
+  REVERSED
+}
+
+/// Naturaleza económica del movimiento. Evita confundir ventas con ganancias,
+/// ingresos con entradas de dinero o préstamos con ingresos operativos.
+enum TxnKind {
+  INCOME
+  EXPENSE
+  TRANSFER_OUT
+  TRANSFER_IN
+  OWNER_WITHDRAWAL
+  OWNER_CONTRIBUTION
+  LOAN_DISBURSEMENT
+  LOAN_PAYMENT
+  CREDIT_CARD_PAYMENT
+  RECEIVABLE_SETTLEMENT
+  PAYABLE_SETTLEMENT
+  ADJUSTMENT
+}
+
+enum TxnStatus {
+  DRAFT
+  POSTED
+  VOIDED
+}
+
+enum SyncStatus {
+  CONFIRMED
+  PENDING
+  FAILED
+  CONFLICT
+}
+
+enum CounterpartyType {
+  CUSTOMER
+  SUPPLIER
+  LENDER
+  BORROWER
+  EMPLOYEE
+  OWNER
+  OTHER
+}
+
+/// PAYABLE  = FINANZA debe dinero (deuda propia).
+/// RECEIVABLE = a FINANZA le deben dinero (cuenta por cobrar).
+enum LoanDirection {
+  PAYABLE
+  RECEIVABLE
+}
+
+enum InterestType {
+  NONE
+  SIMPLE
+  COMPOUND
+  FIXED_INSTALLMENT
+}
+
+enum PaymentFrequency {
+  ONE_TIME
+  WEEKLY
+  BIWEEKLY
+  MONTHLY
+  QUARTERLY
+  SEMIANNUAL
+  ANNUAL
+}
+
+enum LoanStatus {
+  ACTIVE
+  PAID_OFF
+  DEFAULTED
+  CANCELLED
+}
+
+enum ObligationStatus {
+  PENDING
+  PARTIAL
+  SETTLED
+  OVERDUE
+  CANCELLED
+}
+
+enum RecurringStatus {
+  ACTIVE
+  PAUSED
+  ENDED
+}
+
+enum BudgetPeriod {
+  WEEKLY
+  MONTHLY
+  QUARTERLY
+  ANNUAL
+  CUSTOM
+}
+
+enum BudgetStatus {
+  ACTIVE
+  CLOSED
+}
+
+enum ClosingStatus {
+  PENDING
+  IN_PROGRESS
+  PROVISIONAL
+  WITH_DIFFERENCES
+  FINALIZED
+  REOPENED
+}
+
+enum NotificationSeverity {
+  INFO
+  WARNING
+  CRITICAL
+}
+
+enum NotificationStatus {
+  PENDING
+  SENT
+  FAILED
+  READ
+  CANCELLED
+}
+
+/// Resultado de aplicar una operación enviada desde un cliente offline.
+enum SyncOperationStatus {
+  RECEIVED
+  APPLIED
+  DUPLICATE
+  CONFLICT
+  REJECTED
+  ERROR
+}
+
+// ============================================================================
+// IDENTIDAD, SESIONES Y DISPOSITIVOS
+// ============================================================================
+
+model User {
+  id                 String   @id @default(uuid())
+  email              String   @unique
+  passwordHash       String
+  name               String
+  role               UserRole @default(OWNER)
+  isActive           Boolean  @default(true)
+  failedLoginCount   Int      @default(0)
+  lockedUntil        DateTime?
+  lastLoginAt        DateTime?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  ownedEntities      FinancialEntity[]   @relation("EntityOwner")
+  memberships        EntityMember[]
+  sessions           Session[]
+  devices            Device[]
+  preference         UserPreference?
+  notifications      Notification[]
+  pushSubscriptions  PushSubscription[]
+  auditLogs          AuditLog[]
+  createdEntries     JournalEntry[]      @relation("EntryCreatedBy")
+  createdTxns        FinancialTransaction[] @relation("TxnCreatedBy")
+  createdTransfers   Transfer[]          @relation("TransferCreatedBy")
+  createdLoanPayments LoanPayment[]      @relation("LoanPaymentCreatedBy")
+  closedClosings     DailyClosing[]      @relation("ClosingClosedBy")
+  resolvedRecons     ClosingReconciliation[] @relation("ReconResolvedBy")
+  syncOperations     SyncOperation[]
+  attachments        Attachment[]
+
+  @@index([isActive])
+}
+
+/// Sesión de acceso. El refresh token se guarda hasheado, nunca en claro.
+model Session {
+  id               String    @id @default(uuid())
+  userId           String
+  refreshTokenHash String    @unique
+  deviceId         String?
+  // Momento hasta el que la app puede operar offline con esta sesión.
+  offlineAllowedUntil DateTime?
+  expiresAt        DateTime
+  revokedAt        DateTime?
+  revokedReason    String?
+  ip               String?
+  userAgent        String?
+  createdAt        DateTime  @default(now())
+  lastUsedAt       DateTime?
+
+  user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, revokedAt])
+  @@index([expiresAt])
+}
+
+/// Dispositivo autorizado del usuario (control de sesiones y sync).
+model Device {
+  id          String   @id @default(uuid())
+  userId      String
+  deviceId    String
+  name        String
+  platform    String
+  appVersion  String?
+  isActive    Boolean  @default(true)
+  lastSeenAt  DateTime?
+  createdAt   DateTime @default(now())
+
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, deviceId])
+  @@index([userId, isActive])
+}
+
+model UserPreference {
+  id                  String   @id @default(uuid())
+  userId              String   @unique
+  timezone            String   @default("America/Santo_Domingo")
+  currency            String   @default("DOP")
+  locale              String   @default("es-DO")
+  theme               String   @default("system")
+  // Hora local (0-23) a la que se recuerda el cierre diario.
+  closingReminderHour Int      @default(21)
+  closingReminderMinute Int    @default(0)
+  // Avisos escalonados en minutos después del recordatorio principal (evita spam).
+  reminderOffsetsJson Json     @default("[0, 60, 180]")
+  offlineWindowHours  Int      @default(24)
+  budgetWarnPct       Int      @default(80)
+  budgetAlertPct      Int      @default(100)
+  // Diferencia de caja (absoluta) a partir de la cual se considera crítica.
+  cashDifferenceAlert Decimal  @default(500) @db.Decimal(18, 2)
+  pushEnabled         Boolean  @default(false)
+  dailyBriefEnabled   Boolean  @default(true)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  user                User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model PushSubscription {
+  id         String   @id @default(uuid())
+  userId     String
+  endpoint   String   @unique
+  p256dh     String
+  auth       String
+  deviceId   String?
+  platform   String?
+  isActive   Boolean  @default(true)
+  failCount  Int      @default(0)
+  lastError  String?
+  lastSentAt DateTime?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isActive])
+}
+
+// ============================================================================
+// UNIDADES FINANCIERAS Y ACCESO
+// ============================================================================
+
+/// Unidad financiera independiente (FULLTECH, PHYTOEMAGRY, FULLPOS CLOUD,
+/// FINANZAS PERSONALES, o cualquier fuente de ingresos nueva).
+model FinancialEntity {
+  id          String     @id @default(uuid())
+  code        String     @unique
+  name        String
+  type        EntityType @default(BUSINESS)
+  description String?
+  currency    String     @default("DOP")
+  timezone    String     @default("America/Santo_Domingo")
+  color       String?
+  isActive    Boolean    @default(true)
+  ownerUserId String
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  owner       User       @relation("EntityOwner", fields: [ownerUserId], references: [id])
+
+  members          EntityMember[]
+  accounts         FinancialAccount[]
+  categories       TransactionCategory[]
+  counterparties   Counterparty[]
+  ledgerAccounts   LedgerAccount[]
+  journalEntries   JournalEntry[]
+  transactions     FinancialTransaction[]
+  transfers        Transfer[]
+  loans            Loan[]
+  receivables      Receivable[]
+  payables         Payable[]
+  budgets          Budget[]
+  closings         DailyClosing[]
+  recurrings       RecurringObligation[]
+  notifications    Notification[]
+  attachments      Attachment[]
+
+  @@index([isActive])
+  @@index([ownerUserId])
+}
+
+model EntityMember {
+  id        String            @id @default(uuid())
+  entityId  String
+  userId    String
+  role      EntityMemberRole  @default(OPERATOR)
+  createdAt DateTime          @default(now())
+
+  entity    FinancialEntity   @relation(fields: [entityId], references: [id], onDelete: Cascade)
+  user      User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([entityId, userId])
+  @@index([userId])
+}
+
+// ============================================================================
+// CATÁLOGO CONTABLE (partida doble)
+// ============================================================================
+
+model LedgerAccount {
+  id            String            @id @default(uuid())
+  code          String            @unique
+  name          String
+  type          LedgerAccountType
+  normalBalance NormalBalance
+  /// Si es null, la cuenta es del catálogo global; si tiene valor, es propia de esa unidad.
+  entityId      String?
+  isSystem      Boolean           @default(true)
+  isPostable    Boolean           @default(true)
+  description   String?
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+
+  entity        FinancialEntity?  @relation(fields: [entityId], references: [id], onDelete: Cascade)
+
+  lines            JournalLine[]
+  financialAccounts FinancialAccount[]
+
+  @@index([type])
+  @@index([entityId])
+}
+
+// ============================================================================
+// CUENTAS FINANCIERAS (dónde está realmente el dinero)
+// ============================================================================
+
+model FinancialAccount {
+  id              String        @id @default(uuid())
+  entityId        String
+  name            String
+  type            AccountType
+  currency        String        @default("DOP")
+  /// Saldo inicial documentado. El saldo real se calcula desde el libro mayor.
+  openingBalance  Decimal       @default(0) @db.Decimal(18, 2)
+  openingDate     DateTime      @db.Date
+  /// Cuenta del catálogo contable asociada (activo, o pasivo si es tarjeta de crédito).
+  ledgerAccountId String
+  isCreditCard    Boolean       @default(false)
+  creditLimit     Decimal?      @db.Decimal(18, 2)
+  statementDay    Int?
+  paymentDueDay   Int?
+  status          AccountStatus @default(ACTIVE)
+  notes           String?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  entity        FinancialEntity @relation(fields: [entityId], references: [id], onDelete: Cascade)
+  ledgerAccount LedgerAccount   @relation(fields: [ledgerAccountId], references: [id])
+
+  journalLines    JournalLine[]
+  transactions    FinancialTransaction[]
+  transfersOut    Transfer[]    @relation("TransferFromAccount")
+  transfersIn     Transfer[]    @relation("TransferToAccount")
+  loans           Loan[]
+  loanPayments    LoanPayment[]
+  reconciliations ClosingReconciliation[]
+
+  @@unique([entityId, name])
+  @@index([entityId, status])
+  @@index([type])
+}
+
+// ============================================================================
+// CATEGORÍAS, CONTRAPARTES, ADJUNTOS
+// ============================================================================
+
+model TransactionCategory {
+  id        String       @id @default(uuid())
+  entityId  String?
+  name      String
+  kind      CategoryKind
+  isSystem  Boolean      @default(false)
+  isActive  Boolean      @default(true)
+  color     String?
+  /// Cuenta del catálogo que se usa por defecto al registrar en esta categoría.
+  defaultLedgerCode String?
+  parentId  String?
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+
+  entity     FinancialEntity?    @relation(fields: [entityId], references: [id], onDelete: Cascade)
+  parent     TransactionCategory? @relation("CategoryTree", fields: [parentId], references: [id])
+  children   TransactionCategory[] @relation("CategoryTree")
+
+  transactions FinancialTransaction[]
+  allocations  BudgetAllocation[]
+
+  @@unique([entityId, name, kind])
+  @@index([kind, isActive])
+}
+
+model Counterparty {
+  id        String           @id @default(uuid())
+  entityId  String?
+  type      CounterpartyType
+  name      String
+  taxId     String?
+  phone     String?
+  email     String?
+  notes     String?
+  isActive  Boolean          @default(true)
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+
+  entity     FinancialEntity? @relation(fields: [entityId], references: [id], onDelete: Cascade)
+  transactions FinancialTransaction[]
+  loans      Loan[]
+  receivables Receivable[]
+  payables   Payable[]
+  recurrings RecurringObligation[]
+
+  @@unique([entityId, name])
+  @@index([type, isActive])
+}
+
+model Attachment {
+  id           String   @id @default(uuid())
+  entityId     String
+  filename     String
+  mimeType     String
+  sizeBytes    Int
+  sha256       String
+  storagePath  String
+  uploadedByUserId String?
+  createdAt    DateTime @default(now())
+
+  entity       FinancialEntity @relation(fields: [entityId], references: [id], onDelete: Cascade)
+  uploadedBy   User?           @relation(fields: [uploadedByUserId], references: [id])
+  transactions FinancialTransaction[]
+
+  @@index([entityId])
+  @@index([sha256])
+}
+
+// ============================================================================
+// LIBRO MAYOR (partida doble) — el corazón del sistema
+// ============================================================================
+
+model JournalEntry {
+  id             String             @id @default(uuid())
+  /// Número secuencial global, sólo para ordenar y auditar.
+  sequence       Int                @default(autoincrement())
+  entityId       String
+  /// Fecha de negocio (America/Santo_Domingo), sin hora.
+  businessDate   DateTime           @db.Date
+  description    String
+  /// Origen del asiento: TRANSACTION | TRANSFER | LOAN_PAYMENT | CLOSING | ADJUSTMENT | ...
+  sourceType     String
+  sourceId       String?
+  status         JournalEntryStatus @default(POSTED)
+  /// Si este asiento es el reverso de otro, aquí se referencia.
+  reversesEntryId String?           @unique
+  postedAt       DateTime           @default(now())
+  createdAt      DateTime           @default(now())
+  createdByUserId String?
+
+  entity   FinancialEntity    @relation(fields: [entityId], references: [id], onDelete: Cascade)
+  createdBy User?             @relation("EntryCreatedBy", fields: [createdByUserId], references: [id])
+  lines    JournalLine[]
+  /// Uno o varios movimientos pueden apuntar al mismo asiento (transferencia
+  /// dentro de la misma unidad: un asiento, dos movimientos).
+  transactions FinancialTransaction[]
+  reverses JournalEntry?      @relation("EntryReversal", fields: [reversesEntryId], references: [id])
+  reversedBy JournalEntry?    @relation("EntryReversal")
+
+  @@unique([entityId, sequence])
+  @@index([entityId, businessDate])
+  @@index([sourceType, sourceId])
+}
+
+model JournalLine {
+  id               String   @id @default(uuid())
+  entryId          String
+  ledgerAccountId  String
+  /// Cuenta financiera afectada, cuando el movimiento toca efectivo/banco.
+  financialAccountId String?
+  debit            Decimal  @default(0) @db.Decimal(18, 2)
+  credit           Decimal  @default(0) @db.Decimal(18, 2)
+  memo             String?
+  createdAt        DateTime @default(now())
+
+  entry           JournalEntry      @relation(fields: [entryId], references: [id], onDelete: Cascade)
+  ledgerAccount   LedgerAccount     @relation(fields: [ledgerAccountId], references: [id])
+  financialAccount FinancialAccount? @relation(fields: [financialAccountId], references: [id])
+
+  @@index([entryId])
+  @@index([ledgerAccountId])
+  @@index([financialAccountId])
+}
+
+// ============================================================================
+// OPERACIONES FINANCIERAS
+// ============================================================================
+
+model FinancialTransaction {
+  id             String      @id @default(uuid())
+  entityId       String
+  kind           TxnKind
+  status         TxnStatus   @default(POSTED)
+  accountId      String
+  categoryId     String?
+  counterpartyId String?
+  transferId     String?
+  loanId         String?
+  loanPaymentId  String?
+  receivableId   String?
+  payableId      String?
+  attachmentId   String?
+  journalEntryId String?
+
+  /// Importe SIEMPRE positivo; el signo lo determina `kind` + el asiento contable.
+  amount         Decimal     @db.Decimal(18, 2)
+  currency       String      @default("DOP")
+  businessDate   DateTime    @db.Date
+  occurredAt     DateTime    @default(now())
+  description    String
+  reference      String?
+  /// Método de cobro/pago: EFECTIVO, TRANSFERENCIA, TARJETA, BIZUM, CHEQUE, OTRO...
+  method         String?
+
+  /// Idempotencia: identificador generado en el dispositivo. Un reintento no duplica.
+  clientOperationId String   @unique
+  deviceId       String?
+  recordedOffline Boolean    @default(false)
+  syncStatus     SyncStatus  @default(CONFIRMED)
+  syncedAt       DateTime?
+
+  /// Anulación: nunca se borra un movimiento confirmado.
+  voidedAt       DateTime?
+  voidReason     String?
+  voidedByTransactionId String? @unique
+
+  createdByUserId String
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+
+  entity      FinancialEntity  @relation(fields: [entityId], references: [id], onDelete: Cascade)
+  account     FinancialAccount @relation(fields: [accountId], references: [id])
+  category    TransactionCategory? @relation(fields: [categoryId], references: [id])
+  counterparty Counterparty?   @relation(fields: [counterpartyId], references: [id])
+  transfer    Transfer?        @relation(fields: [transferId], references: [id], onDelete: SetNull)
+  loan        Loan?            @relation(fields: [loanId], references: [id], onDelete: SetNull)
+  loanPayment LoanPayment?     @relation(fields: [loanPaymentId], references: [id], onDelete: SetNull)
+  receivable  Receivable?      @relation(fields: [receivableId], references: [id], onDelete: SetNull)
+  payable     Payable?         @relation(fields: [payableId], references: [id], onDelete: SetNull)
+  attachment  Attachment?      @relation(fields: [attachmentId], references: [id])
+  journalEntry JournalEntry?   @relation(fields: [journalEntryId], references: [id])
+  createdBy   User             @relation("TxnCreatedBy", fields: [createdByUserId], references: [id])
+  voidingTransaction FinancialTransaction? @relation("TxnVoid", fields: [voidedByTransactionId], references: [id])
+  voidedTransaction  FinancialTransaction? @relation("TxnVoid")
+
+  @@index([entityId, businessDate])
+  @@index([accountId, businessDate])
+  @@index([kind, businessDate])
+  @@index([categoryId, businessDate])
+  /// Una transferencia dentro de la MISMA unidad financiera genera un único
+  /// asiento que respalda los dos movimientos (salida y entrada): por eso el
+  /// asiento NO es único, sólo está indexado.
+  @@index([journalEntryId])
+  @@index([status])
+  @@index([syncStatus])
+}
+
+/// Transferencia interna entre dos cuentas.
+/// Misma unidad: un asiento (cargo destino / abono origen).
+/// Distinta unidad: dos asientos que usan la cuenta puente 1150, de modo que
+/// la consolidación NUNCA cuenta la transferencia como ingreso.
+model Transfer {
+  id            String    @id @default(uuid())
+  entityId      String
+  fromAccountId String
+  toAccountId   String
+  amount        Decimal   @db.Decimal(18, 2)
+  currency      String    @default("DOP")
+  businessDate  DateTime  @db.Date
+  description   String
+  status        TxnStatus @default(POSTED)
+  isCrossEntity Boolean   @default(false)
+  clientOperationId String @unique
+  createdByUserId String
+  createdAt     DateTime  @default(now())
+
+  entity      FinancialEntity  @relation(fields: [entityId], references: [id], onDelete: Cascade)
+  fromAccount FinancialAccount @relation("TransferFromAccount", fields: [fromAccountId], references: [id])
+  toAccount   FinancialAccount @relation("TransferToAccount", fields: [toAccountId], references: [id])
+  createdBy   User             @relation("TransferCreatedBy", fields: [createdByUserId], references: [id])
+  transactions FinancialTransaction[]
+
+  @@index([entityId, businessDate])
+  @@index([fromAccountId])
+  @@index([toAccountId])
+}
+
+// ============================================================================
+// PRÉSTAMOS Y DEUDAS
+// ============================================================================
+
+model Loan {
+  id                 String           @id @default(uuid())
+  entityId           String
+  direction          LoanDirection
+  counterpartyId     String?
+  name               String
+  /// Importe originalmente pactado.
+  principalAmount    Decimal          @db.Decimal(18, 2)
+  /// Saldo de capital pendiente (se recalcula con cada pago).
+  currentBalance     Decimal          @db.Decimal(18, 2)
+  currency           String           @default("DOP")
+  /// Tasa anual en porcentaje (12.5 = 12,5%). Null si no se conoce: no se inventa.
+  annualRatePct      Decimal?         @db.Decimal(9, 6)
+  interestType       InterestType     @default(NONE)
+  paymentFrequency   PaymentFrequency @default(MONTHLY)
+  installmentAmount  Decimal?         @db.Decimal(18, 2)
+  installmentCount   Int?
+  startDate          DateTime         @db.Date
+  firstDueDate       DateTime?        @db.Date
+  nextDueDate        DateTime?        @db.Date
+  accountId          String?
+  status             LoanStatus       @default(ACTIVE)
+  notes              String?
+  closedAt           DateTime?
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
+
+  entity       FinancialEntity   @relation(fields: [entityId], references: [id], onDelete: Cascade)
+  counterparty Counterparty?     @relation(fields: [counterpartyId], references: [id])
+  account      FinancialAccount? @relation(fields: [accountId], references: [id])
+
+  payments     LoanPayment[]
+  transactions FinancialTransaction[]
+
+  @@index([entityId, status])
+  @@index([nextDueDate])
+}
+
+model LoanPayment {
+  id              String   @id @default(uuid())
+  loanId          String
+  businessDate    DateTime @db.Date
+  totalAmount     Decimal  @db.Decimal(18, 2)
+  principalAmount Decimal  @default(0) @db.Decimal(18, 2)
+  interestAmount  Decimal  @default(0) @db.Decimal(18, 2)
+  feeAmount       Decimal  @default(0) @db.Decimal(18, 2)
+  penaltyAmount   Decimal  @default(0) @db.Decimal(18, 2)
+  accountId       String
+  notes           String?
+  clientOperationId String @unique
+  createdByUserId String
+  createdAt       DateTime @default(now())
+
+  loan      Loan             @relation(fields: [loanId], references: [id], onDelete: Cascade)
+  account   FinancialAccount @relation(fields: [accountId], references: [id])
+  createdBy User             @relation("LoanPaymentCreatedBy", fields: [createdByUserId], references: [id])
+  transactions FinancialTransaction[]
+
+  @@index([loanId, businessDate])
+}
+
+/// Cuenta por cobrar (a FINANZA le deben).
+model Receivable {
+  id             String           @id @default(uuid())
+  entityId       String
+  counterpartyId String?
+  description    String
+  documentRef    String?
+  originalAmount Decimal          @db.Decimal(18, 2)
+  settledAmount  Decimal          @default(0) @db.Decimal(18, 2)
+  currency       String           @default("DOP")
+  issueDate      DateTime         @db.Date
+  dueDate        DateTime?        @db.Date
+  status         ObligationStatus @default(PENDING)
+  notes          String?
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  entity       FinancialEntity @relation(fields: [entityId], references: [id], onDelete: Cascade)
+  counterparty Counterparty?   @relation(fields: [counterpartyId], references: [id])
+  transactions FinancialTransaction[]
+
+  @@index([entityId, status])
+  @@index([dueDate])
+}
+
+/// Cuenta por pagar (FINANZA debe).
+model Payable {
+  id             String           @id @default(uuid())
+  entityId       String
+  counterpartyId String?
+  description    String
+  documentRef    String?
+  originalAmount Decimal          @db.Decimal(18, 2)
+  settledAmount  Decimal          @default(0) @db.Decimal(18, 2)
+  currency       String           @default("DOP")
+  issueDate      DateTime         @db.Date
+  dueDate        DateTime?        @db.Date
+  status         ObligationStatus @default(PENDING)
+  notes          String?
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  entity       FinancialEntity @relation(fields: [entityId], references: [id], onDelete: Cascade)
+  counterparty Counterparty?   @relation(fields: [counterpartyId], references: [id])
+  transactions FinancialTransaction[]
+
+  @@index([entityId, status])
+  @@index([dueDate])
+}
+
+/// Obligación recurrente (alquiler, internet, nómina, cuota...). Es una plantilla:
+/// FINANZA avisa antes del vencimiento y opcionalmente pre-carga el movimiento.
+model RecurringObligation {
+  id             String           @id @default(uuid())
+  entityId       String
+  name           String
+  direction      LoanDirection    @default(PAYABLE)
+  amount         Decimal          @db.Decimal(18, 2)
+  currency       String           @default("DOP")
+  frequency      PaymentFrequency @default(MONTHLY)
+  nextDueDate    DateTime         @db.Date
+  categoryId     String?
+  counterpartyId String?
+  autoCreate     Boolean          @default(false)
+  remindDaysBefore Int            @default(3)
+  status         RecurringStatus  @default(ACTIVE)
+  notes          String?
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  entity       FinancialEntity @relation(fields: [entityId], references: [id], onDelete: Cascade)
+  counterparty Counterparty?   @relation(fields: [counterpartyId], references: [id])
+
+  @@index([entityId, status])
+  @@index([nextDueDate])
+}
+
+// ============================================================================
+// PRESUPUESTOS
+// ============================================================================
+
+model Budget {
+  id        String        @id @default(uuid())
+  entityId  String
+  name      String
+  period    BudgetPeriod  @default(MONTHLY)
+  startDate DateTime      @db.Date
+  endDate   DateTime?     @db.Date
+  status    BudgetStatus  @default(ACTIVE)
+  currency  String        @default("DOP")
+  notes     String?
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+
+  entity      FinancialEntity    @relation(fields: [entityId], references: [id], onDelete: Cascade)
+  allocations BudgetAllocation[]
+
+  @@index([entityId, status])
+}
+
+model BudgetAllocation {
+  id         String   @id @default(uuid())
+  budgetId   String
+  categoryId String
+  limitAmount Decimal @db.Decimal(18, 2)
+  warnPct    Int?     @default(80)
+  alertPct   Int?     @default(100)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  budget   Budget              @relation(fields: [budgetId], references: [id], onDelete: Cascade)
+  category TransactionCategory @relation(fields: [categoryId], references: [id])
+
+  @@unique([budgetId, categoryId])
+}
+
+// ============================================================================
+// CIERRE FINANCIERO DIARIO
+// ============================================================================
+
+model DailyClosing {
+  id             String         @id @default(uuid())
+  entityId       String
+  businessDate   DateTime       @db.Date
+  status         ClosingStatus  @default(PENDING)
+
+  expectedCash   Decimal?       @db.Decimal(18, 2)
+  countedCash    Decimal?       @db.Decimal(18, 2)
+  difference     Decimal?       @db.Decimal(18, 2)
+
+  totalIncome    Decimal        @default(0) @db.Decimal(18, 2)
+  totalExpense   Decimal        @default(0) @db.Decimal(18, 2)
+
+  /// Detalle por cuenta: [{ accountId, name, expected, counted, difference }]
+  balancesJson   Json?
+  differencesJson Json?
+  checklistJson  Json?
+  explanation    String?
+  notes          String?
+
+  /// Control de versiones: reabrir NO reescribe la historia en silencio.
+  version        Int            @default(1)
+  reopenCount    Int            @default(0)
+  lastReopenReason String?
+  lastReopenedAt DateTime?
+
+  closedByUserId String?
+  closedAt       DateTime?
+  /// Idempotencia del cierre enviado desde un dispositivo offline.
+  clientOperationId String?     @unique
+  deviceId       String?
+  recordedOffline Boolean       @default(false)
+
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  entity   FinancialEntity @relation(fields: [entityId], references: [id], onDelete: Cascade)
+  closedBy User?           @relation("ClosingClosedBy", fields: [closedByUserId], references: [id])
+  reconciliations ClosingReconciliation[]
+
+  /// Un solo cierre por unidad financiera y día de negocio: evita duplicados.
+  @@unique([entityId, businessDate])
+  @@index([businessDate, status])
+}
+
+model ClosingReconciliation {
+  id             String   @id @default(uuid())
+  closingId      String
+  accountId      String
+  expectedAmount Decimal  @db.Decimal(18, 2)
+  countedAmount  Decimal  @db.Decimal(18, 2)
+  differenceAmount Decimal @db.Decimal(18, 2)
+  explanation    String?
+  resolvedByUserId String?
+  resolvedAt     DateTime?
+  createdAt      DateTime @default(now())
+
+  closing   DailyClosing      @relation(fields: [closingId], references: [id], onDelete: Cascade)
+  account   FinancialAccount  @relation(fields: [accountId], references: [id])
+  resolvedBy User?            @relation("ReconResolvedBy", fields: [resolvedByUserId], references: [id])
+
+  @@unique([closingId, accountId])
+  @@index([closingId])
+}
+
+// ============================================================================
+// NOTIFICACIONES
+// ============================================================================
+
+model Notification {
+  id           String                @id @default(uuid())
+  userId       String
+  entityId     String?
+  type         String
+  title        String
+  body         String
+  severity     NotificationSeverity  @default(INFO)
+  status       NotificationStatus    @default(PENDING)
+  /// Clave de deduplicación: evita enviar el mismo aviso dos veces.
+  dedupeKey    String?               @unique
+  relatedType  String?
+  relatedId    String?
+  /// Ruta de la app que resuelve la tarea pendiente.
+  actionUrl    String?
+  scheduledFor DateTime              @default(now())
+  sentAt       DateTime?
+  readAt       DateTime?
+  failReason   String?
+  createdAt    DateTime              @default(now())
+
+  user   User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  entity FinancialEntity? @relation(fields: [entityId], references: [id], onDelete: Cascade)
+
+  @@index([userId, status, scheduledFor])
+  @@index([userId, readAt])
+}
+
+// ============================================================================
+// SINCRONIZACIÓN OFFLINE
+// ============================================================================
+
+/// Registro de cada operación enviada por un cliente offline.
+/// Garantiza idempotencia, detecta duplicados y permite auditar conflictos.
+model SyncOperation {
+  id                String              @id @default(uuid())
+  userId            String
+  deviceId          String
+  clientOperationId String              @unique
+  operationType     String
+  entityId          String?
+  payloadJson       Json
+  /// Hash del contenido enviado: permite detectar que el mismo
+  /// clientOperationId llega con datos distintos (conflicto de idempotencia).
+  payloadHash       String?
+  status            SyncOperationStatus @default(RECEIVED)
+  /// Identificador del registro ya aplicado en el servidor, para poder
+  /// responder "esto ya existe" sin volver a crearlo.
+  serverId          String?
+  resultJson        Json?
+  errorMessage      String?
+  /// Reintentos recibidos con el mismo clientOperationId (detector de duplicados).
+  attemptCount      Int                 @default(1)
+  receivedAt        DateTime            @default(now())
+  appliedAt         DateTime?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, receivedAt])
+  @@index([deviceId, receivedAt])
+  @@index([status])
+}
+
+// ============================================================================
+// AUDITORÍA
+// ============================================================================
+
+model AuditLog {
+  id         String   @id @default(uuid())
+  userId     String?
+  actorType  String   @default("USER")
+  action     String
+  entityType String
+  entityId   String?
+  businessId String?
+  beforeJson Json?
+  afterJson  Json?
+  ip         String?
+  userAgent  String?
+  createdAt  DateTime @default(now())
+
+  user User? @relation(fields: [userId], references: [id])
+
+  @@index([entityType, entityId])
+  @@index([createdAt])
+  @@index([userId, createdAt])
+}

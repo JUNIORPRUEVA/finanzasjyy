@@ -1,0 +1,42 @@
+# Dependencias
+node_modules/
+.pnp/
+.pnp.js
+
+# Entorno / secretos
+.env
+.env.*
+!.env.example
+
+# Build
+dist/
+build/
+.vite/
+coverage/
+*.tsbuildinfo
+
+# Prisma
+apps/api/src/generated/
+
+# Datos locales
+.datos-locales/
+backups/
+*.dump
+*.sql.gz
+
+# Logs
+*.log
+npm-debug.log*
+logs/
+
+# Editor / SO
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+.idea/
+.DS_Store
+Thumbs.db
+
+# Temporales
+.tmp/
+tmp/
