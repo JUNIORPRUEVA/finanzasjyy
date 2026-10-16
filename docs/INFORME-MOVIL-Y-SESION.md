@@ -235,6 +235,10 @@ explica por qué existe y que el valor por defecto es 5.
    PWA compilada cachea todos los ficheros). En modo desarrollo (sin Service Worker) las pruebas
    visitan la pantalla una vez con conexión antes de cortarla; está explicado en la propia prueba
    (`session.spec.ts`).
+6. **No se ha hecho una revisión manual pantalla por pantalla en un dispositivo físico.** La
+   revisión de las 17 pantallas se apoya en las comprobaciones automáticas del apartado 6.2
+   (carga, desbordamiento, elementos fuera de pantalla, errores de consola, barra inferior) y en la
+   inspección de las capturas de `docs/capturas/`.
 
 ---
 
