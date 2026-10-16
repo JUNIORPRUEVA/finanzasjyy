@@ -3,6 +3,7 @@
  *
  *   npm run db:reset-password                       (propietario más antiguo)
  *   npm run db:reset-password -- --email=uno@x.com
+ *   npm run db:reset-password -- --archivo=../../CLAVE-TEMPORAL.txt
  *   npm run db:reset-password -- --mostrar          (la imprime en pantalla)
  *
  * POR QUÉ EXISTE
@@ -18,16 +19,18 @@
  *   donde vive la base de datos. No es alcanzable desde internet.
  * · La contraseña NUEVA se genera aquí y NUNCA viaja por la línea de órdenes
  *   (no queda en el historial ni en la lista de procesos).
- * · Se copia al portapapeles de Windows para poder pegarla, y no se imprime
- *   salvo que se pida con `--mostrar`.
+ * · Se copia al portapapeles de Windows y, si se pide con `--archivo`, también a
+ *   un fichero para poder leerla con calma. No se imprime en la terminal salvo
+ *   que se pida con `--mostrar`.
  * · Al restablecerla se CIERRAN todas las sesiones abiertas de ese usuario: si
  *   alguien hubiera entrado con la contraseña vieja, deja de servir.
  * · Queda registrado en la auditoría (`AuditLog`), como cualquier otra acción
  *   sensible.
  *
- * Después de entrar, cámbiela en Ajustes → Perfil.
+ * Después de entrar, cámbiela en Ajustes → Perfil y borre el fichero temporal.
  */
-import { existsSync } from 'node:fs';
+import { existsSync, writeFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { PrismaClient } from '../generated/prisma/client.js';
@@ -36,6 +39,8 @@ import { generateRandomPassword, hashPassword } from '../auth/password.js';
 interface Options {
   email?: string;
   mostrar: boolean;
+  /** Ruta donde dejar la contraseña escrita, para leerla sin prisa. */
+  archivo?: string;
 }
 
 function parseOptions(argv: string[]): Options {
@@ -43,6 +48,11 @@ function parseOptions(argv: string[]): Options {
   for (const argument of argv) {
     if (argument.startsWith('--email=')) {
       options.email = argument.slice('--email='.length).trim().toLowerCase();
+    } else if (argument.startsWith('--archivo=')) {
+      const value = argument.slice('--archivo='.length).trim();
+      if (value.length > 0) {
+        options.archivo = value;
+      }
     } else if (argument === '--mostrar' || argument === '--print') {
       options.mostrar = true;
     }
@@ -121,6 +131,17 @@ async function main(): Promise<void> {
 
     const inClipboard = copyToClipboard(newPassword);
 
+    // Fichero temporal opcional: el portapapeles se puede sobrescribir sin que
+    // uno se entere, y quedarse fuera de la propia aplicación por eso sería
+    // absurdo. Se escribe SIN salto de línea final para poder copiar la línea
+    // entera sin arrastrar espacios.
+    let archivoEscrito: string | null = null;
+    if (options.archivo) {
+      const destino = resolve(options.archivo);
+      writeFileSync(destino, newPassword, { encoding: 'utf8', mode: 0o600 });
+      archivoEscrito = destino;
+    }
+
     console.log('');
     console.log('=== Contraseña restablecida ===');
     console.log(`  Usuario            : ${user.email} (${user.name})`);
@@ -132,21 +153,32 @@ async function main(): Promise<void> {
       console.log('  La contraseña nueva está en el PORTAPAPELES: péguela en la pantalla de acceso.');
       console.log('  (No se muestra aquí para que no quede escrita en la terminal ni en los registros.)');
     } else {
-      console.log('  No se pudo usar el portapapeles. La contraseña nueva es:');
+      console.log('  No se pudo usar el portapapeles.');
+    }
+
+    if (archivoEscrito) {
+      console.log('');
+      console.log(`  También está escrita en: ${archivoEscrito}`);
+      console.log('  Ábralo, copie la línea y péguela en el acceso. Después BORRE ese fichero.');
+    }
+
+    if (!inClipboard && !archivoEscrito) {
+      console.log('');
+      console.log('  La contraseña nueva es:');
       console.log('');
       console.log(`     ${newPassword}`);
       console.log('');
       console.log('  Anótela ahora: no se puede volver a consultar.');
     }
 
-    if (options.mostrar && inClipboard) {
+    if (options.mostrar) {
       console.log('');
       console.log('  (Se pidió con --mostrar):');
       console.log(`     ${newPassword}`);
     }
 
     console.log('');
-    console.log('  Al entrar, cámbiela en Ajustes → Perfil.');
+    console.log('  Al entrar, cámbiela por una que recuerde en Ajustes → Perfil.');
     console.log('');
   } finally {
     await prisma.$disconnect();

@@ -203,10 +203,13 @@ cd apps\api
 npm run db:reset-password
 ```
 
-El script genera una contraseña nueva, la deja **en el portapapeles** (para pegarla en la pantalla de
-acceso sin que quede escrita en ningún registro), **cierra todas las sesiones abiertas** de ese usuario
-—si alguien hubiera entrado con la contraseña vieja, deja de servir— y lo anota en la auditoría.
+El script genera una contraseña nueva, la deja **en el portapapeles** y —si se indica `--archivo`— también en un fichero
+para leerla con calma, **cierra todas las sesiones abiertas** de ese usuario —si alguien hubiera entrado con la
+contraseña vieja, deja de servir— y lo anota en la auditoría.
 Sirve también para cambiar la contraseña de otro usuario: `npm run db:reset-password -- --email=otro@ejemplo.com`.
+
+> El comando recompila la API (`nest build`). Si tenía el servidor de desarrollo en marcha, puede detenerse: pare el
+> servidor antes de ejecutarlo o vuelva a arrancarlo después con `npm run start:dev`.
 
 Al entrar, cámbiala por una que recuerdes en **Ajustes → Perfil**. Nadie puede consultar la contraseña
 anterior: en la base de datos sólo se guarda un hash de Argon2id.

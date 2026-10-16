@@ -45,3 +45,7 @@ tmp/
 apps/web/e2e/.auth/
 apps/web/playwright-report/
 apps/web/test-results/
+
+# Contraseña temporal del restablecimiento local (se borra al entrar)
+CONTRASENA-TEMPORAL.txt
+*.contrasena-temporal.txt

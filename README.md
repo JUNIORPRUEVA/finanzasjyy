@@ -87,7 +87,7 @@ con capturas de pantalla en `docs/capturas/`. Ver `docs/INFORME-MOVIL-Y-SESION.m
 | `scripts\verify.ps1` | Verificación completa de las dos aplicaciones |
 | `scripts\generate-vapid.ps1` | Genera las claves de las notificaciones push |
 | `scripts\create-test-db.ps1` | Prepara `finanza_test` (aislada): migra y siembra |
-| `npm run db:reset-password` (en `apps/api`) | Restablece la contraseña de acceso y la deja en el portapapeles |
+| `npm run db:reset-password` (en `apps/api`) | Restablece la contraseña de acceso y la deja en el portapapeles (opcional `--archivo=`). Recompila la API: si tenía el servidor de desarrollo en marcha, reinícielo después |
 | `scripts\e2e-web.ps1` | Pruebas de navegador (Playwright) con capturas de pantalla |
 | `scripts\reset-dev-db.ps1` | Deja limpia la base de trabajo (pide escribir `LIMPIAR`) |
 | `scripts\backup-db.ps1` | Copia de seguridad comprimida |
