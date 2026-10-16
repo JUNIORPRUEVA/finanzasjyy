@@ -49,3 +49,7 @@ apps/web/test-results/
 # Contraseña temporal del restablecimiento local (se borra al entrar)
 CONTRASENA-TEMPORAL.txt
 *.contrasena-temporal.txt
+
+# Artefactos del navegador de las herramientas de desarrollo (capturas y consola)
+.playwright-mcp/
+
