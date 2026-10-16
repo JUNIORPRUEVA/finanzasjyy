@@ -192,3 +192,26 @@ El recuento guardado se conserva. Al volver, el cierre sigue en el paso donde lo
 **¿Puedo ver los datos de otro negocio?**
 Sólo si tienes permiso sobre esa unidad. Si no, la API responde «sin permiso» aunque conozcas el
 identificador.
+
+**Olvidé la contraseña. ¿Qué hago?**
+FINANZA no envía correos de recuperación, así que no hay un enlace «he olvidado mi contraseña»: sería
+un enlace que no llevaría a ninguna parte. La contraseña se restablece desde el ordenador donde está
+instalada la aplicación:
+
+```powershell
+cd apps\api
+npm run db:reset-password
+```
+
+El script genera una contraseña nueva, la deja **en el portapapeles** (para pegarla en la pantalla de
+acceso sin que quede escrita en ningún registro), **cierra todas las sesiones abiertas** de ese usuario
+—si alguien hubiera entrado con la contraseña vieja, deja de servir— y lo anota en la auditoría.
+Sirve también para cambiar la contraseña de otro usuario: `npm run db:reset-password -- --email=otro@ejemplo.com`.
+
+Al entrar, cámbiala por una que recuerdes en **Ajustes → Perfil**. Nadie puede consultar la contraseña
+anterior: en la base de datos sólo se guarda un hash de Argon2id.
+
+**¿Por qué me pide la contraseña otra vez si no he hecho nada?**
+Sólo ocurre por tres motivos, y la pantalla te dice cuál: la sesión caducó por seguridad, se alcanzó su
+duración máxima, o se cerró desde otro dispositivo. Un corte de internet o un fallo momentáneo del
+servidor **no** cierran la sesión: puedes seguir trabajando y se reintenta solo.

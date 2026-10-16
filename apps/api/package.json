@@ -17,6 +17,7 @@
     "migrate:deploy": "prisma migrate deploy",
     "migrate:status": "prisma migrate status",
     "db:seed": "nest build && node dist/scripts/seed.js",
+    "db:reset-password": "nest build && node dist/scripts/reset-password.js",
     "seed:demo": "nest build && node dist/scripts/demo-seed.js",
     "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js --config jest.config.json",
     "test:watch": "node --experimental-vm-modules node_modules/jest/bin/jest.js --config jest.config.json --watch",
