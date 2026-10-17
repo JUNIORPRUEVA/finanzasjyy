@@ -184,6 +184,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // caducado: se renueva con la cookie. Si el servidor no responde, NO se
     // cierra la sesión.
     if (me === 'unauthorized') {
+      // Primera visita de verdad (nadie ha entrado nunca en este navegador): no
+      // hay ni rastro de sesión, así que no se pide renovar. Sin esto el
+      // servidor contestaba 401 y el navegador lo apuntaba en la consola como
+      // si algo hubiera fallado. Un error normal no debe parecer un error.
+      if (!hasSessionCookieHint()) {
+        return 'anonymous';
+      }
+
       const outcome = await refreshSession();
       if (outcome.status === 'refreshed') {
         me = await fetchMe();
