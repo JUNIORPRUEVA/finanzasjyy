@@ -255,6 +255,7 @@ model User {
   resolvedRecons     ClosingReconciliation[] @relation("ReconResolvedBy")
   syncOperations     SyncOperation[]
   attachments        Attachment[]
+  shoppingLists      ShoppingList[] @relation("ShoppingListCreatedBy")
 
   @@index([isActive])
 }
@@ -382,6 +383,7 @@ model FinancialEntity {
   recurrings       RecurringObligation[]
   notifications    Notification[]
   attachments      Attachment[]
+  shoppingLists    ShoppingList[]
 
   @@index([isActive])
   @@index([ownerUserId])
@@ -656,6 +658,9 @@ model FinancialTransaction {
   createdBy   User             @relation("TxnCreatedBy", fields: [createdByUserId], references: [id])
   voidingTransaction FinancialTransaction? @relation("TxnVoid", fields: [voidedByTransactionId], references: [id])
   voidedTransaction  FinancialTransaction? @relation("TxnVoid")
+  /// Si este gasto se registró desde una lista de compras personales, aquí está
+  /// el enlace. Es sólo informativo: el movimiento es un gasto normal.
+  shoppingList ShoppingList?
 
   @@index([entityId, businessDate])
   @@index([accountId, businessDate])
@@ -1039,4 +1044,93 @@ model AuditLog {
   @@index([entityType, entityId])
   @@index([createdAt])
   @@index([userId, createdAt])
+}
+
+// ---------------------------------------------------------------------------
+// COMPRAS PERSONALES (lista de la compra)
+// ---------------------------------------------------------------------------
+/// Estado de una lista de compras. Ninguno de estos estados mueve dinero.
+enum ShoppingListStatus {
+  /// Borrador: se está preparando.
+  DRAFT
+  /// Lista en uso: se va comprando.
+  ACTIVE
+  /// Terminada y (si el usuario quiso) registrada como gasto en FINANZA.
+  COMPLETED
+  /// Guardada para no volver a usarla, sin borrar nada.
+  ARCHIVED
+}
+
+/// Lista de compras personales (supermercado, farmacia, combustible…).
+///
+/// IMPORTANTE (integridad financiera):
+///  · Una lista de compras NO es un documento financiero. Crearla, añadir
+///    productos o marcarlos como comprados **no genera ningún asiento**.
+///  · El gasto sólo se registra cuando el usuario lo decide, y entonces se llama
+///    al servicio de movimientos de FINANZA (partida doble, validaciones y
+///    auditoría incluidas). Aquí sólo se guarda el vínculo resultante.
+///  · `transactionId` es único: una lista no puede generar dos gastos.
+model ShoppingList {
+  id         String              @id @default(uuid())
+  entityId   String
+  name       String
+  status     ShoppingListStatus  @default(DRAFT)
+  currency   String              @default("DOP")
+  notes      String?
+  /// Fecha en la que se piensa hacer la compra (no es un movimiento).
+  plannedDate DateTime?          @db.Date
+  completedAt DateTime?
+
+  /// Presupuesto estimado de la lista, calculado al guardar (para poder ordenar
+  /// y comparar sin sumar siempre). Nunca se muestra como dinero gastado.
+  estimatedTotal Decimal?        @db.Decimal(18, 2)
+  /// Importe realmente pagado: sólo lo escribe el usuario al finalizar.
+  actualTotal    Decimal?        @db.Decimal(18, 2)
+
+  /// Movimiento financiero confirmado que se generó desde esta lista.
+  transactionId    String? @unique
+  journalEntryId   String?
+  /// Identificador idempotente del envío (si el usuario pulsa dos veces, no se duplica).
+  clientOperationId String? @unique
+  /// Identificador de la lista generado en el dispositivo: permite crearla sin
+  /// conexión y enviarla después sin duplicarla.
+  deviceListId     String? @unique
+
+  createdByUserId String
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  entity      FinancialEntity     @relation(fields: [entityId], references: [id], onDelete: Cascade)
+  createdBy   User                @relation("ShoppingListCreatedBy", fields: [createdByUserId], references: [id])
+  transaction FinancialTransaction? @relation(fields: [transactionId], references: [id], onDelete: SetNull)
+  items       ShoppingListItem[]
+
+  @@index([entityId, status])
+  @@index([createdByUserId, createdAt])
+}
+
+/// Producto dentro de una lista de compras.
+model ShoppingListItem {
+  id     String @id @default(uuid())
+  listId String
+  name   String
+  /// Cantidad (admite decimales: 1,5 kg).
+  quantity Decimal @db.Decimal(18, 3) @default(1)
+  /// Unidad de medida opcional (kg, litro, unidad…).
+  unit     String?
+  /// Precio estimado por unidad (lo que el usuario cree que costará).
+  estimatedUnitPrice Decimal? @db.Decimal(18, 2)
+  /// Precio real pagado por unidad (lo apunta al comprar).
+  actualUnitPrice    Decimal? @db.Decimal(18, 2)
+  isPurchased Boolean  @default(false)
+  purchasedAt DateTime?
+  categoryId  String?
+  notes       String?
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  list ShoppingList @relation(fields: [listId], references: [id], onDelete: Cascade)
+
+  @@index([listId, isPurchased])
 }

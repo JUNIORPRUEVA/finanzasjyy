@@ -40,6 +40,11 @@ const AttachmentsPage = lazy(() =>
   import('./pages/Attachments').then((module) => ({ default: module.AttachmentsPage })),
 );
 const EntitiesPage = lazy(() => import('./pages/Entities').then((module) => ({ default: module.EntitiesPage })));
+const ShoppingPage = lazy(() => import('./pages/Shopping').then((module) => ({ default: module.ShoppingPage })));
+const ShoppingDetailPage = lazy(() =>
+  import('./pages/ShoppingDetail').then((module) => ({ default: module.ShoppingDetailPage })),
+);
+const AuditPage = lazy(() => import('./pages/Audit').then((module) => ({ default: module.AuditPage })));
 
 /** Esqueleto de pantalla: misma silueta que las pantallas reales. */
 function PageSkeleton() {
@@ -105,6 +110,9 @@ export default function App() {
           <Route path="/presupuestos" element={<BudgetsPage />} />
           <Route path="/adjuntos" element={<AttachmentsPage />} />
           <Route path="/unidades" element={<EntitiesPage />} />
+          <Route path="/compras" element={<ShoppingPage />} />
+          <Route path="/compras/:id" element={<ShoppingDetailPage />} />
+          <Route path="/auditoria" element={<AuditPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </Suspense>

@@ -46,6 +46,34 @@ las cifras reales las introduces tú. Si quieres trastear con datos de prueba, h
 
 ---
 
+## Cómo se navega
+
+**Barra inferior, cinco destinos** (ni uno más): Inicio · Movimientos · **Añadir** (botón central) ·
+Control · **Compras**. El botón central no navega: abre las acciones rápidas (ingreso, gasto,
+transferencia, retiro personal, compras y cerrar el día).
+
+**Menú lateral** (botón de tres líneas, arriba a la izquierda): todo lo demás, agrupado por para qué
+sirve — gestión financiera, análisis y documentos, configuración y sesión— con una frase que explica
+cada opción. Aquí no hay una pestaña «Más»: cada función tiene su nombre.
+
+La navegación se declara **una sola vez** en `apps/web/src/navigation/registry.ts`, y las dos barras se
+dibujan a partir de ahí: no puede haber una opción de adorno ni dos listas que se desincronicen.
+
+**Apariencia:** Ajustes → *Apariencia* ofrece claro, oscuro o seguir al sistema. Se aplica al
+instante, se recuerda y la aplicación abre ya con el tema elegido (sin destellos blancos).
+
+---
+
+## Compras personales
+
+Preparar la compra antes de gastar: qué hace falta, cuánto se piensa gastar y, después, cuánto se
+gastó de verdad. **Preparar una lista no mueve dinero**: el gasto sólo existe cuando el usuario lo
+registra, y entonces entra por el camino financiero de siempre (movimiento + asiento contable +
+auditoría). Una lista **no puede generar dos gastos** (identificador de operación único) y se puede
+preparar **sin conexión** (se envía sola al recuperar la red).
+
+---
+
 ## Verificación
 
 ```powershell
@@ -106,6 +134,7 @@ con capturas de pantalla en `docs/capturas/`. Ver `docs/INFORME-MOVIL-Y-SESION.m
 | [docs/SEGURIDAD.md](docs/SEGURIDAD.md)                       | Contraseñas, sesiones, aislamiento entre unidades y datos         |
 | [docs/UAT.md](docs/UAT.md)                                   | Pruebas de aceptación: 28 casos con su resultado                  |
 | [docs/INFORME-MOVIL-Y-SESION.md](docs/INFORME-MOVIL-Y-SESION.md) | Diseño móvil, sesión persistente y qué NO se ha probado       |
+| [docs/INFORME-UX-COMPRAS.md](docs/INFORME-UX-COMPRAS.md)     | Menú lateral, compras personales, apariencia y defectos corregidos |
 | [docs/DESPLIEGUE.md](docs/DESPLIEGUE.md)                     | Docker, copias de seguridad, restauración y despliegue            |
 
 ---

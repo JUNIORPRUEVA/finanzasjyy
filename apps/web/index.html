@@ -13,6 +13,25 @@
     <link rel="icon" type="image/png" sizes="48x48" href="/favicon-48.png" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <title>FINANZA</title>
+    <script>
+      // TEMA ANTES DE PINTAR (sin parpadeos).
+      // Este script se ejecuta antes de que se dibuje nada: aplica el tema
+      // guardado en el dispositivo y evita el destello blanco al abrir la
+      // aplicación de noche en modo oscuro. Si no hay preferencia guardada, se
+      // usa la del sistema. La lógica de la aplicación (src/lib/theme.ts) hace
+      // lo mismo después, y sincroniza con el servidor.
+      (function () {
+        try {
+          var stored = localStorage.getItem('finanza.theme') || 'system';
+          var prefersLight = window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches;
+          var resolved = stored === 'light' || stored === 'dark' ? stored : prefersLight ? 'light' : 'dark';
+          document.documentElement.setAttribute('data-theme', resolved);
+          document.documentElement.style.colorScheme = resolved;
+        } catch (error) {
+          document.documentElement.setAttribute('data-theme', 'dark');
+        }
+      })();
+    </script>
   </head>
   <!-- Los colores los pone src/index.css (variables del tema): así respeta el modo
        claro y oscuro. Antes había aquí clases fijas de color y, en modo claro, el

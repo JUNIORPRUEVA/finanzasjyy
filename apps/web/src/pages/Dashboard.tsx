@@ -19,7 +19,7 @@ import {
   Tabs,
 } from '../components/ui';
 import { formatBusinessDate, formatMoney } from '../lib/format';
-import { IconChevronRight, IconTarget, IconWifiOff } from '../components/icons';
+import { IconArrowDown, IconArrowUp, IconBag, IconChevronRight, IconTarget, IconWifiOff } from '../components/icons';
 
 // Los gráficos se cargan sólo cuando hacen falta (son la parte más pesada).
 const DashboardCharts = lazy(() =>
@@ -70,6 +70,15 @@ interface Charts {
   };
   monthlyTrend: Array<{ month: string; income: string; expense: string; result: string }>;
   transfers: { count: number; internalCount: number; total: string; note: string };
+}
+
+interface ShoppingSummary {
+  openLists: number;
+  itemsPending: number;
+  pendingTotal: string;
+  estimatedTotal: string;
+  lists: Array<{ id: string; name: string; status: string; totals: { estimated: string; actual: string; pending: string } }>;
+  note: string;
 }
 
 interface PendingTasks {
@@ -143,6 +152,12 @@ export function DashboardPage() {
     enabled: navigator.onLine,
   });
 
+  // Listas de compras abiertas: es trabajo vivo del día, por eso se ve en el inicio.
+  const shoppingQuery = useQuery<ShoppingSummary>({
+    queryKey: ['shopping-summary', entityId],
+    queryFn: () => api.get<ShoppingSummary>(`/shopping-lists/summary${entityId ? `?entityId=${entityId}` : ''}`),
+  });
+
   const summary = summaryQuery.data;
   const periodLabel =
     preset === 'TODAY'
@@ -157,6 +172,13 @@ export function DashboardPage() {
 
   const budgetPercent = summary ? Number(summary.budget.percentUsed) : 0;
   const budgetTone = budgetPercent >= 100 ? 'negative' : budgetPercent >= 80 ? 'warning' : 'positive';
+  // Un presupuesto de cero NO es «estoy al día»: es «todavía no me he puesto límite».
+  const hasBudget = summary ? Number(summary.budget.limit) > 0 : false;
+  // Sin ingresos ni gastos en el período, los gráficos no tienen nada que contar.
+  const noMovementsInPeriod = summary
+    ? Number(summary.period.income) === 0 && Number(summary.period.expense) === 0
+    : false;
+  const noMovementsToday = summary ? summary.today.movementCount === 0 : true;
 
   const heroTone = useMemo(() => {
     if (!summary) {
@@ -272,17 +294,35 @@ export function DashboardPage() {
         />
       </div>
 
+      {/* Acciones rápidas: las dos que se usan a diario, y los atajos al lado. */}
       <div className="grid grid-cols-2 gap-2">
         <Link to="/registrar?kind=INCOME">
           <Button fullWidth variant="secondary">
-            Registrar ingreso
+            <IconArrowDown size={16} /> Ingreso
           </Button>
         </Link>
         <Link to="/registrar?kind=EXPENSE">
           <Button fullWidth variant="secondary">
-            Registrar gasto
+            <IconArrowUp size={16} /> Gasto
           </Button>
         </Link>
+      </div>
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 px-1 text-xs font-medium">
+        <Link to="/traspasos" className="text-brand">
+          Transferir
+        </Link>
+        <Link to="/compras" className="text-brand">
+          Compras
+        </Link>
+        {noMovementsToday ? (
+          <Link to="/organizar" className="text-brand">
+            Organizar mi dinero
+          </Link>
+        ) : (
+          <Link to="/cierres" className="text-brand">
+            Cerrar el día
+          </Link>
+        )}
       </div>
 
       {/* Control diario */}
@@ -318,6 +358,37 @@ export function DashboardPage() {
               </Button>
             </Link>
           </div>
+        </Card>
+      ) : null}
+
+      {/* Compras: lo que está pendiente de comprar y cuánto se calcula gastar */}
+      {shoppingQuery.data && shoppingQuery.data.openLists > 0 ? (
+        <Card>
+          <SectionTitle
+            title="Listas de compras"
+            hint={`${shoppingQuery.data.openLists} abierta(s) · ${shoppingQuery.data.itemsPending} producto(s) por comprar`}
+            right={<IconBag size={18} className="text-brand" />}
+          />
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <p className="text-[0.7rem] uppercase tracking-wide text-faint">Falta por comprar</p>
+              <p className="mt-0.5 font-semibold">
+                <Money value={shoppingQuery.data.pendingTotal} currency={currency} />
+              </p>
+            </div>
+            <div>
+              <p className="text-[0.7rem] uppercase tracking-wide text-faint">Cálculo inicial</p>
+              <p className="mt-0.5 font-semibold text-muted">
+                <Money value={shoppingQuery.data.estimatedTotal} currency={currency} />
+              </p>
+            </div>
+          </div>
+          <p className="mt-2 text-[0.7rem] leading-snug text-faint">{shoppingQuery.data.note}</p>
+          <Link to="/compras" className="mt-3 block">
+            <Button fullWidth variant="secondary" size="sm">
+              Ver mis listas <IconChevronRight size={14} />
+            </Button>
+          </Link>
         </Card>
       ) : null}
 
@@ -360,6 +431,13 @@ export function DashboardPage() {
             </p>
           </div>
         </div>
+
+        {noMovementsInPeriod ? (
+          <p className="mt-3 border-t border-border-soft pt-2 text-xs leading-snug text-muted">
+            No hay movimientos en {periodLabel}. Las cifras están a cero porque no ha registrado nada todavía, no porque
+            se haya perdido información.
+          </p>
+        ) : null}
       </Card>
 
       {/* Deudas y cobros */}
@@ -398,33 +476,48 @@ export function DashboardPage() {
       </Card>
 
       {/* Presupuesto y retiros */}
-      <Card>
-        <SectionTitle title="Presupuesto del mes" hint={`Consumido ${summary.budget.percentUsed}%`} />
-        <ProgressBar percent={budgetPercent} tone={budgetTone} />
-        <p className="mt-2 text-xs leading-snug text-muted">
-          Gastado {formatMoney(summary.budget.spent, currency)} de {formatMoney(summary.budget.limit, currency)}. Quedan{' '}
-          <strong className="text-ink">{formatMoney(summary.budget.remaining, currency)}</strong>.
-        </p>
-        <div className="mt-3 grid grid-cols-2 gap-3 border-t border-border-soft pt-3">
-          <div>
-            <p className="text-[0.7rem] uppercase tracking-wide text-faint">Retirado por mí este mes</p>
-            <p className="mt-0.5 font-semibold">
-              <Money value={summary.owner.withdrawalsThisMonth} currency={currency} />
-            </p>
+      {hasBudget ? (
+        <Card>
+          <SectionTitle title="Presupuesto del mes" hint={`Consumido ${summary.budget.percentUsed}%`} />
+          <ProgressBar percent={budgetPercent} tone={budgetTone} />
+          <p className="mt-2 text-xs leading-snug text-muted">
+            Gastado {formatMoney(summary.budget.spent, currency)} de {formatMoney(summary.budget.limit, currency)}. Quedan{' '}
+            <strong className="text-ink">{formatMoney(summary.budget.remaining, currency)}</strong>.
+          </p>
+          <div className="mt-3 grid grid-cols-2 gap-3 border-t border-border-soft pt-3">
+            <div>
+              <p className="text-[0.7rem] uppercase tracking-wide text-faint">Retirado por mí este mes</p>
+              <p className="mt-0.5 font-semibold">
+                <Money value={summary.owner.withdrawalsThisMonth} currency={currency} />
+              </p>
+            </div>
+            <div>
+              <p className="text-[0.7rem] uppercase tracking-wide text-faint">Aporté este mes</p>
+              <p className="mt-0.5 font-semibold">
+                <Money value={summary.owner.contributionsThisMonth} currency={currency} />
+              </p>
+            </div>
           </div>
-          <div>
-            <p className="text-[0.7rem] uppercase tracking-wide text-faint">Aporté este mes</p>
-            <p className="mt-0.5 font-semibold">
-              <Money value={summary.owner.contributionsThisMonth} currency={currency} />
-            </p>
-          </div>
-        </div>
-        <Link to="/presupuestos" className="mt-3 block">
-          <Button fullWidth variant="secondary" size="sm">
-            Ajustar presupuesto <IconChevronRight size={14} />
-          </Button>
-        </Link>
-      </Card>
+          <Link to="/presupuestos" className="mt-3 block">
+            <Button fullWidth variant="secondary" size="sm">
+              Ajustar presupuesto <IconChevronRight size={14} />
+            </Button>
+          </Link>
+        </Card>
+      ) : (
+        <Card>
+          <SectionTitle title="Presupuesto del mes" />
+          <EmptyState
+            title="Todavía no ha fijado un presupuesto"
+            hint="Sin límite definido no se puede decir si va bien o mal. Póngase uno y FINANZA le avisará al acercarse."
+          />
+          <Link to="/presupuestos" className="mt-3 block">
+            <Button fullWidth variant="secondary" size="sm">
+              Definir presupuesto <IconChevronRight size={14} />
+            </Button>
+          </Link>
+        </Card>
+      )}
 
       {/* Tareas financieras pendientes: cada una lleva a donde se resuelve. */}
       {tasksQuery.data && tasksQuery.data.tasks.length > 0 ? (
@@ -524,8 +617,19 @@ export function DashboardPage() {
         </Card>
       ) : null}
 
-      {/* Gráficos: se piden sólo si el usuario los quiere ver. */}
-      {!showCharts ? (
+      {/* Gráficos: se piden sólo si el usuario los quiere ver, y sólo si hay algo que contar. */}
+      {noMovementsInPeriod ? (
+        <Card>
+          <SectionTitle title="Gráficos" />
+          <p className="text-sm leading-snug text-muted">
+            No se muestran gráficos porque no hay movimientos en {periodLabel}. En cuanto registre el primero, aquí
+            aparecerá la evolución diaria y el reparto por categoría.
+          </p>
+          <Link to="/registrar?kind=INCOME" className="mt-3 block">
+            <Button fullWidth>Registrar el primer movimiento</Button>
+          </Link>
+        </Card>
+      ) : !showCharts ? (
         <Button fullWidth variant="secondary" onClick={() => setShowCharts(true)}>
           Ver gráficos del período
         </Button>

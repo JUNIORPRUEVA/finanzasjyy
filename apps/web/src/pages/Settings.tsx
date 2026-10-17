@@ -5,6 +5,7 @@ import { api, ApiError } from '../lib/api';
 import { useAuth } from '../store/auth';
 import { Badge, Button, Card, Field, Notice, SectionTitle, Select, Spinner, Tabs } from '../components/ui';
 import { formatDateTime } from '../lib/format';
+import { deviceThemePreference, setThemePreference, type ThemePreference } from '../lib/theme';
 
 interface Preferences {
   timezone: string;
@@ -40,7 +41,32 @@ interface PushStatus {
   subscriptions: Array<{ id: string; platform: string | null; isActive: boolean; failCount: number; lastSentAt: string | null }>;
 }
 
-type TabId = 'preferencias' | 'seguridad' | 'notificaciones';
+type TabId = 'preferencias' | 'apariencia' | 'seguridad' | 'notificaciones';
+
+/**
+ * Opciones de apariencia, con su explicación en lenguaje llano. Se aplican al
+ * instante (no hay que pulsar «Guardar»): quien elige un tema quiere verlo ya.
+ */
+const THEME_OPTIONS: Array<{ id: ThemePreference; label: string; hint: string; swatch: string[] }> = [
+  {
+    id: 'light',
+    label: 'Claro',
+    hint: 'Fondo claro. Se lee mejor con mucha luz, en la calle o junto a una ventana.',
+    swatch: ['#f4f6fb', '#ffffff', '#0b3b2a'],
+  },
+  {
+    id: 'dark',
+    label: 'Oscuro',
+    hint: 'Fondo oscuro. Más cómodo de noche y gasta menos batería en pantallas OLED.',
+    swatch: ['#0a0f1c', '#131a2b', '#3ddc97'],
+  },
+  {
+    id: 'system',
+    label: 'Como el sistema',
+    hint: 'FINANZA cambia sola cuando el teléfono cambia de modo claro a oscuro (o al revés).',
+    swatch: ['#0a0f1c', '#f4f6fb', '#3ddc97'],
+  },
+];
 
 /**
  * AJUSTES
@@ -203,6 +229,7 @@ export function SettingsPage() {
       <Tabs
         tabs={[
           { id: 'preferencias' as TabId, label: 'Preferencias' },
+          { id: 'apariencia' as TabId, label: 'Apariencia' },
           { id: 'notificaciones' as TabId, label: 'Notificaciones' },
           { id: 'seguridad' as TabId, label: 'Seguridad' },
         ]}
@@ -259,17 +286,6 @@ export function SettingsPage() {
               ]}
             />
 
-            <Select
-              label="Tema"
-              value={form.theme}
-              onChange={(value) => setForm({ ...form, theme: value })}
-              options={[
-                { value: 'dark', label: 'Oscuro' },
-                { value: 'light', label: 'Claro' },
-                { value: 'system', label: 'Según el sistema' },
-              ]}
-            />
-
             <Field
               label="Hora del recordatorio de cierre (0-23)"
               value={String(form.closingReminderHour)}
@@ -310,6 +326,88 @@ export function SettingsPage() {
             <Button disabled={saveMutation.isPending} onClick={() => saveMutation.mutate(form)}>
               {saveMutation.isPending ? 'Guardando…' : 'Guardar preferencias'}
             </Button>
+          </Card>
+        </>
+      ) : null}
+
+      {tab === 'apariencia' ? (
+        <>
+          <Card className="space-y-3">
+            <SectionTitle title="Tema" hint="Se aplica al instante, sin recargar la pantalla" />
+            <div className="space-y-2">
+              {THEME_OPTIONS.map((option) => {
+                const isActive = form.theme === option.id;
+                return (
+                  <button
+                    key={option.id}
+                    type="button"
+                    aria-pressed={isActive}
+                    onClick={() => {
+                      setForm({ ...form, theme: option.id });
+                      setThemePreference(option.id);
+                      saveMutation.mutate({ ...form, theme: option.id });
+                    }}
+                    className={`flex w-full items-start gap-3 rounded-xl border p-3 text-left transition ${
+                      isActive ? 'border-brand bg-brand-soft' : 'border-border-soft bg-surface hover:bg-surface-2'
+                    }`}
+                  >
+                    <span
+                      aria-hidden="true"
+                      className="mt-0.5 flex h-10 w-10 shrink-0 overflow-hidden rounded-lg border border-border-soft"
+                    >
+                      {option.swatch.map((color, index) => (
+                        <span key={color + index} className="h-full flex-1" style={{ backgroundColor: color }} />
+                      ))}
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="flex items-center gap-2">
+                        <span className="text-sm font-semibold text-ink">{option.label}</span>
+                        {isActive ? <Badge tone="positive">En uso</Badge> : null}
+                      </span>
+                      <span className="mt-0.5 block text-xs leading-snug text-muted">{option.hint}</span>
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+            <p className="text-[0.7rem] leading-snug text-faint">
+              Su elección se guarda en la cuenta (viaja con usted a otros dispositivos que todavía no hayan elegido) y
+              también en este teléfono, para que la aplicación abra directamente con el tema elegido y sin destellos
+              blancos.
+            </p>
+            {deviceThemePreference() !== form.theme ? (
+              <Notice tone="warning">
+                <p>
+                  Este teléfono tiene guardado un tema distinto al de su cuenta. Se seguirá usando el de este teléfono,
+                  que es el que usted eligió aquí.
+                </p>
+                <button
+                  type="button"
+                  className="mt-2 text-xs font-semibold text-brand underline"
+                  onClick={() => {
+                    setThemePreference(form.theme as ThemePreference);
+                    saveMutation.mutate(form);
+                  }}
+                >
+                  Usar el de mi cuenta
+                </button>
+              </Notice>
+            ) : null}
+          </Card>
+
+          <Card className="space-y-2">
+            <SectionTitle title="Qué cambia y qué no" />
+            <ul className="space-y-1.5 text-xs leading-snug text-muted">
+              <li>
+                · Cambia el <strong>fondo, el texto y los bordes</strong>. La <strong>paleta de FINANZA no cambia</strong>:
+                verde para lo bueno, rojo para lo malo, igual en los dos temas.
+              </li>
+              <li>
+                · Los <strong>colores de las gráficas</strong> se ajustan para que sigan siendo legibles sobre fondo
+                oscuro o claro.
+              </li>
+              <li>· No cambia ningún dato ni ninguna cifra: es sólo cómo se ve.</li>
+            </ul>
           </Card>
         </>
       ) : null}

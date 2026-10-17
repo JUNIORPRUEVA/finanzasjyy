@@ -25,6 +25,22 @@ La pantalla está pensada para el móvil. Se puede instalar:
 
 ## 2. La rutina diaria
 
+### 2.0 Cómo se mueve uno por la aplicación
+
+Abajo hay **cinco sitios**, siempre los mismos: **Inicio**, **Movimientos**, **Añadir** (el botón
+del centro), **Control** y **Compras**. El botón del centro no cambia de pantalla: abre las acciones
+rápidas (registrar un ingreso, un gasto, transferir dinero, un retiro personal, compras o cerrar el
+día).
+
+Arriba a la izquierda está el botón de tres líneas: ahí vive **todo lo demás**, agrupado por para qué
+sirve y con una frase que explica cada opción. Ya no hay una pestaña «Más»: cada función tiene su
+nombre.
+
+En la cabecera también están la unidad financiera activa (para saber siempre en qué contexto estás
+mirando) y un indicador de estado: te dice si todo está confirmado por el servidor, si hay algo
+pendiente de enviar o si estás sin conexión. **No dice «sesión activa»**: si estás dentro, tu sesión
+está bien; sólo avisa cuando hay algo que hacer.
+
 ### 2.1 Cuando entra o sale dinero: «Registrar»
 
 1. Elige qué es: **Ingreso**, **Gasto**, **Retiro del propietario**, **Aporte del propietario**
@@ -104,9 +120,34 @@ El color no es un adorno: cada punto se puede desplegar para ver exactamente qu�
 
 ### El panel
 
-Muestra el período que elijas (hoy, ayer, semana, mes, trimestre, año, últimos 30 días):
-ingresos, gastos, resultado, cuánto dinero hay y dónde, deuda viva, retiros del propietario,
-consumo de presupuestos, tareas pendientes y comparación entre unidades.
+Muestra el período que elijas (hoy, ayer, semana, mes, último mes): ingresos, gastos, resultado,
+cuánto dinero hay y dónde, deuda viva, retiros del propietario, consumo de presupuestos, tareas
+pendientes, tus listas de compras y comparación entre unidades. Los gráficos aparecen **sólo si los
+pidas** y sólo si hay datos que contar.
+
+Si empezó hace poco verá avisos honestos en lugar de cifras vacías: «no ha registrado movimientos
+en este período», «todavía no ha fijado un presupuesto», «todavía no hay cierre de hoy». **La
+aplicación no dice que todo va bien cuando todavía no lo sabe.**
+
+### Compras personales
+
+Sirve para preparar una compra antes de gastar y, después, saber cuánto se gastó de verdad.
+
+1. **Cree una lista** («Supermercado del sábado», «Farmacia»…) y elija la unidad financiera.
+2. **Añada productos** con su cantidad, su unidad y **el precio que espera pagar**. La aplicación
+   suma y le dice cuánto va a gastar antes de salir de casa.
+3. Ya en la compra, **vaya marcando lo que compró**. Puede corregir el precio real si le costó otra
+   cosa: ahí abajo verá el **desvío** (cuánto costó más o menos de lo previsto).
+4. Cuando termine, pulse **«Registrar gasto en FINANZA»**: ahí sí sale el dinero de una cuenta, con
+   su asiento contable, igual que si lo registrara a mano.
+
+Nada de esto mueve dinero hasta ese último paso, y **una lista sólo puede generar un gasto**: si
+vuelve a pulsar, no se duplica. Una compra ya registrada no se puede borrar (se archiva), para que el
+histórico no se reescriba.
+
+Se puede preparar la lista **sin conexión** (en el supermercado la cobertura falla); se enviará sola
+al recuperarla. Lo que **no** se hace sin conexión es registrar el gasto: eso es dinero real y exige
+el servidor.
 
 ### Movimientos
 
@@ -147,13 +188,14 @@ En «Más → Sincronización» ves:
 
 | Pestaña | Qué se configura |
 | --- | --- |
-| **Preferencias** | Zona horaria de negocio, moneda, tema, hora del recordatorio de cierre, horas de trabajo sin conexión, umbrales de aviso y alerta de presupuesto |
+| **Preferencias** | Perfil, zona horaria de negocio, moneda, hora del recordatorio de cierre, horas de trabajo sin conexión, umbrales de aviso y alerta de presupuesto |
+| **Apariencia** | **Claro**, **Oscuro** o **Como el sistema**. Se aplica al instante, se recuerda, y la aplicación abre ya con el tema elegido (sin destellos blancos). La paleta no cambia: verde entra, rojo sale, ámbar pendiente |
 | **Notificaciones** | Activar en este dispositivo, enviar una de prueba, ver las suscripciones y sus fallos |
 | **Seguridad** | Cambiar contraseña (cierra las demás sesiones), ver y cerrar sesiones por dispositivo, cerrar sesión |
 
 Si el servidor no tiene claves VAPID, la pestaña de notificaciones lo dirá con esas palabras:
 «las notificaciones push están DESACTIVADAS». Las alertas internas seguirán apareciendo en
-«Más → Tareas».
+*Mi control diario* (y en *Sincronización y pendientes*, dentro del menú).
 
 ---
 

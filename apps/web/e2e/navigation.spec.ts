@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test';
 import {
   APP_ROUTES,
+  BOTTOM_NAV,
   collectConsoleErrors,
   ensureAuthenticated,
   expectNoHorizontalOverflow,
@@ -53,6 +54,26 @@ test.describe('recorrido de todas las pantallas', () => {
 });
 
 test.describe('navegación inferior', () => {
+  test('la barra inferior tiene exactamente los cinco destinos acordados y ninguno es «Más»', async ({ page }) => {
+    await ensureAuthenticated(page);
+
+    const bar = page.getByRole('navigation', { name: 'Navegación principal' });
+    await expect(bar).toBeVisible();
+
+    // Los nombres y su ORDEN: es la promesa que se le hace al usuario.
+    // Se toma la ÚLTIMA línea de cada acceso porque «Control» puede llevar encima
+    // su contador de tareas obligatorias (el número se pinta dentro del mismo
+    // enlace), y ese contador no cambia el nombre del destino.
+    const labels = (await bar.locator('a, button').allInnerTexts()).map((text) =>
+      text.trim().split('\n').pop()!.trim(),
+    );
+    expect(labels).toEqual([...BOTTOM_NAV]);
+
+    // «Más» desapareció como destino: su contenido vive ahora en el menú lateral,
+    // con nombre propio. Si alguien lo devolviera, esta prueba lo avisaría.
+    await expect(bar.getByText('Más', { exact: true })).toHaveCount(0);
+  });
+
   test('los cinco accesos llevan a donde dicen', async ({ page }) => {
     await ensureAuthenticated(page);
 
@@ -65,23 +86,31 @@ test.describe('navegación inferior', () => {
     await page.getByRole('button', { name: 'Cerrar', exact: true }).first().click();
     await expect(page.getByText('¿Qué quiere registrar?')).toBeHidden();
 
-    await page.getByRole('link', { name: 'Control', exact: true }).click();
+    // «Control» puede ir acompañado del número de tareas obligatorias, así que se
+    // busca por su nombre sin exigir coincidencia exacta.
+    await page.getByRole('link', { name: /^Control/ }).click();
     await expect(page).toHaveURL(/\/control/);
 
-    await page.getByRole('link', { name: 'Más', exact: true }).click();
-    await expect(page).toHaveURL(/\/mas/);
+    await page.getByRole('link', { name: 'Compras', exact: true }).click();
+    await expect(page).toHaveURL(/\/compras/);
+    await expect(page.getByRole('heading', { name: 'Compras' })).toBeVisible();
 
     await page.getByRole('link', { name: 'Inicio', exact: true }).click();
     await expect(page).toHaveURL(/\/$/);
   });
 
-  test('el menú de añadir ofrece las cuatro acciones diarias y cada una abre su pantalla', async ({ page }) => {
+  test('el menú de añadir ofrece las acciones diarias y cada una abre su pantalla', async ({ page }) => {
     await ensureAuthenticated(page);
 
     const cases: Array<{ action: RegExp; url: RegExp; expectedLabel: string }> = [
-      { action: /^Ingreso /, url: /\/registrar\?kind=INCOME/, expectedLabel: '¿Cuánto entró?' },
-      { action: /^Gasto /, url: /\/registrar\?kind=EXPENSE/, expectedLabel: '¿Cuánto salió?' },
-      { action: /^Traspaso /, url: /\/traspasos/, expectedLabel: 'Traspaso' },
+      { action: /Registrar ingreso/, url: /\/registrar\?kind=INCOME/, expectedLabel: '¿Cuánto entró?' },
+      { action: /Registrar gasto/, url: /\/registrar\?kind=EXPENSE/, expectedLabel: '¿Cuánto salió?' },
+      { action: /Transferir dinero/, url: /\/traspasos/, expectedLabel: 'Traspaso' },
+      { action: /Retiro personal/, url: /\/registrar\?kind=OWNER_WITHDRAWAL/, expectedLabel: 'Retiro' },
+      { action: /^Compras/, url: /\/compras/, expectedLabel: 'Nueva' },
+      // La pantalla de cierre pide un «Día que se cierra»: es lo primero que se
+      // ve siempre, haya o no movimientos ese día.
+      { action: /Cerrar el día/, url: /\/cierres/, expectedLabel: 'Día que se cierra' },
     ];
 
     for (const item of cases) {
@@ -141,7 +170,7 @@ test.describe('formularios y diálogos', () => {
 
     // Los botones de la hoja de acciones también deben poder pulsarse con el dedo.
     await navAddButton(page).click();
-    const actionButton = page.getByRole('button', { name: /^Gasto / });
+    const actionButton = page.getByRole('button', { name: /Registrar gasto/ });
     const actionBox = await actionButton.boundingBox();
     expect(actionBox!.height, 'acción de la hoja por debajo de 44 px').toBeGreaterThanOrEqual(44);
   });

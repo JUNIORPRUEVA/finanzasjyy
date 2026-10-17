@@ -238,3 +238,25 @@ export const IconLogout = (props: IconProps) => (
     <path d="M18 9l3 3-3 3" />
   </Icon>
 );
+
+/** Bolsa de la compra: identifica el módulo de compras personales. */
+export const IconBag = (props: IconProps) => (
+  <Icon {...props}>
+    <path d="M6 8h12l1 11.5a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 5 19.5z" />
+    <path d="M9 8V6.5a3 3 0 0 1 6 0V8" />
+  </Icon>
+);
+
+export const IconSearch = (props: IconProps) => (
+  <Icon {...props}>
+    <circle cx="11" cy="11" r="6.5" />
+    <path d="M16 16l4.5 4.5" />
+  </Icon>
+);
+
+export const IconChevronLeft = (props: IconProps) => (
+  <Icon {...props}>
+    <path d="M14.5 5.5L8 12l6.5 6.5" />
+  </Icon>
+);
+

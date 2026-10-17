@@ -82,6 +82,8 @@ export class FinanzaDatabase extends Dexie {
   cacheAccounts!: Table<CacheAccount, string>;
   cacheCategories!: Table<CacheCategory, string>;
   cacheMeta!: Table<CacheMeta, string>;
+  shoppingLists!: Table<ShoppingListSnapshot, string>;
+  shoppingPending!: Table<ShoppingPendingSave, string>;
 
   constructor() {
     super('finanza-local');
@@ -92,10 +94,122 @@ export class FinanzaDatabase extends Dexie {
       cacheCategories: 'id, kind, entityId',
       cacheMeta: 'key',
     });
+
+    // Versión 2: listas de compras personales.
+    //
+    // Se AÑADE una versión en vez de modificar la 1: así los dispositivos que ya
+    // tenían datos (la cola de movimientos sin confirmar incluida) los conservan.
+    // IndexedDB aplica sólo lo nuevo y no borra nada.
+    this.version(2).stores({
+      shoppingLists: 'id, entityId, status, updatedAt, pendingSync, deviceListId',
+      shoppingPending: 'id, listId, createdAt',
+    });
   }
 }
 
 export const db = new FinanzaDatabase();
+
+// ---------------------------------------------------------------------------
+// Compras personales: copia local y envíos pendientes
+// ---------------------------------------------------------------------------
+
+/**
+ * Copia local de una lista de compras.
+ *
+ * `pendingSync` significa «esto lo ha cambiado este dispositivo y el servidor
+ * todavía no lo ha confirmado». Mientras valga `true`, la interfaz lo dice con
+ * todas las letras: nunca se presenta como sincronizado algo que no lo está.
+ */
+export interface ShoppingListSnapshot {
+  id: string;
+  deviceListId: string;
+  entityId: string;
+  name: string;
+  status: 'DRAFT' | 'ACTIVE' | 'COMPLETED' | 'ARCHIVED';
+  currency: string;
+  notes: string | null;
+  plannedDate: string | null;
+  items: Array<{
+    id: string;
+    name: string;
+    quantity: string;
+    unit: string | null;
+    estimatedUnitPrice: string | null;
+    actualUnitPrice: string | null;
+    isPurchased: boolean;
+    categoryId: string | null;
+  }>;
+  /** Cambios locales sin enviar al servidor. */
+  pendingSync: boolean;
+  /** El gasto ya está registrado: a partir de aquí no se edita sin conexión. */
+  expenseRegistered: boolean;
+  serverId: string | null;
+  updatedAt: string;
+  cachedAt: string;
+}
+
+/** Envío pendiente: la lista completa tal como quedó en el dispositivo. */
+export interface ShoppingPendingSave {
+  id: string;
+  listId: string;
+  deviceListId: string;
+  createdAt: string;
+  attempts: number;
+  lastError: string | null;
+}
+
+/** Guarda (o actualiza) listas en la copia local sin borrar las demás. */
+export async function saveLocalShoppingLists(lists: ShoppingListSnapshot[]): Promise<void> {
+  if (lists.length === 0) {
+    return;
+  }
+  await db.shoppingLists.bulkPut(lists);
+}
+
+export async function getLocalShoppingLists(): Promise<ShoppingListSnapshot[]> {
+  const rows = await db.shoppingLists.toArray();
+  return rows.sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : -1));
+}
+
+export async function getLocalShoppingList(id: string): Promise<ShoppingListSnapshot | null> {
+  return (await db.shoppingLists.get(id)) ?? null;
+}
+
+export async function removeLocalShoppingList(id: string): Promise<void> {
+  await db.shoppingLists.delete(id);
+}
+
+/** Anota que esta lista necesita enviarse al servidor. */
+export async function queueShoppingSave(listId: string, deviceListId: string): Promise<void> {
+  await db.shoppingPending.put({
+    id: listId,
+    listId,
+    deviceListId,
+    createdAt: new Date().toISOString(),
+    attempts: 0,
+    lastError: null,
+  });
+}
+
+export async function listShoppingPending(): Promise<ShoppingPendingSave[]> {
+  return db.shoppingPending.orderBy('createdAt').toArray();
+}
+
+export async function countShoppingPending(): Promise<number> {
+  return db.shoppingPending.count();
+}
+
+export async function clearShoppingPending(listId: string): Promise<void> {
+  await db.shoppingPending.delete(listId);
+}
+
+export async function markShoppingPendingError(listId: string, error: string): Promise<void> {
+  const row = await db.shoppingPending.get(listId);
+  if (!row) {
+    return;
+  }
+  await db.shoppingPending.put({ ...row, attempts: row.attempts + 1, lastError: error });
+}
 
 // ---------------------------------------------------------------------------
 // Cola de operaciones pendientes

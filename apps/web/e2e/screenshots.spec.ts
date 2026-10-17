@@ -1,6 +1,6 @@
-import { test } from '@playwright/test';
+import { expect, test } from '@playwright/test';
 import path from 'node:path';
-import { APP_ROUTES, ensureAuthenticated } from './helpers';
+import { APP_ROUTES, ensureAuthenticated, openMenu } from './helpers';
 
 /**
  * CAPTURAS DE REFERENCIA
@@ -42,4 +42,40 @@ test('capturas de todas las pantallas', async ({ page }, testInfo) => {
       fullPage: true,
     });
   }
+});
+
+/**
+ * Capturas del menú lateral y de los dos temas. Estas no salen del recorrido de
+ * rutas porque son ESTADOS (menú abierto, claro, oscuro) y no direcciones: sin
+ * ellas, en la revisión no se puede comprobar cómo se ve lo que más se usa.
+ */
+test('capturas del menú lateral y de la apariencia', async ({ page }, testInfo) => {
+  await ensureAuthenticated(page);
+  const dir = path.join(OUTPUT_DIR, testInfo.project.name);
+
+  // Menú lateral abierto, sobre el inicio.
+  await page.goto('/');
+  await openMenu(page);
+  await page.screenshot({ path: path.join(dir, 'menu-lateral.png') });
+
+  // Apariencia: las tres opciones y cómo queda cada tema.
+  await page.keyboard.press('Escape');
+  await page.goto('/ajustes?tab=apariencia');
+  await expect(page.getByRole('heading', { name: 'Tema', exact: true })).toBeVisible({ timeout: 20_000 });
+  await page.screenshot({ path: path.join(dir, 'apariencia-ajustes.png'), fullPage: true });
+
+  await page.getByRole('button', { name: /Claro/ }).first().click();
+  await page.goto('/');
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
+  await page.screenshot({ path: path.join(dir, 'inicio-claro.png') });
+
+  await page.goto('/ajustes?tab=apariencia');
+  await page.getByRole('button', { name: /Oscuro/ }).first().click();
+  await page.goto('/');
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+  await page.screenshot({ path: path.join(dir, 'inicio-oscuro.png') });
+
+  // Se deja la apariencia como estaba (claro) para no sorprender a nadie.
+  await page.goto('/ajustes?tab=apariencia');
+  await page.getByRole('button', { name: /Claro/ }).first().click();
 });

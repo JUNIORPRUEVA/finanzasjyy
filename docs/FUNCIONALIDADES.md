@@ -112,8 +112,24 @@ Leyenda: ✅ hecho y probado · 🟡 hecho en el servidor, sin interfaz todavía
 | Gráficas de ingresos/gastos y gasto por categoría | ✅ | Recharts |
 | Comparación entre unidades financieras | ✅ | |
 | Consumo de presupuestos en porcentaje | ✅ | |
-| Tareas pendientes (cierre de ayer sin hacer, cuentas sin recuento, etc.) | ✅ | Pantalla «Más» → Tareas |
+| Tareas pendientes (cierre de ayer sin hacer, cuentas sin recuento, etc.) | ✅ | Menú lateral → *Mi control diario* (barra inferior, con contador) |
 | Códigos de color VERDE/AMARILLO/ROJO | ✅ | Reglas explicitadas, no decorativas |
+| Acciones rápidas con nombre llano | ✅ | Botón central *Añadir*: ingreso, gasto, transferencia, retiro personal, compras y cerrar el día |
+| Estados vacíos honestos | ✅ | Sin movimientos no se muestran gráficos; sin presupuesto no se dice «va bien»; sin cierre no se dice «cerrado» |
+
+## 8 bis. Compras personales (nuevo)
+
+| Función | Estado | Detalle |
+| --- | --- | --- |
+| Listas de compras con nombre, unidad y fecha prevista | ✅ | `/compras`; se pueden crear, duplicar y archivar |
+| Productos con cantidad, unidad, precio estimado y precio real | ✅ | Cantidad con hasta 3 decimales (Decimal en la base de datos) |
+| Comparación estimado / pagado / falta / desvío | ✅ | Se distingue lo previsto de lo gastado; nunca se llama «gastado» a lo estimado |
+| Marcar productos como comprados (sin mover dinero) | ✅ | 19 pruebas contra la base de datos confirman 0 movimientos y 0 asientos |
+| Registrar el gasto por el camino financiero de siempre | ✅ | Movimiento + asiento equilibrado + auditoría, desde la propia lista |
+| **Una lista no puede generar dos gastos** | ✅ | `transactionId` único + identificador de operación derivado de la lista |
+| Preparar la lista sin conexión y enviarla sola después | ✅ | `deviceListId`, envío idempotente; el gasto nunca se registra sin conexión |
+| No se borra ni se sobrescribe una compra ya contabilizada | ✅ | Se archiva (el histórico no se reescribe) |
+| Resumen en el inicio | ✅ | Listas abiertas, productos por comprar y cálculo inicial |
 
 ## 9. Informes y exportación
 
@@ -134,7 +150,7 @@ Leyenda: ✅ hecho y probado · 🟡 hecho en el servidor, sin interfaz todavía
 | Envío por lotes al recuperar la conexión | ✅ | `POST /sync/push`, lotes de 200 |
 | Detección de duplicados (idempotencia) | ✅ | `APPLIED` / `DUPLICATE` / `CONFLICT` / `REJECTED` |
 | Rechazo de fechas alteradas del dispositivo | ✅ | Comparación con la hora del servidor |
-| Nada se pierde: los rechazos se conservan con su motivo | ✅ | Pantalla «Más» → Sincronización |
+| Nada se pierde: los rechazos se conservan con su motivo | ✅ | Menú lateral → *Sincronización y pendientes* |
 | Exportar e importar las operaciones pendientes | ✅ | Archivo JSON, útil antes de cambiar de dispositivo |
 | Ventana de 24 h sin conexión y bloqueo al caducar | ✅ | Configurable |
 | La API **nunca** se sirve de la caché | ✅ | Sólo se cachean archivos estáticos |
@@ -163,7 +179,9 @@ Leyenda: ✅ hecho y probado · 🟡 hecho en el servidor, sin interfaz todavía
 | Exportar informes a PDF | ✅ | «PDF / Imprimir» en informes, con hoja de estilo de impresión (vía diálogo del navegador) |
 | Tiempo de espera en las peticiones | ✅ | 20 s (`VITE_API_TIMEOUT_MS`): una petición colgada ya no deja la pantalla cargando |
 | Autenticación en dos pasos (TOTP) | ⬜ | **No implementada.** Requiere migración aditiva y flujo de desafío |
-| Pruebas de interfaz en navegador | ⬜ | **No añadidas.** Lo cubierto son API, sincronización y formato |
+| Pruebas de interfaz en navegador | ✅ | Playwright: recorrido de todas las pantallas en 5 tamaños, menú lateral, barra de cinco destinos, compras, apariencia y sesión. Ver `docs/INFORME-UX-COMPRAS.md` |
+| Apariencia (claro / oscuro / como el sistema) | ✅ | Ajustes → *Apariencia*; se aplica al instante, se recuerda y abre sin destellos |
+| Auditoría consultable desde la interfaz | ✅ | Menú lateral → *Auditoría* (sólo propietarios y administradores), con paginado y acciones en español |
 
 ## 12. Seguridad y control
 
@@ -186,8 +204,9 @@ Falta poco para lo esencial y todo está enumerado:
 
 1. **Autenticación en dos pasos (TOTP)** y HTTPS, antes de exponer a internet.
 2. Las comprobaciones que **sólo se pueden hacer en un dispositivo real**: 24 h en modo avión, entrega
-   real de push e instalación en iPhone.
-3. **Pruebas de interfaz en navegador** (Playwright): la interfaz no tiene pruebas automatizadas.
+   real de push e instalación en iPhone. Las pruebas de navegador de hoy son tamaños de pantalla
+   emulados en Chromium, no teléfonos ni Safari.
+3. El **logo definitivo** de la aplicación (el archivo tiene que estar en el proyecto).
 4. Restauración de copia ejecutada de principio a fin.
 
 Nada de lo que falta está simulado: simplemente no está, y la aplicación no finge que esté.

@@ -55,6 +55,35 @@ export function navAddButton(page: Page) {
   return page.getByRole('button', { name: 'Añadir movimiento' });
 }
 
+/** Botón de tres líneas que abre el menú lateral. */
+export function menuButton(page: Page) {
+  return page.getByRole('button', { name: 'Abrir el menú' });
+}
+
+/** Indicador de estado de la cabecera (sirve para saber que hay sesión). */
+export function sessionIndicator(page: Page) {
+  // Su nombre incluye también cuántas operaciones quedan sin confirmar, así que
+  // se busca por la parte fija.
+  return page.getByRole('button', { name: /comprobar el estado/i });
+}
+
+/**
+ * Los cinco destinos de la barra inferior, en orden. Se declaran aquí para que
+ * las pruebas y la aplicación no puedan discrepar sin que alguien lo note.
+ */
+export const BOTTOM_NAV = ['Inicio', 'Movimientos', 'Añadir', 'Control', 'Compras'] as const;
+
+/** Abre el menú lateral y espera a que esté visible. */
+export async function openMenu(page: Page): Promise<void> {
+  await menuButton(page).click();
+  await expect(menu(page)).toBeVisible({ timeout: 10_000 });
+}
+
+/** El menú lateral, como diálogo con nombre propio. */
+export function menu(page: Page) {
+  return page.getByRole('dialog', { name: 'Menú de FINANZA' });
+}
+
 export function loginEmailField(page: Page) {
   return page.getByLabel('Correo electrónico', { exact: true });
 }
@@ -107,7 +136,11 @@ export async function ensureAuthenticated(page: Page): Promise<void> {
   // simular un corte de red antes de que ocurriera, estaría midiendo una
   // situación que no se da en la vida real (una sesión recién creada y sin
   // copia local).
-  await expect(page.getByText(/Sesión activa|Sin conexión/i).first()).toBeVisible({ timeout: 30_000 });
+  //
+  // La señal es el indicador de estado de la cabecera. Antes se esperaba aquí un
+  // cartel de «Sesión activa» que ya no existe: si estás dentro, la sesión está
+  // bien, y ese cartel sólo ocupaba sitio.
+  await expect(sessionIndicator(page)).toBeVisible({ timeout: 30_000 });
 }
 
 /** ¿Se está mostrando la pantalla de acceso? */
@@ -189,6 +222,8 @@ export function collectConsoleErrors(page: Page): string[] {
 /** Rutas de toda la aplicación (las que exigen sesión). */
 export const APP_ROUTES: Array<{ path: string; name: string }> = [
   { path: '/', name: 'Panel' },
+  { path: '/compras', name: 'Compras' },
+  { path: '/auditoria', name: 'Auditoría' },
   { path: '/movimientos', name: 'Movimientos' },
   { path: '/registrar', name: 'Registrar' },
   { path: '/cuentas', name: 'Cuentas' },

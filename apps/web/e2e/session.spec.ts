@@ -6,6 +6,7 @@ import {
   isLoginVisible,
   loginEmailField,
   navAddButton,
+  sessionIndicator,
 } from './helpers';
 
 /**
@@ -79,10 +80,14 @@ test.describe('cuando el servidor no puede comprobar la sesión', () => {
     await expect(page.getByText(/Sin conexión/i).first()).toBeVisible();
 
     // Y cuando el servidor vuelve, la sesión se recupera sin escribir nada.
+    // El indicador de la cabecera es el que dice si hay conexión y si hay algo
+    // pendiente: ya no existe un cartel de «Sesión activa» (si estás dentro, la
+    // sesión está bien) y el aviso de «Sin conexión» desaparece.
     await context.unroute('**/api/v1/auth/me');
     await context.unroute('**/api/v1/auth/refresh');
-    await page.getByRole('button', { name: 'Actualizar estado de la sesión' }).click();
-    await expect(page.getByText(/Sesión activa/i).first()).toBeVisible({ timeout: 30_000 });
+    await sessionIndicator(page).click();
+    await expect(page.getByText(/Sin conexión/i)).toHaveCount(0, { timeout: 30_000 });
+    expect(await isLoginVisible(page), 'recuperado el servidor, el usuario sigue dentro').toBe(false);
   });
 
   test('un corte de red al renovar tampoco cierra la sesión', async ({ page, context }) => {
@@ -148,8 +153,8 @@ test.describe('nada se pierde', () => {
 
     // 2) Registra un gasto con el botón central.
     await navAddButton(page).click();
-    // El nombre accesible de la acción incluye su explicación («Gasto Sale dinero»).
-    await page.getByRole('button', { name: /^Gasto / }).click();
+    // El nombre accesible de la acción incluye su explicación («Registrar gasto Sale dinero»).
+    await page.getByRole('button', { name: /Registrar gasto/ }).click();
     await page.getByLabel('¿Cuánto salió?').fill('1250.50');
     await page.getByLabel('Descripción').fill('Compra de combustible');
     await page.getByRole('button', { name: 'Registrar movimiento' }).click();
@@ -158,7 +163,10 @@ test.describe('nada se pierde', () => {
     // Se espera al mensaje exacto del resultado, no a cualquier texto que
     // mencione «sin confirmar» (el aviso de cabecera también lo dice).
     await expect(page.getByText(/Guardado en este dispositivo SIN CONFIRMAR/i)).toBeVisible({ timeout: 45_000 });
-    await expect(page.getByText(/1 sin confirmar/i).first()).toBeVisible({ timeout: 20_000 });
+    // El indicador de la cabecera dice cuántas operaciones quedan sin confirmar.
+    await expect(page.getByRole('button', { name: /1 operación\(es\) sin confirmar/i })).toBeVisible({
+      timeout: 20_000,
+    });
 
     // 3) Vuelve la conexión, pero el servidor sigue sin poder aceptar envíos.
     await context.route('**/api/v1/sync/push', (route) =>
@@ -169,7 +177,10 @@ test.describe('nada se pierde', () => {
     // 4) Cerrar y volver a abrir la aplicación: la operación sigue ahí.
     await page.reload();
     await expect(navAddButton(page)).toBeVisible({ timeout: 30_000 });
-    await expect(page.getByText(/1 sin confirmar/i).first()).toBeVisible({ timeout: 30_000 });
+    // Sigue pendiente después de cerrar y volver a abrir: no se ha perdido nada.
+    await expect(page.getByRole('button', { name: /1 operación\(es\) sin confirmar/i })).toBeVisible({
+      timeout: 30_000,
+    });
 
     // Sin errores inesperados en consola durante todo el recorrido.
     expect(consoleErrors, `errores de consola: ${consoleErrors.join(' | ')}`).toEqual([]);

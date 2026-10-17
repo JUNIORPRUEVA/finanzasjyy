@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
   ApiError,
   OfflineError,
@@ -18,6 +18,7 @@ import {
   requestPersistentStorage,
   setMeta,
 } from '../lib/db';
+import { readStoredTheme, setThemePreference, watchSystemTheme } from '../lib/theme';
 
 /**
  * SESIÓN DEL USUARIO
@@ -118,6 +119,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [offlineAllowedUntil, setOfflineAllowedUntil] = useState<string | null>(null);
   const [sessionExpired, setSessionExpired] = useState(false);
   const [sessionExpiredMessage, setSessionExpiredMessage] = useState<string | null>(null);
+  /** Comprobación de sesión en curso (ver `reload`). */
+  const reloadInFlight = useRef<Promise<void> | null>(null);
 
   /** Guarda el perfil para poder abrir la aplicación sin conexión. */
   const persistProfile = useCallback(async (profile: CachedSessionProfile) => {
@@ -130,6 +133,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setEntities(profile.entities);
       setPreferences(profile.preferences);
       setOfflineAllowedUntil(profile.offlineAllowedUntil);
+
+      // El tema de la cuenta se adopta SÓLO si este dispositivo todavía no ha
+      // elegido nada (primera vez, o teléfono nuevo): así el usuario encuentra
+      // FINANZA como le gusta sin configurarlo otra vez, y una elección hecha
+      // aquí no se le deshace al reabrir la aplicación.
+      const accountTheme = profile.preferences?.theme;
+      if (
+        readStoredTheme() === null &&
+        (accountTheme === 'light' || accountTheme === 'dark' || accountTheme === 'system')
+      ) {
+        setThemePreference(accountTheme);
+      }
     },
     [],
   );
@@ -156,7 +171,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     };
 
-    let me = await fetchMe();
+    // Al abrir la aplicación NO hay token en memoria: se empieza renovando con
+    // la cookie, en lugar de pedir /auth/me a sabiendas de que va a responder
+    // 401. Ese 401 era inofensivo, pero aparecía en la consola en cada arranque
+    // y hacía dudar de si la sesión estaba bien. Un error normal no debe
+    // parecer un error.
+    let me: MeResponse | 'unauthorized' | 'temporary' | 'unexpected' = tokenStore.hasSession()
+      ? await fetchMe()
+      : 'unauthorized';
 
     // Sin access token en memoria (es lo normal al abrir la aplicación) o
     // caducado: se renueva con la cookie. Si el servidor no responde, NO se
@@ -264,13 +286,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [applyProfile]);
 
   const reload = useCallback(async () => {
-    const state = await loadSession();
-    if (state === 'offline') {
-      setSessionState(await enterOfflineWithCache());
-    } else {
-      setSessionState(state);
+    // Una sola comprobación a la vez. Al abrir la aplicación pueden coincidir
+    // dos peticiones (React monta los efectos dos veces en desarrollo, y el
+    // usuario puede pulsar «actualizar» a la vez): sin esta unión se pedía
+    // /auth/me dos veces seguidas y el registro del navegador se llenaba de
+    // 401 normales, que parecen un problema de sesión y no lo son.
+    if (reloadInFlight.current) {
+      return reloadInFlight.current;
     }
-    setReady(true);
+    const run = (async () => {
+      const state = await loadSession();
+      if (state === 'offline') {
+        setSessionState(await enterOfflineWithCache());
+      } else {
+        setSessionState(state);
+      }
+      setReady(true);
+    })();
+    reloadInFlight.current = run;
+    try {
+      await run;
+    } finally {
+      reloadInFlight.current = null;
+    }
   }, [loadSession, enterOfflineWithCache]);
 
   const login = useCallback(
@@ -325,6 +363,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     void reload();
   }, [reload]);
+
+  // Si la apariencia está en «como el sistema», hay que reaccionar cuando el
+  // teléfono cambia de modo claro a oscuro sin que el usuario toque nada.
+  useEffect(() => watchSystemTheme(), []);
 
   useEffect(() => {
     const handleExpired = (event: Event) => {

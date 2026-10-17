@@ -82,6 +82,20 @@ npm test          # 29 pruebas del cliente (formato del dinero y cola sin conexi
 | UAT-29 | Guardar el conteo con la diferencia ya explicada y finalizar | e2e: segundo `POST /closings/count` del mismo día → 201 y `canFinalize = true` | **PASA (automático)** |
 | UAT-30 | Una base de datos creada desde cero se comporta igual que la corregida a mano | Reconstrucción completa desde las migraciones + las 52 pruebas e2e en verde | **PASA (automático)** |
 
+## G. Navegación y compras personales
+
+| Caso | Qué se comprueba | Cómo | Resultado |
+| --- | --- | --- | --- |
+| UAT-31 | La barra inferior tiene exactamente los cinco destinos acordados y ninguno es «Más» | Navegador: se leen los nombres y su orden en la barra | **PASA (automático)** |
+| UAT-32 | Preparar una lista y marcar productos como comprados **no mueve dinero** | e2e de API: 0 movimientos y 0 asientos tras crear, marcar, duplicar y archivar. Navegador: el importe no aparece en Movimientos | **PASA (automático)** |
+| UAT-33 | Registrar el gasto de una lista crea **un** movimiento con su asiento equilibrado | e2e de API: 1 movimiento, 1 asiento cuadrado (1620,50 = 1620,50); en el navegador aparece una sola vez | **PASA (automático)** |
+| UAT-34 | Volver a pulsar «Registrar gasto» **no duplica** el gasto | e2e de API: segunda pulsación → `duplicate: true` y ninguna fila nueva | **PASA (automático)** |
+| UAT-35 | Una compra ya contabilizada no se borra ni se sobrescribe | e2e de API: borrar → 409; envío desde el móvil → rechazado | **PASA (automático)** |
+| UAT-36 | Una lista creada sin conexión se envía sola y **una sola vez** | e2e de API (idempotencia por `deviceListId`) y navegador (corte de red real con `context.setOffline`) | **PASA (automático)** |
+| UAT-37 | El menú lateral se cierra con Escape, tocando fuera y al elegir; el foco vuelve al botón | Navegador, 3 tamaños de móvil | **PASA (automático)** |
+| UAT-38 | La apariencia se aplica al instante, se recuerda y **no hay destellos** | Navegador: claro, oscuro y «como el sistema»; se comprueba el tema en el instante de `domcontentloaded` tras recargar | **PASA (automático)** |
+| UAT-39 | Sin movimientos, el inicio **no inventa** un estado de calma | Navegador + lectura del código: sin movimientos no hay gráficos; sin presupuesto no se dice «va bien»; sin cierre no se dice «cerrado» | **PASA (manual)** |
+
 ### Defecto encontrado por estas pruebas
 
 **UAT-29 y UAT-30 destaparon un defecto real.** Las pruebas e2e estaban pasando en la base de datos de
@@ -128,6 +142,11 @@ Estas no están marcadas como pasadas porque requieren cosas que no dependen del
 | `apps/web/src/lib/session.test.ts` | 21 | **Sesión persistente**: entrar bien y mal, reabrir la aplicación, renovación automática, una sola renovación simultánea, 503 / sin red / tiempo agotado / 500 (que NO cierran la sesión), sesión caducada, revocada, inactividad, duración máxima, cierre de sesión y recuperación, y que la cola de movimientos pendientes sobrevive al cierre de sesión |
 | `apps/web/e2e/*.spec.ts` (Playwright) | 123 | Recorrido de las 17 pantallas en 5 tamaños, sin desbordamiento horizontal ni errores de consola; barra inferior y botón central; hojas y diálogos; **sesión en un navegador de verdad** (recargar, otra pestaña, 503, corte de red, caducidad explicada, movimiento sin conexión que sobrevive) |
 | `test/cors-sesion.e2e-spec.ts` | 3 | **Las cabeceras que la PWA envía están autorizadas por la API** (preflight de CORS). Nace del fallo real que hizo imposible iniciar sesión en el navegador |
+| `test/compras.e2e-spec.ts` | 19 | Que preparar una compra **no mueve dinero**, que el gasto se crea una sola vez con su asiento equilibrado, que no se puede borrar ni sobrescribir una compra contabilizada, la sincronización idempotente desde el dispositivo y el aislamiento entre unidades |
+| `apps/web/src/lib/theme.test.ts` | 7 | Tema y apariencia: se recuerda, distingue «nunca elegí» de «elegí el sistema», ignora valores corruptos y sigue al sistema sólo cuando toca |
+| `apps/web/src/navigation/registry.test.ts` | 9 | La navegación como promesa: cinco destinos, sin «Más», sin opciones de adorno, permisos de auditoría y agrupación ordenada |
+| `apps/web/src/lib/shopping-offline.test.ts` | 7 | Compras sin conexión: copia local fiel, `dev_…` frente a identificadores del servidor, y que una compra ya contabilizada **nunca** se sobrescribe |
+| `apps/web/e2e/drawer.spec.ts`, `compras.spec.ts`, `apariencia.spec.ts` | 14 | Menú lateral (apertura, cierre, foco, bloqueo del fondo), recorrido de compras con gasto real y apariencia |
 
 ### Defectos reales que destaparon
 
@@ -140,6 +159,8 @@ Estas no están marcadas como pasadas porque requieren cosas que no dependen del
 7. **Las cuentas y categorías no se guardaban** para el modo sin conexión: `getCachedAccounts()` se leía, pero nadie escribía esa copia, así que sin conexión la lista salía vacía y no se podía registrar nada. Corregido con `lib/cache-mirror.ts`.
 8. **La sesión caducada no explicaba nada**: la pantalla de acceso aparecía sin motivo. Ahora muestra el motivo que envía el servidor.
 9. **No se podía iniciar sesión en el navegador (CORS)**, y las 123 pruebas de navegador no lo vieron porque se ejecutan en el mismo origen que la API. La API no autorizaba sus propias cabeceras de sesión (`X-Session-Mode`, `X-CSRF-Token`), así que el navegador bloqueaba la petición y la pantalla decía «no se pudo contactar con el servidor». Corregido en un único sitio (`src/common/cors.ts`), con prueba que falla si se quita una cabecera (`test/cors-sesion.e2e-spec.ts`), y la PWA pasa a usar la ruta relativa `/api/v1` (mismo camino que producción).
+10. **Abrir una lista de compras dejaba la pantalla en blanco**: la ruta declaraba `:listId` y la pantalla leía `id`, así que sin identificador se pedía la **lista completa** y se trataba como una lista suelta. Corregido, y sin identificador **no se llama al servidor**.
+11. **En una lista creada sin conexión, añadir un producto podía perderlo**: la comprobación «¿esta lista está en el servidor?» se equivocaba justo con las listas nacidas en el móvil, e intentaba escribir contra una lista que allí no existe. Corregido mirando el identificador de la lista, con prueba propia.
 
 ---
 

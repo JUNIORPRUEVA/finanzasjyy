@@ -770,6 +770,10 @@ export function Sheet({
   children: ReactNode;
 }) {
   const ref = useRef<HTMLDivElement | null>(null);
+  // El título da NOMBRE al diálogo. Sin esto, un lector de pantalla anuncia
+  // «diálogo» y nada más: quien no ve la pantalla no sabe qué se le está
+  // preguntando. También permite dirigirse a él por su nombre en las pruebas.
+  const titleId = useId();
 
   useEffect(() => {
     if (!open) {
@@ -795,7 +799,12 @@ export function Sheet({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center" role="dialog" aria-modal="true">
+    <div
+      className="fixed inset-0 z-50 flex items-end justify-center"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby={title ? titleId : undefined}
+    >
       {/* El fondo se puede tocar para cerrar, y por eso lleva su propio nombre:
           dos controles distintos no deben llamarse igual («Cerrar»). */}
       <button
@@ -809,7 +818,9 @@ export function Sheet({
         className="relative w-full max-w-lg animate-rise rounded-t-sheet border border-border-soft bg-bg-elevated pb-[calc(var(--safe-bottom)+1rem)] shadow-elevated"
       >
         <div className="flex items-center justify-between px-5 pt-4">
-          <p className="text-base font-semibold text-ink">{title}</p>
+          <p id={titleId} className="text-base font-semibold text-ink">
+            {title}
+          </p>
           <IconButton label="Cerrar" onClick={onClose}>
             <IconClose size={20} />
           </IconButton>
@@ -839,11 +850,18 @@ export function ConfirmDialog({
   onConfirm: () => void;
   onCancel: () => void;
 }) {
+  const titleId = useId();
+
   if (!open) {
     return null;
   }
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center px-5" role="alertdialog" aria-modal="true">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center px-5"
+      role="alertdialog"
+      aria-modal="true"
+      aria-labelledby={titleId}
+    >
       <button
         type="button"
         aria-label="Descartar aviso y cancelar"
@@ -851,7 +869,9 @@ export function ConfirmDialog({
         className="absolute inset-0 bg-black/60"
       />
       <div className="relative w-full max-w-sm animate-pop rounded-card border border-border-soft bg-bg-elevated p-5 shadow-elevated">
-        <p className="text-base font-semibold text-ink">{title}</p>
+        <p id={titleId} className="text-base font-semibold text-ink">
+          {title}
+        </p>
         <div className="mt-2 text-sm leading-snug text-muted">{message}</div>
         <div className="mt-4 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
           <Button variant="secondary" onClick={onCancel}>
