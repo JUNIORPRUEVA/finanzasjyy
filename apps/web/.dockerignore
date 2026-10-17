@@ -7,3 +7,4 @@
 !**/.env.example
 **/*.log
 **/.git
+# (la configuracion de nginx se copia como plantilla: no se ignora)
