@@ -32,32 +32,40 @@ dominio y **no hay problemas de CORS ni de cookies**.
 
 ## 1. Crear la base de datos (dos opciones)
 
-### Opción A — que FINANZA traiga su propia base (lo más simple)
+### Opción B — usar su PostgreSQL del panel: **ya está hecha en su servidor**
+
+En el servidor `31.97.99.70` (EasyPanel, proyecto `ventas`) **la base ya está creada y probada**:
+
+| Dato | Valor |
+| --- | --- |
+| Servicio PostgreSQL | `ventas_studio-db` (imagen `postgres:17`, el que usted llama «studio») |
+| Host interno (verificado) | **`ventas_studio-db`** |
+| Puerto | `5432` |
+| Base de datos | **`finanza`** |
+| Usuario | **`finanza_user`** |
+| Contraseña | En el servidor: `/root/finanza-db-credentials.txt` (permisos `600`, sólo root) |
+
+La cadena que hay que pegar en `DATABASE_URL` es:
+
+```
+postgresql://finanza_user:LA_CLAVE@ventas_studio-db:5432/finanza?schema=public
+```
+
+Para ver la clave (queda fuera de este documento a propósito):
+
+```ssh
+ssh -i SU_CLAVE root@31.97.99.70 "cat /root/finanza-db-credentials.txt"
+```
+
+Comprobaciones hechas sobre esa base, no supuestas: el usuario conecta, escribe y borra una tabla; la
+base está vacía (0 tablas, el esquema lo creará la API al desplegar) y pertenece a `finanza_user`.
+Si elige esta opción, en el paso 2 use **`docker-compose.produccion.base-existente.yml`** y **no** ponga
+las variables `FINANZA_DB_*`.
+
+### Opción A — que FINANZA traiga su propia base (servidor nuevo o proyecto aparte)
 
 No haga nada en este paso: el archivo `docker-compose.produccion.yml` ya incluye el contenedor
 `db` con su volumen. Los datos quedan en `finanzasjyy_pgdata`.
-
-### Opción B — usar su PostgreSQL del panel (por ejemplo el servicio «studio»)
-
-1. En EasyPanel, abra su servicio de PostgreSQL (el que llama **studio**).
-2. Pestaña **Databases** → **Create database**:
-   - Nombre: `finanza`
-3. Pestaña **Users** (o «Credentials») → cree un usuario:
-   - Usuario: `finanza_app`
-   - Contraseña: una larga (30+ caracteres). **Apúntela**, la necesitará en el paso 2.
-4. En la pestaña **General** de ese servicio verá el **host interno** (algo como
-   `studio_finanzasjyy` o `studio_nombreproyecto`). Anótelo.
-5. Su cadena de conexión será:
-
-   ```
-   postgresql://finanza_app:LA_CONTRASEÑA@EL_HOST_INTERNO:5432/finanza?schema=public
-   ```
-
-   > Ojo: el `?schema=public` del final es obligatorio. Sin él, Prisma busca las tablas en otro sitio y
-   > el despliegue falla con «la tabla no existe».
-
-Si elige esta opción, en el paso 2 usará `docker-compose.produccion.base-existente.yml` en vez
-del normal.
 
 ---
 
