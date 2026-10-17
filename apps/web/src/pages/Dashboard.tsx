@@ -203,7 +203,15 @@ export function DashboardPage() {
   if (summaryQuery.isError || !summary) {
     return (
       <Notice tone="warning" title="No se pudo cargar el panel">
-        Puede seguir consultando los últimos datos guardados en este dispositivo desde «Movimientos» y «Cierre».
+        <p>
+          No se pudo contactar con el servidor. Puede seguir consultando los últimos datos guardados en este dispositivo
+          desde «Movimientos» y «Cierre».
+        </p>
+        <div className="mt-3">
+          <Button variant="secondary" size="sm" onClick={() => void summaryQuery.refetch()}>
+            Reintentar ahora
+          </Button>
+        </div>
       </Notice>
     );
   }

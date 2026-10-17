@@ -317,10 +317,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                   type="button"
                   onClick={() => setQuickOpen(true)}
                   aria-label="Añadir movimiento"
-                  className="-mt-3 flex flex-col items-center gap-0.5 px-2"
+                  className="flex flex-col items-center justify-center gap-0.5 px-2"
                 >
-                  <span className="flex h-[3.25rem] w-[3.25rem] items-center justify-center rounded-full bg-brand text-white shadow-elevated transition active:scale-95">
-                    <Icon size={26} />
+                  <span className="flex h-12 w-12 items-center justify-center rounded-full bg-brand text-white shadow-elevated transition active:scale-95">
+                    <Icon size={24} />
                   </span>
                   <span className="text-[0.66rem] font-medium text-muted">{entry.label}</span>
                 </button>

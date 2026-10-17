@@ -44,8 +44,9 @@
   --safe-bottom: env(safe-area-inset-bottom, 0px);
   --safe-left: env(safe-area-inset-left, 0px);
   --safe-right: env(safe-area-inset-right, 0px);
-  /* Alto de la barra inferior, para no tapar contenido. */
-  --nav-height: 4.25rem;
+  /* Alto de la barra inferior, para no tapar contenido. Se mide con la barra
+     real (botón central incluido) y deja un margen de sobra. */
+  --nav-height: 4.75rem;
 
   color-scheme: dark;
 }
@@ -156,6 +157,16 @@ body,
   height: 100%;
 }
 
+/*
+ * El alto real de la pantalla del móvil cambia cuando aparece o desaparece la
+ * barra del navegador. Con `100dvh` la aplicación ocupa SIEMPRE la ventana
+ * entera y no queda una franja muerta al final.
+ */
+#root {
+  min-height: 100dvh;
+  width: 100%;
+}
+
 html {
   /* Evita el ajuste automático de tamaño de texto en iPhone. */
   -webkit-text-size-adjust: 100%;
@@ -168,6 +179,36 @@ body {
   font-family: var(--font-sans);
   -webkit-tap-highlight-color: transparent;
   overscroll-behavior-y: none;
+  /*
+   * Nada puede sacar una franja lateral: si algún elemento se pasara un píxel,
+   * aparecería una barra horizontal y toda la pantalla se vería «cortada».
+   * Se recorta en lugar de desplazarse.
+   */
+  overflow-x: clip;
+  /*
+   * Esto es una APLICACIÓN, no una página: se toca, no se selecciona. Sin esto,
+   * al mantener pulsado un botón o una cifra el teléfono ofrece «copiar» y el
+   * texto se queda marcado en azul, que es justo lo que hace que parezca una
+   * web y no una app.
+   */
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
+/*
+ * Lo que SÍ se puede seleccionar: lo que se escribe y lo que se copia a mano
+ * (por ejemplo el detalle de un registro de auditoría).
+ */
+input,
+textarea,
+select,
+[contenteditable='true'],
+.seleccionable,
+.seleccionable * {
+  -webkit-user-select: text;
+  user-select: text;
+  -webkit-touch-callout: default;
 }
 
 /* Los campos NUNCA por debajo de 16px: si no, el móvil hace zoom al enfocar. */
