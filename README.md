@@ -74,6 +74,31 @@ preparar **sin conexión** (se envía sola al recuperar la red).
 
 ---
 
+## Despliegue en un servidor (EasyPanel)
+
+El proyecto ya trae todo lo necesario para publicarlo con HTTPS:
+
+| Archivo | Para qué |
+| --- | --- |
+| `apps/api/Dockerfile` | API de producción (multi-etapa, sin root, aplica migraciones al arrancar) |
+| `apps/web/Dockerfile` + `apps/web/nginx.conf` | PWA compilada servida por nginx, que además hace de proxy de `/api` |
+| `deploy/easypanel/docker-compose.yml` | Pila completa (web + api + base de datos propia) |
+| `deploy/easypanel/docker-compose.base-existente.yml` | La misma pila usando un PostgreSQL que ya tenga en el panel |
+| `deploy/easypanel/env.ejemplo` | Todas las variables, para copiar y pegar en el panel |
+
+**Guía paso a paso: [docs/DESPLIEGUE-EASYPANEL.md](docs/DESPLIEGUE-EASYPANEL.md)** (base de datos,
+variables, dominio, HTTPS, primera puesta en marcha y comprobaciones).
+
+Para probar las imágenes en su propia máquina antes de subirlas:
+
+```powershell
+docker compose --profile full build api web
+docker compose --profile full up -d
+# app en http://localhost:5180 · API en http://localhost:3010/api/v1/health
+```
+
+---
+
 ## Verificación
 
 ```powershell
@@ -136,6 +161,7 @@ con capturas de pantalla en `docs/capturas/`. Ver `docs/INFORME-MOVIL-Y-SESION.m
 | [docs/INFORME-MOVIL-Y-SESION.md](docs/INFORME-MOVIL-Y-SESION.md) | Diseño móvil, sesión persistente y qué NO se ha probado       |
 | [docs/INFORME-UX-COMPRAS.md](docs/INFORME-UX-COMPRAS.md)     | Menú lateral, compras personales, apariencia y defectos corregidos |
 | [docs/DESPLIEGUE.md](docs/DESPLIEGUE.md)                     | Docker, copias de seguridad, restauración y despliegue            |
+| [docs/DESPLIEGUE-EASYPANEL.md](docs/DESPLIEGUE-EASYPANEL.md) | Publicarlo en su servidor: base de datos, variables, dominio y HTTPS |
 
 ---
 

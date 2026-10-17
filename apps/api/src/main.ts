@@ -1,6 +1,7 @@
 import 'reflect-metadata';
 import { Logger, ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
+import type { NestExpressApplication } from '@nestjs/platform-express';
 import helmet from 'helmet';
 import { AppModule } from './app.module.js';
 import { AllExceptionsFilter } from './common/all-exceptions.filter.js';
@@ -15,13 +16,26 @@ async function bootstrap(): Promise<void> {
     process.exit(1);
   }
 
-  const app = await NestFactory.create(AppModule, {
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, {
     logger: process.env.NODE_ENV === 'production'
       ? ['error', 'warn', 'log']
       : ['error', 'warn', 'log', 'debug'],
   });
 
   app.setGlobalPrefix('api/v1');
+
+  /*
+   * Detrás de un proxy (nginx y el proxy de EasyPanel/Traefik) la dirección del
+   * cliente NO es la del proxy. Sin esto, todos los usuarios compartirían la
+   * misma «IP» y el límite de intentos de acceso (5 por minuto) los afectaría a
+   * todos a la vez: bastaría que tres personas escribieran mal la contraseña
+   * para bloquear a las demás.
+   *
+   * `1` significa «confía en el proxy inmediato» y toma la IP real de la cabecera
+   * X-Forwarded-For. Se puede subir con TRUST_PROXY si hay más saltos.
+   */
+  const trustProxy = Number(process.env.TRUST_PROXY ?? 1);
+  app.set('trust proxy', Number.isFinite(trustProxy) ? trustProxy : 1);
 
   // Cabeceras de seguridad. La CSP se relaja sólo para Swagger en desarrollo.
   app.use(
@@ -48,7 +62,13 @@ async function bootstrap(): Promise<void> {
   app.enableShutdownHooks();
 
   const port = Number(process.env.PORT ?? 3010);
-  const host = process.env.HOST ?? '127.0.0.1';
+  /*
+   * En desarrollo se escucha sólo en local (nadie más de la red puede entrar).
+   * Dentro de un contenedor hay que escuchar en 0.0.0.0 o nginx no puede
+   * alcanzar la API: el contenedor arrancaría, el chequeo interno pasaría y la
+   * web daría 502. Ese detalle se come una tarde, así que se resuelve aquí.
+   */
+  const host = process.env.HOST ?? (process.env.NODE_ENV === 'production' ? '0.0.0.0' : '127.0.0.1');
   await app.listen(port, host);
 
   logger.log(`FINANZA API escuchando en http://${host}:${port}/api/v1`);

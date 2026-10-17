@@ -1,0 +1,83 @@
+# FINANZA — pila completa para EasyPanel (con su propia base de datos)
+#
+# CÓMO SE USA
+#   En EasyPanel: Proyecto → + Servicio → «Docker Compose» (Stack), apuntando a
+#   este repositorio y a este archivo:
+#       deploy/easypanel/docker-compose.yml
+#
+#   Las variables se rellenan en la pestaña «Environment» del servicio
+#   (están todas listadas en deploy/easypanel/env.ejemplo).
+#
+# QUÉ LEVANTA
+#   db   → PostgreSQL 16 con su volumen propio. NO publica puertos: sólo se llega
+#          a ella desde dentro de la pila.
+#   api  → la API (NestJS). Al arrancar aplica las migraciones (`prisma migrate
+#          deploy`): nunca borra datos.
+#   web  → la PWA servida por nginx, que además hace de proxy de /api hacia la API.
+#          Es el ÚNICO servicio que EasyPanel debe publicar.
+#
+# IMPORTANTE: no se usa `docker system prune` ni `down -v` con este proyecto.
+
+name: finanzasjyy
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${FINANZA_DB_USER:?falta FINANZA_DB_USER}
+      POSTGRES_PASSWORD: ${FINANZA_DB_PASSWORD:?falta FINANZA_DB_PASSWORD}
+      POSTGRES_DB: ${FINANZA_DB_NAME:-finanza}
+      TZ: America/Santo_Domingo
+      PGTZ: America/Santo_Domingo
+    volumes:
+      - finanza_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${FINANZA_DB_USER} -d ${FINANZA_DB_NAME:-finanza}']
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+  api:
+    build:
+      context: ../../apps/api
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: 3010
+      HOST: 0.0.0.0
+      TZ: America/Santo_Domingo
+      DATABASE_URL: postgresql://${FINANZA_DB_USER}:${FINANZA_DB_PASSWORD}@db:5432/${FINANZA_DB_NAME:-finanza}?schema=public
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:?falta JWT_ACCESS_SECRET}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:?falta JWT_REFRESH_SECRET}
+      JWT_ACCESS_TTL: ${JWT_ACCESS_TTL:-900}
+      JWT_REFRESH_TTL: ${JWT_REFRESH_TTL:-2592000}
+      SESSION_MAX_HOURS: ${SESSION_MAX_HOURS:-720}
+      SESSION_IDLE_HOURS: ${SESSION_IDLE_HOURS:-168}
+      OFFLINE_WINDOW_HOURS: ${OFFLINE_WINDOW_HOURS:-24}
+      CORS_ORIGINS: ${CORS_ORIGINS:-}
+      COOKIE_SAMESITE: ${COOKIE_SAMESITE:-lax}
+      TRUST_PROXY: ${TRUST_PROXY:-1}
+      VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:-}
+      VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY:-}
+      VAPID_SUBJECT: ${VAPID_SUBJECT:-mailto:admin@example.com}
+
+  web:
+    build:
+      context: ../../apps/web
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      - api
+    # EasyPanel publica este puerto y le pone el dominio con HTTPS.
+    ports:
+      - '3000:80'
+
+volumes:
+  finanza_pgdata:
+    name: finanzasjyy_pgdata

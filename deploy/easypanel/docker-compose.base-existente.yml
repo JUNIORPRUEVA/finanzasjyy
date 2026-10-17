@@ -1,0 +1,53 @@
+# FINANZA — pila para EasyPanel SIN base de datos nueva
+#
+# Úselo cuando ya tenga un servicio PostgreSQL en el panel (por ejemplo el que
+# llama «studio») y quiera que FINANZA use una base de datos dentro de él.
+#
+# ANTES DE DESPLEGAR (en el panel, no aquí):
+#   1. Abra su servicio PostgreSQL (p. ej. «studio»).
+#   2. En «Databases» cree una base llamada  finanza  y un usuario  finanza_app
+#      con contraseña larga (o reutilice el usuario del servicio).
+#   3. Copie el host interno que muestra el panel (algo como
+#      «studio_finanzasjyy») y monte la cadena de conexión:
+#        postgresql://finanza_app:LA_CONTRASEÑA@studio_finanzasjyy:5432/finanza?schema=public
+#   4. Péguela en la variable DATABASE_URL de este stack.
+#
+# El resto es igual que en docker-compose.yml.
+
+name: finanzasjyy
+
+services:
+  api:
+    build:
+      context: ../../apps/api
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 3010
+      HOST: 0.0.0.0
+      TZ: America/Santo_Domingo
+      DATABASE_URL: ${DATABASE_URL:?falta DATABASE_URL (la base de su servicio PostgreSQL)}
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:?falta JWT_ACCESS_SECRET}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:?falta JWT_REFRESH_SECRET}
+      JWT_ACCESS_TTL: ${JWT_ACCESS_TTL:-900}
+      JWT_REFRESH_TTL: ${JWT_REFRESH_TTL:-2592000}
+      SESSION_MAX_HOURS: ${SESSION_MAX_HOURS:-720}
+      SESSION_IDLE_HOURS: ${SESSION_IDLE_HOURS:-168}
+      OFFLINE_WINDOW_HOURS: ${OFFLINE_WINDOW_HOURS:-24}
+      CORS_ORIGINS: ${CORS_ORIGINS:-}
+      COOKIE_SAMESITE: ${COOKIE_SAMESITE:-lax}
+      TRUST_PROXY: ${TRUST_PROXY:-1}
+      VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:-}
+      VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY:-}
+      VAPID_SUBJECT: ${VAPID_SUBJECT:-mailto:admin@example.com}
+
+  web:
+    build:
+      context: ../../apps/web
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      - api
+    ports:
+      - '3000:80'

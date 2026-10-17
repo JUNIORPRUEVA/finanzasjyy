@@ -104,11 +104,14 @@ describe('FINANZA — rutas que ofrece la interfaz (e2e)', () => {
       }
     }
 
-    expect(
-      missing,
-      `Estas rutas las pide la aplicación y no existen. Una pantalla que las use mostrará un error ` +
-        `y el usuario no tendrá forma de saber por qué:\n${missing.join('\n')}`,
-    ).toEqual([]);
+    // Si alguna falta, el mensaje dice cuál y por qué importa.
+    if (missing.length > 0) {
+      throw new Error(
+        `Estas rutas las pide la aplicación y no existen:\n${missing.join('\n')}\n` +
+          'Una pantalla que las use mostrará un error y el usuario no sabrá por qué.',
+      );
+    }
+    expect(missing).toEqual([]);
   });
 
   it('las rutas clave responden con datos (no basta con que existan)', async () => {
