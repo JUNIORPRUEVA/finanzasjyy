@@ -3,14 +3,18 @@
 Guía para dejar FINANZA funcionando en su servidor con **HTTPS y base de datos propia**,
 subiendo el código desde GitHub. Está pensada para hacerlo a mano, con calma, en unos 15 minutos.
 
-> **Lo que yo no puedo hacer desde aquí:** entrar en su servidor. No tengo acceso a EasyPanel ni a su
-> base de datos, y no voy a pedirle contraseñas por el chat. Todo lo que sigue lo ejecuta usted; cada
-> paso dice exactamente qué debe escribir y qué debe ver si salió bien.
-
----
-
-## 0. Lo que hace falta antes de empezar
-
+> **Estado actual: YA ESTÁ DESPLEGADO Y FUNCIONANDO** (17/10/2026).
+>
+> | | |
+> | --- | --- |
+> | Dirección | **https://ventas-finanzaspersonalespwa.gcdndd.easypanel.host** |
+> | Certificado | Let's Encrypt, válido y renovándose solo |
+> | Base de datos | la suya del panel (`ventas_studio-db`, base `finanza`), con las 31 tablas creadas |
+> | Acceso | usuario propietario ya creado; la contraseña temporal está en el servidor, en `/root/finanza-acceso.txt` |
+>
+> Lo que sigue queda como referencia por si algún día hay que rehacerlo desde cero, y para explicar
+> **cómo actualizar** el sistema a partir de ahora (sección 6). El detalle exacto de lo que hay en el
+> servidor está en la **sección 10**.
 | Cosa | Estado |
 | --- | --- |
 | Código en GitHub | ✅ ya está en `https://github.com/JUNIORPRUEVA/finanzasjyy` (rama `master`) |
@@ -253,3 +257,68 @@ respaldo.
   nada. Se generan con `npx web-push generate-vapid-keys`.
 - **Autenticación en dos pasos.** No está implementada (ver `docs/FUNCIONALIDADES.md`).
 - **Copias automáticas.** EasyPanel las ofrece por servicio; actívelas y pruébelas.
+
+---
+
+## 10. Lo que hay realmente en el servidor (17/10/2026)
+
+Esta sección no es teoría: es el estado comprobado del servidor `31.97.99.70`.
+
+### Servicios
+
+| Servicio (Swarm) | Qué es | Puerto interno | Dominio asignado |
+| --- | --- | --- | --- |
+| `ventas_finanzaspersonalespwa` | La aplicación, servida por nginx | `80` | **https://ventas-finanzaspersonalespwa.gcdndd.easypanel.host** |
+| `ventas_finanzapersonales` | La API | `3010` | `ventas-finanzapersonales.gcdndd.easypanel.host` (no hace falta usarlo: la web le pasa `/api` por dentro) |
+| `ventas_studio-db` | Su PostgreSQL (ya existía; no se ha tocado) | `5432` | — |
+
+Los nombres son **los que el panel ya esperaba** en su configuración de dominios. Por eso el enrutado
+funciona sin tocar Traefik: nginx reenvía `/api` a `http://ventas_finanzapersonales:3010`.
+
+### Dónde está cada cosa en el servidor
+
+| Ruta | Qué contiene | Permisos |
+| --- | --- | --- |
+| `/root/finanza-api.env` | Variables de la API (incluidos los dos secretos JWT y la `DATABASE_URL`) | `600` |
+| `/root/finanza-db-credentials.txt` | Usuario y contraseña de la base `finanza` | `600` |
+| `/root/finanza-acceso.txt` | Dirección, correo y contraseña **temporal** del propietario | `600` |
+
+Nada de eso se ha subido al repositorio, y ninguna de esas claves se ha escrito en este documento.
+
+### Cómo se actualiza (a partir de ahora)
+
+```sh
+# en el servidor, como root
+bash /ruta/al/repo/deploy/servidor/actualizar.sh
+```
+
+El script baja el último `master`, reconstruye las dos imágenes y actualiza los servicios sin
+cortar el servicio (orden «start-first»). La API aplica las migraciones nuevas al arrancar.
+
+A mano, el equivalente es:
+
+```sh
+git -C /tmp/finanza-deploy pull --ff-only origin master
+docker build -f /tmp/finanza-deploy/Dockerfile.api -t easypanel/ventas/finanzapersonales:latest /tmp/finanza-deploy
+docker build -f /tmp/finanza-deploy/Dockerfile.web -t easypanel/ventas/finanzaspersonalespwa:latest /tmp/finanza-deploy
+docker service update --force --no-resolve-image --image easypanel/ventas/finanzapersonales:latest ventas_finanzapersonales
+docker service update --force --no-resolve-image --image easypanel/ventas/finanzaspersonalespwa:latest ventas_finanzaspersonalespwa
+```
+
+> **Importante:** estos dos servicios se crearon desde la terminal, **no** desde EasyPanel. Se ven y se
+> reinician con `docker service ...`, pero el panel no los lista. Si algún día quiere que el panel los
+> gestione, use la vía **Docker Compose** del paso 2 en un servicio nuevo y, cuando esté arriba,
+> `docker service rm ventas_finanzapersonales ventas_finanzaspersonalespwa`.
+> **No** pulse *Deploy* en los dos servicios de tipo *App* que quedaron sin desplegar: siguen con la
+> ruta de compilación equivocada y volverán a fallar (sin afectar a lo que ya funciona).
+
+### Para volver atrás
+
+```sh
+docker service rollback ventas_finanzapersonales
+docker service rollback ventas_finanzaspersonalespwa
+```
+
+Swarm guarda la versión anterior de cada servicio, así que esto devuelve la imagen previa en segundos.
+La base de datos **no** se revierte sola: si una migración nueva cambió el esquema, haga la copia de
+seguridad antes de actualizar (sección 7).
