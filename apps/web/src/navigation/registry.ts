@@ -63,11 +63,26 @@ export interface NavEntry {
   order: number;
 }
 
-export const NAV_GROUPS: Array<{ id: NavGroupId; label: string }> = [
-  { id: 'gestion', label: 'Gestión financiera' },
-  { id: 'analisis', label: 'Análisis y documentos' },
-  { id: 'config', label: 'Configuración' },
-  { id: 'sesion', label: 'Sesión' },
+export const NAV_GROUPS: Array<{ id: NavGroupId; label: string; hint: string; collapsible: boolean }> = [
+  {
+    id: 'gestion',
+    label: 'Gestión financiera',
+    hint: 'Cuentas, deudas y presupuestos',
+    collapsible: true,
+  },
+  {
+    id: 'analisis',
+    label: 'Análisis y documentos',
+    hint: 'Informes, cierres y auditoría',
+    collapsible: true,
+  },
+  {
+    id: 'config',
+    label: 'Configuración',
+    hint: 'Apariencia, preferencias y seguridad',
+    collapsible: true,
+  },
+  { id: 'sesion', label: 'Sesión', hint: '', collapsible: false },
 ];
 
 /**
@@ -298,7 +313,7 @@ export const DRAWER_ENTRIES: NavEntry[] = [
   },
   {
     id: 'seguridad',
-    label: 'Seguridad',
+    label: 'Seguridad y dispositivos',
     hint: 'Contraseña y sesiones abiertas',
     icon: IconLock,
     to: '/ajustes?tab=seguridad',
@@ -315,16 +330,6 @@ export const DRAWER_ENTRIES: NavEntry[] = [
     group: 'config',
     availability: 'ready',
     order: 35,
-  },
-  {
-    id: 'accesos',
-    label: 'Dispositivos y sesiones',
-    hint: 'Cerrar el acceso de un dispositivo perdido',
-    icon: IconLock,
-    to: '/ajustes?tab=seguridad',
-    group: 'config',
-    availability: 'ready',
-    order: 36,
   },
 
   // --- Sesión ---------------------------------------------------------------
@@ -345,7 +350,7 @@ export const ALL_NAV_ENTRIES: NavEntry[] = [...BOTTOM_NAV, ...DRAWER_ENTRIES];
 
 /** Entradas del menú lateral que el usuario puede ver, agrupadas y ordenadas. */
 export function visibleDrawerEntries(role: string | null | undefined): Array<{
-  group: { id: NavGroupId; label: string };
+  group: { id: NavGroupId; label: string; hint: string; collapsible: boolean };
   entries: NavEntry[];
 }> {
   const canSee = (entry: NavEntry) =>

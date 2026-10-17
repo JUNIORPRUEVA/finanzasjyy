@@ -1,7 +1,7 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { visibleDrawerEntries } from '../navigation/registry';
-import { IconClose } from './icons';
+import { visibleDrawerEntries, type NavGroupId } from '../navigation/registry';
+import { IconChevronDown, IconClose } from './icons';
 
 /**
  * MENÚ LATERAL (DRAWER)
@@ -41,6 +41,20 @@ export function Drawer({ open, onClose, role, userName, entityName, onLogout, re
   const panelRef = useRef<HTMLDivElement | null>(null);
   const location = useLocation();
   const sections = visibleDrawerEntries(role);
+
+  /**
+   * Submenús plegables, UNO abierto a la vez.
+   *
+   * El menú tiene más de veinte opciones: mostrarlas todas de golpe convertía
+   * esto en una lista interminable en la que no se encontraba nada. Ahora se ve
+   * de un vistazo para qué hay tres bloques (gestión, análisis, configuración),
+   * y se abre sólo el que interesa.
+   *
+   * Arranca con «Gestión financiera» abierta (es lo que se usa a diario) y las
+   * demás cerradas. Si abres una, la otra se cierra: así el menú nunca crece más
+   * de lo que cabe en la pantalla.
+   */
+  const [openGroup, setOpenGroup] = useState<NavGroupId | null>('gestion');
 
   // Escape cierra; el foco entra en el menú y se encierra dentro (dialog modal).
   useEffect(() => {
@@ -147,59 +161,89 @@ export function Drawer({ open, onClose, role, userName, entityName, onLogout, re
 
         {/* Contenido con desplazamiento propio */}
         <nav className="flex-1 overflow-y-auto overscroll-contain px-2 py-3">
-          {sections.map((section) => (
-            <div key={section.group.id} className="mb-4">
-              <p className="px-3 pb-1 text-[0.68rem] font-semibold uppercase tracking-wider text-faint">
-                {section.group.label}
-              </p>
-              <ul>
-                {section.entries.map((entry) => {
-                  const Icon = entry.icon;
-                  const content = (
-                    <>
-                      <span className="mt-0.5 shrink-0 text-muted">
-                        <Icon size={19} />
-                      </span>
-                      <span className="min-w-0">
-                        <span className="block truncate text-sm font-medium text-ink">{entry.label}</span>
-                        {entry.hint ? (
-                          <span className="mt-0.5 block truncate text-xs text-muted">{entry.hint}</span>
-                        ) : null}
-                      </span>
-                    </>
-                  );
+          {sections.map((section) => {
+            const isSession = !section.group.collapsible;
+            const isOpen = isSession || openGroup === section.group.id;
+            const panelId = `menu-panel-${section.group.id}`;
 
-                  if (entry.action === 'logout') {
-                    return (
-                      <li key={entry.id}>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            onClose();
-                            onLogout();
-                          }}
-                          className="flex w-full items-start gap-3 rounded-xl px-3 py-2.5 text-left transition hover:bg-surface-2"
-                        >
-                          {content}
-                        </button>
-                      </li>
-                    );
-                  }
+            return (
+              <div key={section.group.id} className="mb-2">
+                {isSession ? (
+                  <p className="px-3 pb-1 pt-2 text-[0.68rem] font-semibold uppercase tracking-wider text-faint">
+                    {section.group.label}
+                  </p>
+                ) : (
+                  <button
+                    type="button"
+                    aria-expanded={isOpen}
+                    aria-controls={panelId}
+                    onClick={() => setOpenGroup(isOpen ? null : section.group.id)}
+                    className="flex w-full items-center justify-between gap-2 rounded-xl px-3 py-2.5 text-left transition hover:bg-surface-2"
+                  >
+                    <span className="min-w-0">
+                      <span className="block truncate text-sm font-semibold text-ink">{section.group.label}</span>
+                      <span className="mt-0.5 block truncate text-xs text-muted">{section.group.hint}</span>
+                    </span>
+                    <span className="flex shrink-0 items-center gap-1.5 text-faint">
+                      <span className="text-[0.7rem]">{section.entries.length}</span>
+                      <span className={`transition-transform ${isOpen ? 'rotate-180' : ''}`} aria-hidden="true">
+                        <IconChevronDown size={18} />
+                      </span>
+                    </span>
+                  </button>
+                )}
 
-                  return (
-                    <li key={entry.id}>
-                      <Link
-                        to={entry.to ?? '/'}
-                        className="flex items-start gap-3 rounded-xl px-3 py-2.5 transition hover:bg-surface-2 active:bg-surface-3"
-                      >
-                        {content}
-                      </Link>
-                    </li>
-                  );
-                })}
-              </ul>
-            </div>
-          ))}
+                <div id={panelId} hidden={!isOpen}>
+                  <ul>
+                    {section.entries.map((entry) => {
+                      const Icon = entry.icon;
+                      const content = (
+                        <>
+                          <span className="mt-0.5 shrink-0 text-muted">
+                            <Icon size={19} />
+                          </span>
+                          <span className="min-w-0">
+                            <span className="block truncate text-sm font-medium text-ink">{entry.label}</span>
+                            {entry.hint ? (
+                              <span className="mt-0.5 block truncate text-xs text-muted">{entry.hint}</span>
+                            ) : null}
+                          </span>
+                        </>
+                      );
+
+                      if (entry.action === 'logout') {
+                        return (
+                          <li key={entry.id}>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                onClose();
+                                onLogout();
+                              }}
+                              className="flex w-full items-start gap-3 rounded-xl px-3 py-2.5 text-left transition hover:bg-surface-2"
+                            >
+                              {content}
+                            </button>
+                          </li>
+                        );
+                      }
+
+                      return (
+                        <li key={entry.id}>
+                          <Link
+                            to={entry.to ?? '/'}
+                            className="ml-2 flex items-start gap-3 rounded-xl border-l border-border-soft py-2.5 pl-3 pr-2 transition hover:bg-surface-2 active:bg-surface-3"
+                          >
+                            {content}
+                          </Link>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </div>
+              </div>
+            );
+          })}
         </nav>
 
         <p className="border-t border-border-soft px-4 py-3 text-[0.68rem] leading-snug text-faint">

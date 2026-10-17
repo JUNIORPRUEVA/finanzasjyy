@@ -32,9 +32,12 @@ del centro), **Control** y **Compras**. El botón del centro no cambia de pantal
 rápidas (registrar un ingreso, un gasto, transferir dinero, un retiro personal, compras o cerrar el
 día).
 
-Arriba a la izquierda está el botón de tres líneas: ahí vive **todo lo demás**, agrupado por para qué
-sirve y con una frase que explica cada opción. Ya no hay una pestaña «Más»: cada función tiene su
-nombre.
+Arriba a la izquierda está el botón de tres líneas: ahí vive **todo lo demás**, en **tres bloques
+plegables** —*Gestión financiera*, *Análisis y documentos* y *Configuración*—. Se abre **sólo uno a la
+vez** (pulse el título para abrirlo o cerrarlo), de modo que el menú nunca se convierte en una lista
+interminable. Cada opción lleva su nombre y una frase que explica para qué sirve, y **todas las
+opciones de configuración están dentro de *Configuración***: perfil, apariencia, preferencias,
+notificaciones, seguridad y dispositivos, y sincronización. Ya no hay una pestaña «Más».
 
 En la cabecera también están la unidad financiera activa (para saber siempre en qué contexto estás
 mirando) y un indicador de estado: te dice si todo está confirmado por el servidor, si hay algo

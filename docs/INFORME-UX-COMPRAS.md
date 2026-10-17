@@ -31,7 +31,22 @@
 | 4 | Control | `/control` (con contador de tareas obligatorias) |
 | 5 | **Compras** | `/compras` |
 
-**Menú lateral (botón de tres líneas, arriba a la izquierda):** agrupado en *Gestión financiera* (cuentas, listas de compras, traspasos, deudas, cobrar, pagar, recurrentes, presupuestos, unidades), *Análisis y documentos* (informes, cierres, documentos, auditoría, organizar), *Configuración* (perfil, apariencia, preferencias, notificaciones, seguridad, sincronización, accesos) y *Sesión* (cerrar sesión, con confirmación).
+**Menú lateral (botón de tres líneas, arriba a la izquierda):** tres bloques **plegables** y una acción de
+sesión. Se abre uno cada vez, y por defecto viene abierto sólo *Gestión financiera* (lo de todos los
+días):
+
+| Bloque | Qué contiene |
+| --- | --- |
+| **Gestión financiera** (9) | Cuentas y bancos, listas de compras, traspasos, deudas y préstamos, cuentas por cobrar, cuentas por pagar, obligaciones recurrentes, presupuestos y unidades financieras |
+| **Análisis y documentos** (5) | Informes y exportaciones, historial de cierres, documentos y adjuntos, auditoría y organizar mi dinero |
+| **Configuración** (6) | Perfil, apariencia, configuración general, notificaciones, **seguridad y dispositivos** y sincronización |
+| **Sesión** | Cerrar sesión (con confirmación; los pendientes no se pierden) |
+
+**Todas las opciones de configuración viven dentro de *Configuración*** (antes había dos entradas que
+llevaban al mismo sitio, «Seguridad» y «Dispositivos y sesiones»: ahora son una sola, «Seguridad y
+dispositivos»). Los bloques se comportan como un acordeón: al abrir uno se cierra el anterior, y
+volver a pulsar el que está abierto lo recoge. Así el menú cabe en una pantalla de teléfono sin
+convertirse en una lista de veinte líneas.
 
 La navegación se declara **en un solo archivo** (`apps/web/src/navigation/registry.ts`) y de ahí salen las dos barras. La barra inferior **se dibuja a partir del registro**: no puede existir una opción de adorno ni una lista duplicada que se desincronice.
 

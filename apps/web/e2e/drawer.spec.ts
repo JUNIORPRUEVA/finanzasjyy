@@ -17,18 +17,64 @@ test.describe('menú lateral', () => {
     await openMenu(page);
     const drawer = menu(page);
 
-    // Los tres bloques de la aplicación, con sus encabezados legibles.
-    await expect(drawer.getByText('Gestión financiera')).toBeVisible();
-    await expect(drawer.getByText('Análisis y documentos')).toBeVisible();
+    // Los tres bloques, con una frase que dice qué hay dentro y cuántas opciones.
+    for (const grupo of ['Gestión financiera', 'Análisis y documentos', 'Configuración']) {
+      await expect(drawer.getByRole('button', { name: new RegExp(grupo) })).toBeVisible();
+    }
 
-    // Entradas con nombre propio (no nombres técnicos) y su explicación.
+    // «Gestión financiera» viene abierta (es lo de todos los días).
     await expect(drawer.getByRole('link', { name: /Cuentas y bancos/ })).toBeVisible();
     await expect(drawer.getByRole('link', { name: /Listas de compras/ })).toBeVisible();
+
+    // Las otras dos vienen plegadas: sus opciones no se ven hasta abrirlas, y por
+    // eso el menú cabe en una pantalla de teléfono sin ser una lista infinita.
+    await expect(drawer.getByRole('link', { name: /Auditoría/ })).toBeHidden();
+    await expect(drawer.getByRole('link', { name: /Seguridad y dispositivos/ })).toBeHidden();
+
+    await drawer.getByRole('button', { name: /Análisis y documentos/ }).click();
     await expect(drawer.getByRole('link', { name: /Auditoría/ })).toBeVisible();
+
+    await drawer.getByRole('button', { name: /Configuración/ }).click();
+    await expect(drawer.getByRole('link', { name: /Seguridad y dispositivos/ })).toBeVisible();
+    await expect(drawer.getByRole('link', { name: /Apariencia/ })).toBeVisible();
 
     // El pie recuerda que no se pierde trabajo al cerrar sesión: es la duda que
     // tiene cualquiera antes de pulsar ese botón.
     await expect(drawer.getByText(/los movimientos que estén sin confirmar se conservan/i)).toBeVisible();
+  });
+
+  test('sólo hay un bloque abierto a la vez (y se puede cerrar el que está abierto)', async ({ page }) => {
+    await ensureAuthenticated(page);
+
+    await openMenu(page);
+    const drawer = menu(page);
+    const abiertos = async () => {
+      const estados = await drawer
+        .locator('button[aria-expanded]')
+        .evaluateAll((botones) => botones.map((b) => b.getAttribute('aria-expanded')));
+      return estados.filter((estado) => estado === 'true').length;
+    };
+
+    // De entrada hay exactamente uno abierto.
+    expect(await abiertos()).toBe(1);
+
+    await drawer.getByRole('button', { name: /Análisis y documentos/ }).click();
+    expect(await abiertos(), 'abrir uno debe cerrar el anterior').toBe(1);
+    await expect(drawer.getByRole('button', { name: /Análisis y documentos/ })).toHaveAttribute(
+      'aria-expanded',
+      'true',
+    );
+    await expect(drawer.getByRole('button', { name: /Gestión financiera/ })).toHaveAttribute(
+      'aria-expanded',
+      'false',
+    );
+
+    await drawer.getByRole('button', { name: /Configuración/ }).click();
+    expect(await abiertos()).toBe(1);
+
+    // Volver a pulsar el que está abierto lo cierra: deja el menú recogido del todo.
+    await drawer.getByRole('button', { name: /Configuración/ }).click();
+    expect(await abiertos()).toBe(0);
   });
 
   test('se cierra con Escape y el foco vuelve al botón que lo abrió', async ({ page }) => {
