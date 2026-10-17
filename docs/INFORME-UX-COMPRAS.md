@@ -157,7 +157,21 @@ En `docs/capturas/<perfil>/`: una por pantalla y tamaño (incluidas **Compras** 
 
 ## 10. Resultado de la suite de navegador completa
 
-*(Se completa al terminar la ejecución; se pega el resumen literal de Playwright, sin maquillar.)*
+Ejecución completa, con el resultado literal de Playwright:
+
+```
+210 passed (7.0m)
+```
+
+Son 42 pruebas por cada uno de los cinco perfiles: ndroid-360x800, ndroid-390x844,
+iphone-375x667, iphone-430x932 y scritorio-1280x800. Incluye el recorrido de las 19 pantallas,
+el menú lateral, la barra de cinco destinos, las compras (con gasto real), la apariencia y la sesión.
+Ninguna prueba quedó en «flaky» y no se ha relajado ninguna aserción para que pasara: las tres que
+fallaron al principio estaban escritas contra la navegación anterior y se corrigieron para comprobar
+lo nuevo (incluido el número de tareas obligatorias junto a «Control»).
+
+**Aviso honesto sobre lo que estas pruebas NO son:** son tamaños de pantalla emulados en Chromium.
+No son teléfonos reales ni Safari/WebKit.
 
 ---
 
