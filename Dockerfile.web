@@ -1,0 +1,34 @@
+# FINANZA PWA — imagen de producción, compilada DESDE LA RAÍZ del repositorio.
+#
+# Igual que `Dockerfile.api`: existe para paneles que construyen desde la raíz
+# (EasyPanel y similares), donde la «Ruta de compilación» es `/`.
+#
+# La web se sirve con nginx, que además manda /api a la API. Así la aplicación y
+# la API comparten dominio: no hay CORS ni problemas con las cookies de sesión.
+
+FROM node:24-alpine AS build
+WORKDIR /app
+
+COPY apps/web/package.json apps/web/package-lock.json ./
+RUN npm ci
+
+COPY apps/web/ ./
+# URL relativa: nginx hace de proxy hacia la API.
+ENV VITE_API_URL=/api/v1
+RUN npm run build
+
+FROM nginx:1.29-alpine AS runtime
+COPY --from=build /app/dist /usr/share/nginx/html
+
+# Plantilla: al arrancar, nginx sustituye ${API_UPSTREAM} por la dirección real
+# de la API. Por defecto, el servicio «api» de la pila completa; en un despliegue
+# de dos servicios se cambia con la variable API_UPSTREAM, sin recompilar.
+COPY apps/web/nginx.template.conf /etc/nginx/templates/default.conf.template
+ENV API_UPSTREAM=http://api:3010
+
+EXPOSE 80
+
+HEALTHCHECK --interval=15s --timeout=5s --start-period=10s --retries=5 \
+  CMD wget -q --spider http://127.0.0.1/ || exit 1
+
+CMD ["nginx", "-g", "daemon off;"]

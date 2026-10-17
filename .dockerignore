@@ -1,0 +1,21 @@
+# Contexto de compilación cuando se construye DESDE LA RAÍZ del repositorio
+# (Dockerfile.api / Dockerfile.web). Sin esto, el contexto incluiría las
+# dependencias instaladas (cientos de MB) y la compilación tardaría una eternidad.
+
+**/node_modules
+**/dist
+**/dev-dist
+**/coverage
+**/.env
+**/.env.*
+!**/.env.example
+**/*.log
+**/backups
+**/.tmp
+**/.playwright-mcp
+**/test-results
+**/playwright-report
+**/.git
+**/docs/capturas
+**/src/generated
+**/.datos-locales

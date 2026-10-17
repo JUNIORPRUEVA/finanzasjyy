@@ -118,6 +118,42 @@ No haga nada en este paso: el archivo `docker-compose.produccion.yml` ya incluye
    - `api`: `Aplicando migraciones…` y luego `FINANZA API escuchando en http://0.0.0.0:3010/api/v1`
    - `web`: nginx arrancando.
 
+### 2-bis. Alternativa: dos servicios «App» en vez de un Compose
+
+Si prefiere (o si ya empezó por aquí) crear **dos servicios de tipo *App*** —uno para la API y otro para
+la web—, el campo que suele atascar a todo el mundo es **«Ruta de compilación»**. El repositorio es un
+monorepo (`apps/api`, `apps/web`) y ese campo **no** espera `api` ni `apps/api`: espera la raíz.
+
+Para que no haya nada que adivinar, en la raíz del repositorio hay dos Dockerfiles hechos a propósito:
+
+| Servicio | Ruta de compilación | Archivo (Dockerfile) | Puerto interno |
+| --- | --- | --- | --- |
+| API | `/` (la raíz, sin escribir nada) | `Dockerfile.api` | `3010` |
+| Web | `/` (la raíz, sin escribir nada) | `Dockerfile.web` | `80` |
+
+> **Por qué fallaba:** si en «Ruta de compilación» se escribe `api`, EasyPanel busca
+> `<repositorio>/api` —que no existe— y el registro dice
+> `unable to prepare context: path ".../code/api" not found`. Dejándolo vacío o `/`, el contexto es la
+> raíz del repositorio y basta con indicar el Dockerfile de la tabla.
+
+En el servicio **web**, además, hay que decirle a nginx dónde está la API (los dos servicios son
+contenedores separados, así que `http://api:3010` no existe):
+
+```env
+API_UPSTREAM=http://EL-NOMBRE-INTERNO-DEL-SERVICIO-DE-LA-API:3010
+```
+
+Ese nombre interno es el que muestre EasyPanel en el servicio de la API (p. ej.
+`ventas_finanzapersonales`). El **dominio** se pone sólo en el servicio **web**, apuntando a su puerto
+`80`; la API no necesita dominio propio porque la web le pasa `/api` por dentro.
+
+En la API, las variables son las de la tabla del paso 4 (`DATABASE_URL`, `JWT_ACCESS_SECRET`,
+`JWT_REFRESH_SECRET`, `CORS_ORIGINS`…) más `PORT=3010`.
+
+> **Recomendación:** si no tiene una razón concreta para lo contrario, use la vía **Docker Compose** del
+> paso 2. Ya está probada de punta a punta (imágenes construidas, pila levantada y `/api/v1/health`
+> respondiendo a través de nginx) y no necesita conectar los dos servicios a mano.
+
    Si `api` se reinicia en bucle, casi siempre es `DATABASE_URL` mal escrita (revise el usuario, la
    contraseña y el `?schema=public`).
 

@@ -82,6 +82,8 @@ El proyecto ya trae todo lo necesario para publicarlo con HTTPS:
 | --- | --- |
 | `apps/api/Dockerfile` | API de producción (multi-etapa, sin root, aplica migraciones al arrancar) |
 | `apps/web/Dockerfile` + `apps/web/nginx.template.conf` | PWA compilada servida por nginx, que además hace de proxy de `/api` |
+| `Dockerfile.api` + `Dockerfile.web` | Los mismos dos servicios pero **compilados desde la raíz** del repositorio. Son los que hay que usar en paneles donde se pide una «ruta de compilación» (EasyPanel y similares): ahí la ruta es `/` y sólo se elige el archivo |
+| `.dockerignore` | Evita que el contexto de compilación arrastre `node_modules`, `dist` y basura (sin esto, compilar desde la raíz tarda muchísimo) |
 | `docker-compose.produccion.yml` | Pila completa (web + api + base de datos propia) |
 | `docker-compose.produccion.base-existente.yml` | La misma pila usando un PostgreSQL que ya tenga en el panel |
 | `deploy/easypanel/env.ejemplo` | Todas las variables, para copiar y pegar en el panel |

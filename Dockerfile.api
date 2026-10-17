@@ -1,0 +1,59 @@
+# FINANZA API — imagen de producción, compilada DESDE LA RAÍZ del repositorio.
+#
+# ¿Por qué hay dos Dockerfiles para lo mismo?
+#   · `apps/api/Dockerfile`  → para la pila completa (docker compose), donde el
+#                              contexto es la carpeta de la API.
+#   · `Dockerfile.api` (este) → para paneles que construyen desde la RAÍZ del
+#                              repositorio (EasyPanel, Coolify…). Así la «Ruta de
+#                              compilación» es `/` y no hay que acertar con
+#                              `apps/api`, que es donde se atasca la gente.
+#
+# Multi-etapa: se compila con todo y la imagen final sólo lleva lo necesario.
+# Las migraciones se aplican al arrancar (`prisma migrate deploy`); NUNCA se
+# ejecuta `migrate reset`.
+
+FROM node:24-alpine AS build
+WORKDIR /app
+
+# openssl lo necesita Prisma para detectar la plataforma.
+RUN apk add --no-cache openssl
+
+COPY apps/api/package.json apps/api/package-lock.json ./
+RUN npm ci
+
+COPY apps/api/prisma ./prisma
+COPY apps/api/prisma.config.ts apps/api/tsconfig.json apps/api/tsconfig.build.json apps/api/nest-cli.json ./
+COPY apps/api/src ./src
+
+# `prisma generate` no necesita conectarse a ninguna base de datos.
+RUN npx prisma generate
+RUN npm run build
+
+# Sólo dependencias de producción en la imagen final.
+RUN npm prune --omit=dev
+
+FROM node:24-alpine AS runtime
+WORKDIR /app
+ENV NODE_ENV=production
+ENV PORT=3010
+ENV HOST=0.0.0.0
+ENV TZ=America/Santo_Domingo
+
+RUN apk add --no-cache openssl tzdata curl \
+  && cp /usr/share/zoneinfo/America/Santo_Domingo /etc/localtime
+
+COPY --from=build /app/node_modules ./node_modules
+COPY --from=build /app/dist ./dist
+COPY --from=build /app/prisma ./prisma
+COPY --from=build /app/prisma.config.ts ./prisma.config.ts
+COPY --from=build /app/package.json ./package.json
+
+RUN addgroup -S finanza && adduser -S finanza -G finanza && chown -R finanza:finanza /app
+USER finanza
+
+EXPOSE 3010
+
+HEALTHCHECK --interval=15s --timeout=5s --start-period=25s --retries=5 \
+  CMD curl -fsS http://127.0.0.1:3010/api/v1/health || exit 1
+
+CMD ["sh", "-c", "npx prisma migrate deploy && node dist/main.js"]
