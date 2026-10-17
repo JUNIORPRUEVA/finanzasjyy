@@ -34,7 +34,7 @@ dominio y **no hay problemas de CORS ni de cookies**.
 
 ### Opción A — que FINANZA traiga su propia base (lo más simple)
 
-No haga nada en este paso: el archivo `deploy/easypanel/docker-compose.yml` ya incluye el contenedor
+No haga nada en este paso: el archivo `docker-compose.produccion.yml` ya incluye el contenedor
 `db` con su volumen. Los datos quedan en `finanzasjyy_pgdata`.
 
 ### Opción B — usar su PostgreSQL del panel (por ejemplo el servicio «studio»)
@@ -56,7 +56,7 @@ No haga nada en este paso: el archivo `deploy/easypanel/docker-compose.yml` ya i
    > Ojo: el `?schema=public` del final es obligatorio. Sin él, Prisma busca las tablas en otro sitio y
    > el despliegue falla con «la tabla no existe».
 
-Si elige esta opción, en el paso 2 usará `deploy/easypanel/docker-compose.base-existente.yml` en vez
+Si elige esta opción, en el paso 2 usará `docker-compose.produccion.base-existente.yml` en vez
 del normal.
 
 ---
@@ -72,7 +72,7 @@ del normal.
    | Name | `finanza` |
    | Source | **GitHub** → autorice y elija `JUNIORPRUEVA/finanzasjyy` |
    | Branch | `master` |
-   | Docker Compose file | `deploy/easypanel/docker-compose.yml` (Opción A) o `deploy/easypanel/docker-compose.base-existente.yml` (Opción B) |
+   | Docker Compose file | `docker-compose.produccion.yml` (Opción A) o `docker-compose.produccion.base-existente.yml` (Opción B) |
 
 4. **Environment** (pestaña de variables). Pegue y rellene esto:
 

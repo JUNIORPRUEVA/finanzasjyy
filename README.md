@@ -82,10 +82,9 @@ El proyecto ya trae todo lo necesario para publicarlo con HTTPS:
 | --- | --- |
 | `apps/api/Dockerfile` | API de producción (multi-etapa, sin root, aplica migraciones al arrancar) |
 | `apps/web/Dockerfile` + `apps/web/nginx.conf` | PWA compilada servida por nginx, que además hace de proxy de `/api` |
-| `deploy/easypanel/docker-compose.yml` | Pila completa (web + api + base de datos propia) |
-| `deploy/easypanel/docker-compose.base-existente.yml` | La misma pila usando un PostgreSQL que ya tenga en el panel |
+| `docker-compose.produccion.yml` | Pila completa (web + api + base de datos propia) |
+| `docker-compose.produccion.base-existente.yml` | La misma pila usando un PostgreSQL que ya tenga en el panel |
 | `deploy/easypanel/env.ejemplo` | Todas las variables, para copiar y pegar en el panel |
-
 **Guía paso a paso: [docs/DESPLIEGUE-EASYPANEL.md](docs/DESPLIEGUE-EASYPANEL.md)** (base de datos,
 variables, dominio, HTTPS, primera puesta en marcha y comprobaciones).
 

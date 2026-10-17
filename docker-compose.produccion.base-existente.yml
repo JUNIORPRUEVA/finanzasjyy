@@ -1,25 +1,26 @@
-# FINANZA — pila para EasyPanel SIN base de datos nueva
+# FINANZA — pila de producción usando un PostgreSQL que YA existe en el panel
 #
-# Úselo cuando ya tenga un servicio PostgreSQL en el panel (por ejemplo el que
-# llama «studio») y quiera que FINANZA use una base de datos dentro de él.
+# ÚSELO SI: en su EasyPanel ya tiene un servicio de base de datos (por ejemplo el
+# que llama «studio») y prefiere que FINANZA viva en una base dentro de él, en
+# lugar de levantar otro PostgreSQL.
 #
-# ANTES DE DESPLEGAR (en el panel, no aquí):
+# ANTES DE DESPLEGAR (todo en el panel):
 #   1. Abra su servicio PostgreSQL (p. ej. «studio»).
-#   2. En «Databases» cree una base llamada  finanza  y un usuario  finanza_app
-#      con contraseña larga (o reutilice el usuario del servicio).
-#   3. Copie el host interno que muestra el panel (algo como
-#      «studio_finanzasjyy») y monte la cadena de conexión:
-#        postgresql://finanza_app:LA_CONTRASEÑA@studio_finanzasjyy:5432/finanza?schema=public
-#   4. Péguela en la variable DATABASE_URL de este stack.
+#   2. Databases → Create database → nombre: finanza
+#   3. Users → cree «finanza_app» con una contraseña larga.
+#   4. Copie el HOST INTERNO del servicio (p. ej. studio_finanzasjyy).
+#   5. En «Environment» de este stack ponga:
+#        DATABASE_URL=postgresql://finanza_app:LA_CLAVE@EL_HOST_INTERNO:5432/finanza?schema=public
 #
-# El resto es igual que en docker-compose.yml.
+#   El «?schema=public» del final NO es opcional: sin él, Prisma busca las tablas
+#   en otro esquema y el arranque falla con «la tabla no existe».
 
 name: finanzasjyy
 
 services:
   api:
     build:
-      context: ../../apps/api
+      context: ./apps/api
       dockerfile: Dockerfile
     restart: unless-stopped
     environment:
@@ -27,7 +28,7 @@ services:
       PORT: 3010
       HOST: 0.0.0.0
       TZ: America/Santo_Domingo
-      DATABASE_URL: ${DATABASE_URL:?falta DATABASE_URL (la base de su servicio PostgreSQL)}
+      DATABASE_URL: ${DATABASE_URL:?falta DATABASE_URL}
       JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:?falta JWT_ACCESS_SECRET}
       JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:?falta JWT_REFRESH_SECRET}
       JWT_ACCESS_TTL: ${JWT_ACCESS_TTL:-900}
@@ -44,7 +45,7 @@ services:
 
   web:
     build:
-      context: ../../apps/web
+      context: ./apps/web
       dockerfile: Dockerfile
     restart: unless-stopped
     depends_on:

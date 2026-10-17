@@ -1,22 +1,22 @@
-# FINANZA — pila completa para EasyPanel (con su propia base de datos)
+# FINANZA — pila completa de producción (para EasyPanel o cualquier servidor)
 #
-# CÓMO SE USA
-#   En EasyPanel: Proyecto → + Servicio → «Docker Compose» (Stack), apuntando a
-#   este repositorio y a este archivo:
-#       deploy/easypanel/docker-compose.yml
-#
-#   Las variables se rellenan en la pestaña «Environment» del servicio
-#   (están todas listadas en deploy/easypanel/env.ejemplo).
+# USO EN EASYPANEL
+#   Proyecto → + Servicio → «Docker Compose» (Stack)
+#     Repositorio : JUNIORPRUEVA/finanzasjyy
+#     Rama        : master
+#     Archivo     : docker-compose.produccion.yml
+#   Las variables se rellenan en la pestaña «Environment» (ver deploy/easypanel/env.ejemplo).
 #
 # QUÉ LEVANTA
-#   db   → PostgreSQL 16 con su volumen propio. NO publica puertos: sólo se llega
-#          a ella desde dentro de la pila.
-#   api  → la API (NestJS). Al arrancar aplica las migraciones (`prisma migrate
-#          deploy`): nunca borra datos.
-#   web  → la PWA servida por nginx, que además hace de proxy de /api hacia la API.
-#          Es el ÚNICO servicio que EasyPanel debe publicar.
+#   db  → PostgreSQL 16 con volumen propio. No publica puertos: sólo se llega
+#         desde dentro de la pila.
+#   api → API NestJS. Al arrancar aplica las migraciones (`prisma migrate deploy`).
+#         NUNCA borra datos.
+#   web → PWA servida por nginx, que además manda /api a la API. Es el ÚNICO
+#         servicio que se publica (3000).
 #
-# IMPORTANTE: no se usa `docker system prune` ni `down -v` con este proyecto.
+# La web y la API comparten dominio y puerto, así que no hay CORS ni problemas
+# con las cookies de sesión.
 
 name: finanzasjyy
 
@@ -41,7 +41,7 @@ services:
 
   api:
     build:
-      context: ../../apps/api
+      context: ./apps/api
       dockerfile: Dockerfile
     restart: unless-stopped
     depends_on:
@@ -69,12 +69,12 @@ services:
 
   web:
     build:
-      context: ../../apps/web
+      context: ./apps/web
       dockerfile: Dockerfile
     restart: unless-stopped
     depends_on:
       - api
-    # EasyPanel publica este puerto y le pone el dominio con HTTPS.
+    # EasyPanel publica este puerto y le asigna el dominio con HTTPS.
     ports:
       - '3000:80'
 
