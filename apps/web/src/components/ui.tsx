@@ -1,5 +1,15 @@
 import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
-import { IconAlert, IconCheck, IconChevronRight, IconClose, IconEye, IconEyeOff, IconLock } from './icons';
+import {
+  IconAlert,
+  IconCalendar,
+  IconCheck,
+  IconChevronRight,
+  IconClose,
+  IconEye,
+  IconEyeOff,
+  IconLock,
+  IconSearch,
+} from './icons';
 
 /**
  * SISTEMA DE COMPONENTES DE FINANZA
@@ -895,3 +905,222 @@ export function SuccessMark({ label }: { label: string }) {
     </p>
   );
 }
+
+// ---------------------------------------------------------------------------
+// Listas largas: barra fija arriba, sólo la lista hace scroll
+// ---------------------------------------------------------------------------
+
+/**
+ * ESTRUCTURA DE UNA PANTALLA DE LISTA
+ * -----------------------------------
+ * Deja arriba, quieto, lo que sirve para buscar y filtrar, y hace que **sólo la
+ * lista** se desplace. Así el buscador y el filtro no se van con el dedo cuando
+ * hay muchos registros, que es justo cuando más se usan.
+ *
+ * Necesita que el contenedor de la página tenga alto definido (el armazón de la
+ * aplicación ocupa la ventana entera y sólo desplaza su interior).
+ */
+export function ListScreen({
+  toolbar,
+  footer,
+  children,
+}: {
+  toolbar: ReactNode;
+  /** Se queda pegado abajo, fuera del scroll (paginación, totales…). */
+  footer?: ReactNode;
+  children: ReactNode;
+}) {
+  return (
+    <div className="flex h-full min-h-0 flex-col gap-2">
+      <div className="shrink-0 space-y-2">{toolbar}</div>
+      <div className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain">{children}</div>
+      {footer ? <div className="shrink-0 border-t border-border-soft bg-bg pt-2">{footer}</div> : null}
+    </div>
+  );
+}
+
+/** Campo de búsqueda compacto, con lupa y botón para borrar. */
+export function SearchBox({
+  value,
+  onChange,
+  label = 'Buscar',
+  placeholder = 'Buscar…',
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  label?: string;
+  placeholder?: string;
+}) {
+  const id = useId();
+
+  return (
+    <div className="relative min-w-0 flex-1">
+      <label htmlFor={id} className="sr-only">
+        {label}
+      </label>
+      <IconSearch
+        size={16}
+        className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-faint"
+      />
+      <input
+        id={id}
+        type="search"
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        placeholder={placeholder}
+        enterKeyHint="search"
+        // 16 px: por debajo, iPhone amplía la pantalla al enfocar el campo.
+        className="h-11 w-full rounded-xl border border-border-soft bg-surface-2 pl-9 pr-9 text-base text-ink outline-none transition placeholder:text-faint focus:border-brand [&::-webkit-search-cancel-button]:hidden"
+      />
+      {value ? (
+        <button
+          type="button"
+          onClick={() => onChange('')}
+          aria-label="Borrar la búsqueda"
+          className="absolute right-1 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full text-faint transition hover:bg-surface hover:text-ink"
+        >
+          <IconClose size={16} />
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
+/** `2026-10-17` → `17/10/26` (sólo para mostrar en el botón). */
+function shortDate(iso: string): string {
+  const partes = iso.split('-');
+  if (partes.length !== 3) {
+    return iso;
+  }
+  return `${partes[2]}/${partes[1]}/${partes[0].slice(2)}`;
+}
+
+export interface DateRange {
+  from: string;
+  to: string;
+}
+
+/**
+ * FILTRO POR RANGO DE FECHAS
+ * --------------------------
+ * Un solo botón con el icono de calendario, a la derecha del buscador. Abre una
+ * hoja con las dos fechas y atajos (hoy, ayer, 7 días, este mes). Cuando hay un
+ * rango activo, el botón lo muestra y se marca en color, para que nunca se
+ * quede filtrando sin darse cuenta.
+ */
+export function DateRangeFilter({
+  value,
+  onChange,
+  today,
+}: {
+  value: DateRange;
+  onChange: (value: DateRange) => void;
+  /** Fecha de hoy en formato `AAAA-MM-DD` (la del negocio, no la del aparato). */
+  today: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const [desde, setDesde] = useState(value.from);
+  const [hasta, setHasta] = useState(value.to);
+  const activo = Boolean(value.from || value.to);
+
+  const abrir = () => {
+    setDesde(value.from);
+    setHasta(value.to);
+    setOpen(true);
+  };
+
+  const aplicar = (rango: DateRange) => {
+    // Si el usuario invierte las fechas, se ordenan: nunca un rango imposible.
+    const ordenado =
+      rango.from && rango.to && rango.from > rango.to
+        ? { from: rango.to, to: rango.from }
+        : rango;
+    onChange(ordenado);
+    setOpen(false);
+  };
+
+  const atajo = (dias: number) => {
+    const fin = new Date(`${today}T12:00:00`);
+    const inicio = new Date(fin);
+    inicio.setDate(fin.getDate() - (dias - 1));
+    aplicar({
+      from: inicio.toISOString().slice(0, 10),
+      to: today,
+    });
+  };
+
+  const etiqueta = activo
+    ? value.from && value.to
+      ? `${shortDate(value.from)} – ${shortDate(value.to)}`
+      : value.from
+        ? `desde ${shortDate(value.from)}`
+        : `hasta ${shortDate(value.to)}`
+    : 'Filtrar por fechas';
+
+  return (
+    <>
+      <button
+        type="button"
+        onClick={abrir}
+        aria-expanded={open}
+        aria-label={activo ? `Cambiar fechas (${etiqueta})` : 'Filtrar por fechas'}
+        className={`flex h-11 shrink-0 items-center gap-1.5 rounded-xl border px-3 text-xs font-medium transition ${
+          activo
+            ? 'border-brand/60 bg-brand/15 text-brand'
+            : 'border-border-soft bg-surface-2 text-muted hover:text-ink'
+        }`}
+      >
+        <IconCalendar size={17} />
+        <span className={activo ? 'tabular-nums' : 'hidden sm:inline'}>{etiqueta}</span>
+      </button>
+
+      <Sheet open={open} onClose={() => setOpen(false)} title="Filtrar por fechas">
+        <div className="space-y-3">
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Desde" value={desde} onChange={setDesde} type="date" />
+            <Field label="Hasta" value={hasta} onChange={setHasta} type="date" />
+          </div>
+
+          <div className="flex flex-wrap gap-2">
+            {[
+              { label: 'Hoy', dias: 1 },
+              { label: 'Últimos 7 días', dias: 7 },
+              { label: 'Últimos 30 días', dias: 30 },
+            ].map((opcion) => (
+              <button
+                key={opcion.dias}
+                type="button"
+                onClick={() => atajo(opcion.dias)}
+                className="rounded-full border border-border-soft px-3 py-1.5 text-xs text-muted transition hover:text-ink"
+              >
+                {opcion.label}
+              </button>
+            ))}
+          </div>
+
+          <div className="flex gap-2 pt-1">
+            <Button
+              variant="secondary"
+              fullWidth
+              onClick={() => {
+                setDesde('');
+                setHasta('');
+                aplicar({ from: '', to: '' });
+              }}
+            >
+              Quitar filtro
+            </Button>
+            <Button fullWidth onClick={() => aplicar({ from: desde, to: hasta })}>
+              Aplicar
+            </Button>
+          </div>
+
+          <p className="pb-1 text-xs leading-snug text-faint">
+            Cada día cuenta desde las 00:00 hasta las 23:59 de la zona horaria de su negocio.
+          </p>
+        </div>
+      </Sheet>
+    </>
+  );
+}
+

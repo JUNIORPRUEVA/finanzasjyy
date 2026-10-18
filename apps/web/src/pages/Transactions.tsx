@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, ApiError } from '../lib/api';
-import { Badge, Button, Card, EmptyState, Field, Money, Notice, SectionTitle, Spinner } from '../components/ui';
+import { Badge, Button, Card, DateRangeFilter, EmptyState, Field, ListScreen, Money, Notice, SearchBox, SectionTitle, Spinner } from '../components/ui';
 import { formatBusinessDate, txnKindLabel, txnKindTone, todayBusinessDate } from '../lib/format';
 
 interface TransactionRow {
@@ -87,54 +87,83 @@ export function TransactionsPage() {
   });
 
   return (
-    <div className="space-y-4">
-      {message ? <Notice tone={message.tone}>{message.text}</Notice> : null}
-
-      <Card className="space-y-3">
-        <SectionTitle title="Filtros" hint="Busque por descripción, fechas o tipo" />
-        <div className="grid grid-cols-2 gap-3">
-          <Field label="Desde" value={from} onChange={setFrom} type="date" />
-          <Field label="Hasta" value={to} onChange={setTo} type="date" />
-        </div>
-        <Field label="Buscar" value={search} onChange={setSearch} placeholder="Texto en la descripción" />
-        <div className="flex flex-wrap gap-2">
-          {[
-            { value: '', label: 'Todos' },
-            { value: 'INCOME', label: 'Ingresos' },
-            { value: 'EXPENSE', label: 'Gastos' },
-            { value: 'OWNER_WITHDRAWAL', label: 'Retiros' },
-            { value: 'TRANSFER_IN,TRANSFER_OUT', label: 'Transferencias' },
-            { value: 'LOAN_DISBURSEMENT,LOAN_PAYMENT', label: 'Préstamos' },
-          ].map((option) => (
-            <button
-              key={option.value}
-              type="button"
-              onClick={() => {
-                setKindFilter(option.value);
+    <ListScreen
+      toolbar={
+        <>
+          {/* Una sola línea: buscar y, al lado, el calendario para el rango de
+              fechas. Antes eran cuatro campos apilados que se llevaban media
+              pantalla y se iban con el dedo al desplazar la lista. */}
+          <div className="flex items-center gap-2">
+            <SearchBox
+              value={search}
+              onChange={(value) => {
+                setSearch(value);
                 setPage(1);
               }}
-              className={`rounded-full border px-3 py-1 text-xs ${
-                kindFilter === option.value
-                  ? 'border-positive/50 bg-positive/20 text-positive'
-                  : 'border-border-soft text-muted'
-              }`}
+              label="Buscar"
+              placeholder="Buscar en la descripción"
+            />
+            <DateRangeFilter
+              value={{ from, to }}
+              onChange={(rango) => {
+                setFrom(rango.from);
+                setTo(rango.to);
+                setPage(1);
+              }}
+              today={todayBusinessDate()}
+            />
+          </div>
+
+          {/* Tipo de movimiento: se desplaza en horizontal si no cabe. */}
+          <div className="flex items-center gap-2 overflow-x-auto pb-0.5">
+            {[
+              { value: '', label: 'Todos' },
+              { value: 'INCOME', label: 'Ingresos' },
+              { value: 'EXPENSE', label: 'Gastos' },
+              { value: 'OWNER_WITHDRAWAL', label: 'Retiros' },
+              { value: 'TRANSFER_IN,TRANSFER_OUT', label: 'Transferencias' },
+              { value: 'LOAN_DISBURSEMENT,LOAN_PAYMENT', label: 'Préstamos' },
+            ].map((option) => (
+              <button
+                key={option.value}
+                type="button"
+                onClick={() => {
+                  setKindFilter(option.value);
+                  setPage(1);
+                }}
+                aria-pressed={kindFilter === option.value}
+                className={`shrink-0 rounded-full border px-3 py-1 text-xs ${
+                  kindFilter === option.value
+                    ? 'border-brand/60 bg-brand/15 text-brand'
+                    : 'border-border-soft text-muted'
+                }`}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+        </>
+      }
+      footer={
+        listQuery.data && listQuery.data.data.length > 0 ? (
+          <div className="flex items-center justify-between gap-2">
+            <Button variant="secondary" size="sm" disabled={page === 1} onClick={() => setPage((current) => Math.max(1, current - 1))}>
+              Anterior
+            </Button>
+            <span className="text-xs text-muted">Página {page}</span>
+            <Button
+              variant="secondary"
+              size="sm"
+              disabled={!listQuery.data.meta.hasNext}
+              onClick={() => setPage((current) => current + 1)}
             >
-              {option.label}
-            </button>
-          ))}
-          <button
-            type="button"
-            onClick={() => {
-              setFrom(todayBusinessDate());
-              setTo(todayBusinessDate());
-              setPage(1);
-            }}
-            className="rounded-full border border-border-soft px-3 py-1 text-xs text-muted"
-          >
-            Hoy
-          </button>
-        </div>
-      </Card>
+              Siguiente
+            </Button>
+          </div>
+        ) : null
+      }
+    >
+      {message ? <Notice tone={message.tone}>{message.text}</Notice> : null}
 
       {listQuery.isLoading ? <Spinner /> : null}
 
@@ -216,22 +245,8 @@ export function TransactionsPage() {
               </div>
             ))}
           </div>
-
-          <div className="mt-3 flex items-center justify-between">
-            <Button variant="secondary" disabled={page === 1} onClick={() => setPage((current) => Math.max(1, current - 1))}>
-              Anterior
-            </Button>
-            <span className="text-xs text-muted">Página {page}</span>
-            <Button
-              variant="secondary"
-              disabled={!listQuery.data.meta.hasNext}
-              onClick={() => setPage((current) => current + 1)}
-            >
-              Siguiente
-            </Button>
-          </div>
         </Card>
       ) : null}
-    </div>
+    </ListScreen>
   );
 }

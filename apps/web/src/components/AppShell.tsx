@@ -194,9 +194,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <div className="mx-auto flex min-h-full w-full max-w-3xl flex-col">
+    <div className="mx-auto flex h-[100dvh] w-full max-w-3xl flex-col overflow-hidden">
       {/* CABECERA: baja, con lo que se usa a diario */}
-      <header className="sticky top-0 z-30 border-b border-border-soft bg-bg/95 backdrop-blur-md">
+      <header className="z-30 shrink-0 border-b border-border-soft bg-bg/95 backdrop-blur-md">
         <div className="flex items-center gap-1 px-2 pb-1.5 pt-[calc(var(--safe-top)+0.35rem)]">
           <button
             ref={menuButtonRef}
@@ -259,7 +259,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       </header>
 
       {serverUnreachable ? (
-        <div className="px-4 pt-3">
+        <div className="shrink-0 px-4 pt-3">
           <div className="rounded-xl border border-warning/40 bg-warning/10 p-3 text-xs leading-snug text-ink">
             {isOnline ? (
               <>
@@ -281,7 +281,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       ) : null}
 
       {offlineExpiringSoon && isOnline ? (
-        <div className="px-4 pt-3">
+        <div className="shrink-0 px-4 pt-3">
           <div className="rounded-xl border border-warning/40 bg-warning/10 p-3 text-xs leading-snug text-ink">
             Su autorización para trabajar sin conexión vence en menos de 4 horas. Conéctese un momento para renovarla.
           </div>
@@ -289,7 +289,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       ) : null}
 
       {offlineExpired && sessionState === 'offline' ? (
-        <div className="px-4 pt-3">
+        <div className="shrink-0 px-4 pt-3">
           <div className="rounded-xl border border-negative/40 bg-negative/10 p-3 text-xs leading-snug text-ink">
             La autorización para trabajar sin conexión ha caducado. Conéctese a internet para validar su sesión antes de
             seguir registrando movimientos.
@@ -297,7 +297,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </div>
       ) : null}
 
-      <main className="page-bottom-space flex-1 px-4 py-4">{children}</main>
+      <main className="page-bottom-space min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4">
+        {children}
+      </main>
 
       {/* BARRA INFERIOR: cinco destinos, el central para añadir */}
       <nav

@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../lib/api';
-import { Badge, Button, Card, EmptyState, Notice, SectionTitle, Skeleton } from '../components/ui';
-import { formatDateTime } from '../lib/format';
+import { Button, DateRangeFilter, EmptyState, ListScreen, Notice, Skeleton } from '../components/ui';
+import { formatDateTime, todayBusinessDate } from '../lib/format';
 
 /**
  * AUDITORÍA
@@ -104,10 +104,15 @@ function detailOf(row: AuditRow): string | null {
 
 export function AuditPage() {
   const [page, setPage] = useState(1);
+  const [from, setFrom] = useState('');
+  const [to, setTo] = useState('');
 
   const query = useQuery<AuditResponse>({
-    queryKey: ['audit', page],
-    queryFn: () => api.get<AuditResponse>(`/audit?page=${page}&limit=40`),
+    queryKey: ['audit', page, from, to],
+    queryFn: () =>
+      api.get<AuditResponse>(
+        `/audit?page=${page}&limit=40${from ? `&from=${from}` : ''}${to ? `&to=${to}` : ''}`,
+      ),
   });
 
   if (query.isLoading) {
@@ -132,68 +137,78 @@ export function AuditPage() {
   const rows = query.data.data ?? [];
 
   return (
-    <div className="space-y-4">
-      <div>
-        <h1 className="text-xl font-semibold tracking-tight text-ink">Auditoría</h1>
-        <p className="mt-0.5 text-xs leading-snug text-muted">
-          Todo lo que cambia algo importante queda registrado: quién, qué, cuándo y desde qué dispositivo. Los registros
-          no se pueden editar ni borrar.
-        </p>
-      </div>
-
-      <Card>
-        <SectionTitle
-          title="Últimos movimientos del sistema"
-          hint={`${query.data.meta.total} registro(s) en total`}
-          right={<Badge tone="neutral">página {query.data.meta.page}</Badge>}
-        />
-
-        {rows.length === 0 ? (
-          <EmptyState
-            title="Todavía no hay registros"
-            hint="En cuanto registre movimientos, cierres o cambios de configuración, aparecerán aquí en orden."
-          />
-        ) : (
-          <div className="space-y-2">
-            {rows.map((row) => (
-              <div key={row.id} className="rounded-xl border border-border-soft p-3">
-                <div className="flex items-start justify-between gap-2">
-                  <p className="min-w-0 flex-1 text-sm font-medium text-ink">{humanAction(row.action)}</p>
-                  <span className="shrink-0 text-[0.68rem] text-faint">{formatDateTime(row.createdAt)}</span>
-                </div>
-                <p className="mt-0.5 text-xs text-muted">
-                  {row.entityType}
-                  {row.actorType === 'SYSTEM' ? ' · por el sistema' : ''}
-                  {row.ip ? ` · desde ${row.ip}` : ''}
-                </p>
-                {detailOf(row) ? <p className="mt-1 break-words text-[0.7rem] text-faint">{detailOf(row)}</p> : null}
-              </div>
-            ))}
+    <ListScreen
+      toolbar={
+        <>
+          <div className="flex items-center justify-between gap-2">
+            <div className="min-w-0">
+              <h1 className="text-lg font-semibold tracking-tight text-ink">Auditoría</h1>
+              <p className="text-xs text-muted">{query.data.meta.total} registro(s)</p>
+            </div>
+            <DateRangeFilter
+              value={{ from, to }}
+              onChange={(rango) => {
+                setFrom(rango.from);
+                setTo(rango.to);
+                setPage(1);
+              }}
+              today={todayBusinessDate()}
+            />
           </div>
-        )}
-
-        <div className="mt-3 flex items-center justify-between gap-2 border-t border-border-soft pt-3">
-          <Button variant="secondary" size="sm" disabled={page <= 1} onClick={() => setPage((current) => Math.max(1, current - 1))}>
-            Anterior
-          </Button>
-          <span className="text-xs text-faint">
-            {query.data.meta.page} / {Math.max(1, query.data.meta.totalPages)}
-          </span>
-          <Button
-            variant="secondary"
-            size="sm"
-            disabled={!query.data.meta.hasNext}
-            onClick={() => setPage((current) => current + 1)}
-          >
-            Siguiente
-          </Button>
+          <p className="text-xs leading-snug text-muted">
+            Todo lo que cambia algo importante queda registrado: quién, qué, cuándo y desde qué dispositivo.
+          </p>
+        </>
+      }
+      footer={
+        rows.length > 0 ? (
+          <div className="flex items-center justify-between gap-2">
+            <Button variant="secondary" size="sm" disabled={page <= 1} onClick={() => setPage((current) => Math.max(1, current - 1))}>
+              Anterior
+            </Button>
+            <span className="text-xs text-faint">
+              {query.data.meta.page} / {Math.max(1, query.data.meta.totalPages)}
+            </span>
+            <Button
+              variant="secondary"
+              size="sm"
+              disabled={!query.data.meta.hasNext}
+              onClick={() => setPage((current) => current + 1)}
+            >
+              Siguiente
+            </Button>
+          </div>
+        ) : null
+      }
+    >
+      {rows.length === 0 ? (
+        <EmptyState
+          title="No hay registros con ese filtro"
+          hint="Pruebe a ampliar el rango de fechas o a quitarlo."
+        />
+      ) : (
+        <div className="space-y-2">
+          {rows.map((row) => (
+            <div key={row.id} className="rounded-xl border border-border-soft bg-surface p-3">
+              <div className="flex items-start justify-between gap-2">
+                <p className="min-w-0 flex-1 text-sm font-medium text-ink">{humanAction(row.action)}</p>
+                <span className="shrink-0 text-[0.68rem] text-faint">{formatDateTime(row.createdAt)}</span>
+              </div>
+              <p className="mt-0.5 text-xs text-muted">
+                {row.entityType}
+                {row.actorType === 'SYSTEM' ? ' · por el sistema' : ''}
+                {row.ip ? ` · desde ${row.ip}` : ''}
+              </p>
+              {detailOf(row) ? <p className="mt-1 break-words text-[0.7rem] text-faint">{detailOf(row)}</p> : null}
+            </div>
+          ))}
         </div>
-      </Card>
+      )}
 
       <p className="text-[0.7rem] leading-snug text-faint">
-        Si ve algo que no reconoce, cámbiela contraseña y cierre las demás sesiones desde Ajustes → Seguridad. Quedará
-        registrado aquí, que es justo lo que se busca.
+        Los registros no se pueden editar ni borrar. Si ve algo que no reconoce, cambie su contraseña y cierre las
+        demás sesiones desde Ajustes → Seguridad: quedará registrado aquí, que es justo lo que se busca.
       </p>
-    </div>
+    </ListScreen>
   );
 }

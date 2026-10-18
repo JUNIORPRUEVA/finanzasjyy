@@ -9,15 +9,17 @@ import {
   ConfirmDialog,
   EmptyState,
   Field,
+  ListScreen,
   Money,
   Notice,
   ProgressBar,
+  SearchBox,
   SegmentedControl,
   Sheet,
   Skeleton,
 } from '../components/ui';
 import { toast } from '../components/Toast';
-import { IconPlus, IconSearch } from '../components/icons';
+import { IconPlus } from '../components/icons';
 import {
   createListOffline,
   flushShoppingQueue,
@@ -206,58 +208,53 @@ export function ShoppingPage() {
   }, [lists, pending]);
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <h1 className="text-xl font-semibold tracking-tight text-ink">Compras</h1>
-          <p className="mt-0.5 text-xs leading-snug text-muted">
-            Prepare lo que necesita comprar y cuánto piensa gastar. Nada de esto mueve dinero: el gasto se registra
-            aparte, cuando usted lo decide.
-          </p>
-        </div>
-        <Button onClick={() => setCreating(true)} className="shrink-0">
-          <IconPlus size={18} /> Nueva
-        </Button>
-      </div>
+    <ListScreen
+      toolbar={
+        <>
+          <div className="flex items-center justify-between gap-2">
+            <div className="min-w-0">
+              <h1 className="text-lg font-semibold tracking-tight text-ink">Compras</h1>
+              <p className="text-xs leading-snug text-muted">
+                Prepare lo que necesita; el gasto se registra aparte, cuando usted lo decide.
+              </p>
+            </div>
+            <Button onClick={() => setCreating(true)} className="shrink-0" size="sm">
+              <IconPlus size={18} /> Nueva
+            </Button>
+          </div>
 
-      {fromCache ? (
-        <Notice tone="warning" title="Mostrando lo guardado en este dispositivo">
-          No hay conexión con el servidor. Puede consultar y preparar sus listas; los cambios quedarán
-          <strong> pendientes de enviar</strong>.
-        </Notice>
-      ) : null}
+          {fromCache ? (
+            <Notice tone="warning" title="Mostrando lo guardado en este dispositivo">
+              No hay conexión con el servidor. Puede consultar y preparar sus listas; los cambios quedarán
+              <strong> pendientes de enviar</strong>.
+            </Notice>
+          ) : null}
 
-      {pending > 0 ? (
-        <Notice tone="info">
-          {pending} lista(s) con cambios <strong>pendientes de enviar</strong>. Se enviarán solas cuando haya conexión.
-        </Notice>
-      ) : null}
+          {pending > 0 ? (
+            <Notice tone="info">
+              {pending} lista(s) con cambios <strong>pendientes de enviar</strong>. Se enviarán solas cuando haya conexión.
+            </Notice>
+          ) : null}
 
-      <SegmentedControl
-        options={[
-          { value: 'ABIERTAS' as Filtro, label: 'Abiertas' },
-          { value: 'FINALIZADAS' as Filtro, label: 'Finalizadas' },
-          { value: 'TODAS' as Filtro, label: 'Todas' },
-        ]}
-        value={filtro}
-        onChange={setFiltro}
-      />
-
-      <label className="block">
-        <span className="sr-only">Buscar en las listas</span>
-        <span className="relative block">
-          <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-faint">
-            <IconSearch size={18} />
-          </span>
-          <input
+          <SearchBox
             value={busqueda}
-            onChange={(event) => setBusqueda(event.target.value)}
+            onChange={setBusqueda}
+            label="Buscar en las listas"
             placeholder="Buscar lista o producto…"
-            enterKeyHint="search"
-            className="w-full rounded-xl border border-border-soft bg-surface-2 py-2.5 pl-10 pr-3 text-ink outline-none transition placeholder:text-faint focus:border-brand"
           />
-        </span>
-      </label>
+
+          <SegmentedControl
+            options={[
+              { value: 'ABIERTAS' as Filtro, label: 'Abiertas' },
+              { value: 'FINALIZADAS' as Filtro, label: 'Finalizadas' },
+              { value: 'TODAS' as Filtro, label: 'Todas' },
+            ]}
+            value={filtro}
+            onChange={setFiltro}
+          />
+        </>
+      }
+    >
 
       {loading ? (
         <div className="space-y-2">
@@ -441,6 +438,6 @@ export function ShoppingPage() {
         onCancel={() => setToDelete(null)}
         onConfirm={() => void confirmDelete()}
       />
-    </div>
+    </ListScreen>
   );
 }
