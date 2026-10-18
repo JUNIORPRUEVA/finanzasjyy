@@ -299,4 +299,28 @@ button,
     width: 100% !important;
     font-size: 10pt;
   }
+
+  /*
+   * LISTA DE COMPRAS: se imprime SÓLO la hoja.
+   * La pantalla de la compra marca el <body>, y la hoja vive fuera de #root
+   * (montada en <body>), así que basta con apagar la aplicación entera.
+   */
+  body.con-hoja-imprimible #root {
+    display: none !important;
+  }
+
+  body.con-hoja-imprimible #hoja-compra {
+    display: block !important;
+    padding: 0 !important;
+    color: #000 !important;
+    font-size: 11pt;
+  }
+
+  body.con-hoja-imprimible #hoja-compra table {
+    border-collapse: collapse;
+  }
+
+  @page {
+    margin: 14mm;
+  }
 }
