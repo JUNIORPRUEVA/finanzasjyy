@@ -5,12 +5,12 @@ import { useQuery } from '@tanstack/react-query';
 import { api, ApiError } from '../lib/api';
 import { useAuth } from '../store/auth';
 import {
-  Badge,
   Button,
   Card,
   ConfirmDialog,
   EmptyState,
   Field,
+  ListScreen,
   Money,
   MoneyInput,
   Notice,
@@ -21,7 +21,7 @@ import {
   Skeleton,
 } from '../components/ui';
 import { toast } from '../components/Toast';
-import { IconArrowDown, IconCheck, IconChevronLeft, IconClose, IconFile, IconPlus } from '../components/icons';
+import { IconArrowDown, IconCheck, IconChevronLeft, IconClose, IconFile, IconPlus, IconShare } from '../components/icons';
 import {
   flushShoppingQueue,
   isServerList,
@@ -414,26 +414,163 @@ export function ShoppingDetailPage() {
   const difference = Number(list.totals.difference);
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-start gap-2">
-        <Link
-          to="/compras"
-          aria-label="Volver a Compras"
-          className="mt-0.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-muted transition hover:bg-surface-2 hover:text-ink"
-        >
-          <IconChevronLeft size={20} />
-        </Link>
-        <div className="min-w-0 flex-1">
-          <h1 className="truncate text-xl font-semibold tracking-tight text-ink">{list.name}</h1>
-          <p className="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs text-muted">
-            {list.entityName ?? entity?.name ?? 'Unidad financiera'}
-            {list.plannedDate ? <span>· prevista {list.plannedDate}</span> : null}
-            {registered ? <Badge tone="positive">gasto registrado</Badge> : null}
-            {fromCache ? <Badge tone="warning">sin conexión</Badge> : null}
-          </p>
-        </div>
-      </div>
+    <ListScreen
+      toolbar={
+        <>
+          {/* Encabezado compacto: de dónde vengo, qué lista es y las salidas. */}
+          <div className="flex items-center gap-1.5">
+            <Link
+              to="/compras"
+              aria-label="Volver a Compras"
+              className="-ml-1.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-muted transition hover:bg-surface-2 hover:text-ink"
+            >
+              <IconChevronLeft size={20} />
+            </Link>
+            <div className="min-w-0 flex-1">
+              <h1 className="truncate text-base font-semibold leading-tight tracking-tight text-ink">{list.name}</h1>
+              <p className="flex items-center gap-1.5 truncate text-[0.7rem] text-muted">
+                {list.entityName ?? entity?.name ?? 'Unidad financiera'}
+                {list.plannedDate ? <span>· {list.plannedDate}</span> : null}
+                {registered ? <span className="text-positive">· gasto registrado</span> : null}
+                {fromCache ? <span className="text-warning">· sin conexión</span> : null}
+              </p>
+            </div>
+            {total > 0 ? (
+              <>
+                <button
+                  type="button"
+                  onClick={imprimir}
+                  aria-label="Imprimir o guardar en PDF"
+                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-muted transition hover:bg-surface-2 hover:text-ink"
+                >
+                  <IconFile size={19} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void compartir()}
+                  aria-label="Compartir la lista"
+                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-muted transition hover:bg-surface-2 hover:text-ink"
+                >
+                  <IconShare size={19} />
+                </button>
+              </>
+            ) : null}
+          </div>
 
+          {/* Añadir producto: SIEMPRE visible. Es lo que más se usa y antes
+              quedaba al final del listado, obligando a bajar con el dedo. */}
+          {!registered ? (
+            <div className="rounded-2xl border border-border-soft bg-surface p-2.5 shadow-card">
+              <div className="flex items-center gap-2">
+                <label htmlFor="nuevo-producto" className="sr-only">
+                  ¿Qué necesita?
+                </label>
+                <input
+                  id="nuevo-producto"
+                  value={addName}
+                  onChange={(event) => setAddName(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter') {
+                      void addItem();
+                    }
+                  }}
+                  placeholder="¿Qué necesita? Ej.: arroz, plátano, detergente…"
+                  autoComplete="off"
+                  enterKeyHint="done"
+                  className="h-11 min-w-0 flex-1 rounded-xl border border-border-soft bg-surface-2 px-3 text-base text-ink outline-none transition placeholder:text-faint focus:border-brand"
+                />
+                <button
+                  type="button"
+                  onClick={() => void addItem()}
+                  disabled={adding || addName.trim().length < 1}
+                  aria-label="Añadir a la lista"
+                  className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-brand text-white transition active:scale-95 disabled:opacity-40"
+                >
+                  <IconPlus size={22} />
+                </button>
+              </div>
+
+              <div className="mt-2 flex items-end gap-2">
+                <div className="w-[4.75rem] shrink-0">
+                  <label
+                    htmlFor="nuevo-cantidad"
+                    className="mb-1 block text-[0.62rem] font-semibold uppercase tracking-wide text-faint"
+                  >
+                    Cantidad
+                  </label>
+                  <input
+                    id="nuevo-cantidad"
+                    value={addQuantity}
+                    onChange={(event) => setAddQuantity(event.target.value)}
+                    inputMode="decimal"
+                    className="h-10 w-full rounded-lg border border-border-soft bg-surface-2 px-2 text-center text-base tabular-nums text-ink outline-none transition focus:border-brand"
+                  />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <label
+                    htmlFor="nuevo-precio"
+                    className="mb-1 block text-[0.62rem] font-semibold uppercase tracking-wide text-faint"
+                  >
+                    Precio estimado
+                  </label>
+                  <input
+                    id="nuevo-precio"
+                    value={addPrice}
+                    onChange={(event) => setAddPrice(event.target.value)}
+                    inputMode="decimal"
+                    placeholder="opcional"
+                    className="h-10 w-full rounded-lg border border-border-soft bg-surface-2 px-3 text-base tabular-nums text-ink outline-none transition placeholder:text-faint focus:border-brand"
+                  />
+                </div>
+              </div>
+            </div>
+          ) : null}
+
+          {/* Resumen en una línea: cuánto llevo y cuánto suman. */}
+          <div className="space-y-1">
+            <div className="flex items-baseline justify-between gap-2 text-xs">
+              <span className="text-muted">
+                {comprados} de {total || 0} productos comprados
+                {grupos.length > 0 ? ` · ${grupos.length} pasillo(s)` : ''}
+              </span>
+              <span className="shrink-0 font-semibold tabular-nums text-ink">
+                <Money value={list.totals.estimated} currency={currency} />
+              </span>
+            </div>
+            <ProgressBar percent={percent} tone={percent >= 100 ? 'positive' : 'neutral'} />
+            <div className="flex items-center justify-between gap-2 text-[0.7rem]">
+              <span className="text-faint">
+                Pagado <Money value={list.totals.actual} currency={currency} /> · falta{' '}
+                <Money value={list.totals.pending} currency={currency} />
+                {difference !== 0 ? (
+                  <>
+                    {' '}
+                    · desvío{' '}
+                    <Money
+                      value={list.totals.difference}
+                      currency={currency}
+                      tone={difference > 0 ? 'negative' : 'positive'}
+                    />
+                  </>
+                ) : null}
+              </span>
+              {total > 0 ? (
+                <button
+                  type="button"
+                  onClick={() => setPorPasillo((valor) => !valor)}
+                  aria-pressed={porPasillo}
+                  className={`shrink-0 rounded-full border px-2.5 py-0.5 text-[0.7rem] ${
+                    porPasillo ? 'border-brand/60 bg-brand/15 text-brand' : 'border-border-soft text-muted'
+                  }`}
+                >
+                  {porPasillo ? 'Por pasillos' : 'En orden'}
+                </button>
+              ) : null}
+            </div>
+          </div>
+        </>
+      }
+    >
       {fromCache ? (
         <Notice tone="warning" title="Sin conexión con el servidor">
           Puede seguir preparando y editando la lista: los cambios se guardan en este dispositivo y se enviarán solos.
@@ -448,88 +585,23 @@ export function ShoppingDetailPage() {
         </Notice>
       ) : null}
 
-      <Card className="space-y-3">
-        <div className="flex items-center justify-between gap-2">
-          <SectionTitle title="Resumen de la compra" hint={`${comprados} de ${total || 0} productos comprados`} />
-          <span className="text-sm font-semibold text-ink">{percent}%</span>
-        </div>
-        <ProgressBar percent={percent} tone={percent >= 100 ? 'positive' : 'neutral'} />
-        <div className="grid grid-cols-[repeat(auto-fit,minmax(7rem,1fr))] gap-3 border-t border-border-soft pt-3">
-          <div>
-            <p className="text-[0.7rem] uppercase tracking-wide text-faint">Estimado</p>
-            <p className="mt-0.5 font-semibold">
-              <Money value={list.totals.estimated} currency={currency} />
-            </p>
-          </div>
-          <div>
-            <p className="text-[0.7rem] uppercase tracking-wide text-faint">Pagado de verdad</p>
-            <p className="mt-0.5 font-semibold">
-              <Money value={list.totals.actual} currency={currency} tone={list.totals.actual === '0.00' ? 'neutral' : 'negative'} />
-            </p>
-          </div>
-          <div>
-            <p className="text-[0.7rem] uppercase tracking-wide text-faint">Falta por comprar</p>
-            <p className="mt-0.5 font-semibold">
-              <Money value={list.totals.pending} currency={currency} />
-            </p>
-          </div>
-          <div>
-            <p className="text-[0.7rem] uppercase tracking-wide text-faint">Desvío</p>
-            <p className="mt-0.5 font-semibold">
-              <Money
-                value={list.totals.difference}
-                currency={currency}
-                tone={difference > 0 ? 'negative' : difference < 0 ? 'positive' : 'neutral'}
-              />
-            </p>
-            <p className="text-[0.65rem] leading-snug text-faint">
-              {difference > 0 ? 'Costó más de lo previsto' : difference < 0 ? 'Costó menos de lo previsto' : 'Sin desvío'}
-            </p>
-          </div>
-        </div>
-      </Card>
-
-      <Card className="space-y-3">
-        <SectionTitle
-          title="Productos"
-          hint={total === 0 ? 'Añada lo que necesita comprar' : `${comprados} comprados · ${total - comprados} pendientes`}
-        />
-
-        {total > 0 ? (
-          <div className="sin-imprimir flex flex-wrap items-center gap-2">
-            <Button variant="secondary" size="sm" onClick={imprimir}>
-              <IconFile size={16} /> Imprimir / PDF
-            </Button>
-            <Button variant="secondary" size="sm" onClick={() => void compartir()}>
-              Compartir
-            </Button>
-            <button
-              type="button"
-              onClick={() => setPorPasillo((valor) => !valor)}
-              aria-pressed={porPasillo}
-              className={`rounded-full border px-3 py-1 text-xs ${
-                porPasillo ? 'border-brand/60 bg-brand/15 text-brand' : 'border-border-soft text-muted'
-              }`}
-            >
-              {porPasillo ? 'Ordenado por pasillos' : 'En orden de la lista'}
-            </button>
-          </div>
-        ) : null}
-
-        {total === 0 ? (
+      {total === 0 ? (
           <EmptyState
             title="Lista vacía"
             hint="Añada productos con su cantidad y el precio que espera pagar. Así sabrá cuánto va a gastar antes de salir."
           />
         ) : porPasillo ? (
-          <div className="space-y-4">
-            {grupos.map((grupo) => (
-              <div key={grupo.id} className="space-y-2">
-                <p className="flex items-center gap-1.5 text-[0.7rem] font-semibold uppercase tracking-wide text-muted">
+        <div className="space-y-2.5">
+          {grupos.map((grupo) => (
+            <Card key={grupo.id} className="overflow-hidden p-0">
+              <div className="flex items-baseline justify-between gap-2 bg-surface-2 px-3 py-1.5">
+                <p className="flex items-center gap-1.5 text-[0.66rem] font-semibold uppercase tracking-wide text-muted">
                   <span aria-hidden>{grupo.emoji}</span>
                   {grupo.label}
-                  <span className="font-normal text-faint">· {grupo.items.length}</span>
                 </p>
+                <span className="text-[0.66rem] tabular-nums text-faint">{grupo.items.length}</span>
+              </div>
+              <div className="divide-y divide-border-soft">
                 {grupo.items.map((item) => (
                   <FilaProducto
                     key={item.id}
@@ -549,10 +621,12 @@ export function ShoppingDetailPage() {
                   />
                 ))}
               </div>
-            ))}
-          </div>
-        ) : (
-          <div className="space-y-2">
+            </Card>
+          ))}
+        </div>
+      ) : (
+        <Card className="overflow-hidden p-0">
+          <div className="divide-y divide-border-soft">
             {list.items.map((item) => (
               <FilaProducto
                 key={item.id}
@@ -572,31 +646,8 @@ export function ShoppingDetailPage() {
               />
             ))}
           </div>
-        )}
-
-        {!registered ? (
-          <div className="space-y-3 border-t border-border-soft pt-3">
-            <p className="text-sm font-medium text-ink">Añadir producto</p>
-            <Field
-              label="¿Qué necesita?"
-              value={addName}
-              onChange={setAddName}
-              placeholder="Ej.: Arroz"
-              autoComplete="off"
-              enterKeyHint="done"
-              onEnter={() => void addItem()}
-            />
-            <div className="grid grid-cols-2 gap-3">
-              <Field label="Cantidad" value={addQuantity} onChange={setAddQuantity} inputMode="decimal" />
-              <MoneyInput label="Precio estimado" value={addPrice} onChange={setAddPrice} size="md" />
-            </div>
-            <Button disabled={adding || addName.trim().length < 1} onClick={() => void addItem()} fullWidth>
-              <IconPlus size={18} /> {adding ? 'Añadiendo…' : 'Añadir a la lista'}
-            </Button>
-          </div>
-        ) : null}
-      </Card>
-
+        </Card>
+      )}
       {/* Cómo va la compra: consejos calculados en el dispositivo */}
       {list.items.length > 0 ? (
         <Card className="sin-imprimir space-y-2">
@@ -838,7 +889,7 @@ export function ShoppingDetailPage() {
         </div>,
         document.body,
       )}
-    </div>
+    </ListScreen>
   );
 }
 
@@ -863,7 +914,7 @@ function FilaProducto({
   onDelete: () => void;
 }) {
   return (
-    <div className="flex items-start gap-3 rounded-xl border border-border-soft p-3 transition">
+    <div className="flex items-start gap-3 px-3 py-2.5 transition">
       <button
         type="button"
         disabled={registered}

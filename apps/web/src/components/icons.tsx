@@ -260,3 +260,12 @@ export const IconChevronLeft = (props: IconProps) => (
   </Icon>
 );
 
+/** Compartir: la flecha que sale de una caja (el gesto de «enviar a»). */
+export const IconShare = (props: IconProps) => (
+  <Icon {...props}>
+    <path d="M12 15V4" />
+    <path d="M8.5 7.5L12 4l3.5 3.5" />
+    <path d="M6 12v6.5A1.5 1.5 0 0 0 7.5 20h9a1.5 1.5 0 0 0 1.5-1.5V12" />
+  </Icon>
+);
+
