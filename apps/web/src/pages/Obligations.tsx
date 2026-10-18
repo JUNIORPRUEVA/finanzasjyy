@@ -115,7 +115,7 @@ export function ObligationsPage() {
   const receivablesQuery = useQuery<unknown>({ queryKey: ['receivables'], queryFn: () => api.get('/obligations/receivables?limit=100') });
   const payablesQuery = useQuery<unknown>({ queryKey: ['payables'], queryFn: () => api.get('/obligations/payables?limit=100') });
   const upcomingQuery = useQuery<UpcomingResponse>({ queryKey: ['upcoming'], queryFn: () => api.get<UpcomingResponse>('/obligations/upcoming?days=15') });
-  const accountsQuery = useQuery<unknown>({ queryKey: ['accounts-all'], queryFn: () => api.get('/accounts?limit=200') });
+  const accountsQuery = useQuery<unknown>({ queryKey: ['accounts-all'], queryFn: () => api.get('/accounts') });
 
   const recurrings = useMemo(() => asArray<RecurringRow>(recurringQuery.data), [recurringQuery.data]);
   const receivables = useMemo(() => asArray<ObligationRow>(receivablesQuery.data), [receivablesQuery.data]);

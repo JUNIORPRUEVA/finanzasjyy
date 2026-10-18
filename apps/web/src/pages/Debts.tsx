@@ -91,7 +91,7 @@ export function DebtsPage() {
   });
   const accountsQuery = useQuery<unknown>({
     queryKey: ['accounts-all'],
-    queryFn: () => api.get('/accounts?limit=200'),
+    queryFn: () => api.get('/accounts'),
   });
 
   const loans = useMemo(() => asArray<LoanRow>(loansQuery.data), [loansQuery.data]);

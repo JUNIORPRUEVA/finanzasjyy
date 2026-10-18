@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import type { EntityMemberRole } from '../generated/prisma/enums.js';
 import { PrismaService } from '../prisma/prisma.service.js';
-import { ForbiddenError, NotFoundError } from '../common/errors.js';
+import { ForbiddenError, NotFoundError, ValidationError } from '../common/errors.js';
 
 export interface EntityAccessResult {
   entityId: string;
@@ -28,6 +28,16 @@ export class AccessService {
   constructor(private readonly prisma: PrismaService) {}
 
   async resolveEntityAccess(userId: string, entityId: string): Promise<EntityAccessResult> {
+    // Sin unidad no hay nada que autorizar. Antes se llegaba a Prisma con
+    // `id: undefined`, que responde con un error interno y acaba en un 500 con
+    // la traza del ORM: un cliente que olvida el parámetro veía «error del
+    // servidor» cuando en realidad le faltaba un dato. Un 400 lo dice claro.
+    if (typeof entityId !== 'string' || entityId.trim() === '') {
+      throw new ValidationError(
+        'Falta indicar la unidad financiera. Elija una unidad antes de continuar.',
+      );
+    }
+
     const entity = await this.prisma.financialEntity.findUnique({
       where: { id: entityId },
       select: { id: true, ownerUserId: true, isActive: true },

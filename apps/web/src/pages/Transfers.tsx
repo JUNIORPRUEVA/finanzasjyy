@@ -59,7 +59,7 @@ export function TransfersPage() {
 
   const accountsQuery = useQuery<AccountsResponse>({
     queryKey: ['accounts-all'],
-    queryFn: () => api.get<AccountsResponse>('/accounts?limit=200'),
+    queryFn: () => api.get<AccountsResponse>('/accounts'),
   });
 
   const transfersQuery = useQuery<TransfersResponse>({
