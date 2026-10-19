@@ -1,7 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { visibleDrawerEntries, type NavGroupId } from '../navigation/registry';
-import { IconChevronDown, IconClose } from './icons';
+import { IconArrowDown, IconChevronDown, IconClose } from './icons';
+import { Sheet } from './ui';
+import type { InstalacionApp } from '../lib/install';
+import { buscarActualizacion, versionActual } from '../lib/pwa';
 
 /**
  * MENÚ LATERAL (DRAWER)
@@ -35,12 +38,30 @@ export interface DrawerProps {
   onLogout: () => void;
   /** Elemento que tenía el foco antes de abrir el menú. */
   returnFocusTo?: HTMLElement | null;
+  /** Instalación en el teléfono: decide si se ofrece y qué hace el botón. */
+  instalacion?: InstalacionApp;
 }
 
-export function Drawer({ open, onClose, role, userName, entityName, onLogout, returnFocusTo }: DrawerProps) {
+export function Drawer({ open, onClose, role, userName, entityName, onLogout, returnFocusTo, instalacion }: DrawerProps) {
   const panelRef = useRef<HTMLDivElement | null>(null);
   const location = useLocation();
   const sections = visibleDrawerEntries(role);
+
+  // Estado del botón «Instalar» y de la comprobación de versión.
+  const [pedirInstrucciones, setPedirInstrucciones] = useState(false);
+  const [estadoVersion, setEstadoVersion] = useState<'inicial' | 'buscando' | 'aldia'>('inicial');
+  const version = versionActual();
+
+  const comprobarVersion = async () => {
+    setEstadoVersion('buscando');
+    const resultado = await buscarActualizacion();
+    // Si se aplicó, la página se está recargando: no hace falta cambiar el texto.
+    if (resultado === 'al-dia') {
+      setEstadoVersion('aldia');
+      // Vuelve al texto normal a los pocos segundos.
+      window.setTimeout(() => setEstadoVersion('inicial'), 4000);
+    }
+  };
 
   /**
    * Submenús plegables, UNO abierto a la vez.
@@ -246,9 +267,76 @@ export function Drawer({ open, onClose, role, userName, entityName, onLogout, re
           })}
         </nav>
 
+        {/* Instalar en el teléfono: discreto y sólo si de verdad se puede. */}
+        {instalacion && !instalacion.instalada && (instalacion.disponible || instalacion.requiereInstrucciones) ? (
+          <div className="px-3 pb-2 pt-1">
+            <button
+              type="button"
+              onClick={() => {
+                void (async () => {
+                  const resultado = await instalacion.instalar();
+                  if (resultado === 'instrucciones') {
+                    setPedirInstrucciones(true);
+                  }
+                  if (resultado === 'aceptada') {
+                    onClose();
+                  }
+                })();
+              }}
+              className="flex w-full items-center gap-2.5 rounded-xl border border-brand/40 bg-brand/10 px-3 py-2.5 text-left transition active:scale-[0.99]"
+            >
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand/20 text-brand">
+                <IconArrowDown size={18} />
+              </span>
+              <span className="min-w-0">
+                <span className="block text-sm font-semibold text-ink">Instalar FINANZA</span>
+                <span className="block text-[0.7rem] leading-snug text-muted">
+                  Ábrala sin el navegador. Es la forma de que las actualizaciones se apliquen solas.
+                </span>
+              </span>
+            </button>
+          </div>
+        ) : null}
+
+        {/* Versión que está ejecutando ESTE dispositivo (para comparar con la del servidor). */}
+        <div className="flex items-center justify-between gap-2 px-4 pb-1 text-[0.66rem] text-faint">
+          <span className="tabular-nums">
+            v{version.version} · {version.compilada}
+          </span>
+          <button
+            type="button"
+            onClick={() => void comprobarVersion()}
+            className="underline decoration-dotted underline-offset-2"
+          >
+            {estadoVersion === 'buscando' ? 'Buscando…' : estadoVersion === 'aldia' ? 'Ya está al día' : 'Buscar actualización'}
+          </button>
+        </div>
+
         <p className="border-t border-border-soft px-4 py-3 text-[0.68rem] leading-snug text-faint">
           Al cerrar sesión, los movimientos que estén sin confirmar se conservan en este dispositivo.
         </p>
+
+        {/* En iPhone no existe el diálogo de instalación: se explican los toques. */}
+        <Sheet
+          open={pedirInstrucciones}
+          onClose={() => setPedirInstrucciones(false)}
+          title="Instalar en iPhone o iPad"
+        >
+          <ol className="space-y-2.5 pb-4 text-sm leading-snug text-ink">
+            <li>
+              1. Toque el botón <strong>Compartir</strong> del navegador (el cuadrado con la flecha hacia arriba).
+            </li>
+            <li>
+              2. Elija <strong>«Añadir a pantalla de inicio»</strong> en la lista.
+            </li>
+            <li>
+              3. Pulse <strong>Añadir</strong>. FINANZA quedará como una aplicación más y se abrirá sin el navegador.
+            </li>
+          </ol>
+          <p className="pb-4 text-xs leading-snug text-faint">
+            Apple no permite instalar desde un botón: es un paso del propio Safari. Se hace una sola vez.
+          </p>
+        </Sheet>
       </div>
     </div>
   );

@@ -7,6 +7,8 @@ import { flushShoppingQueue } from '../lib/shopping-offline';
 import { localSyncStatus, syncPendingOperations } from '../lib/sync';
 import { useAuth } from '../store/auth';
 import { BOTTOM_NAV } from '../navigation/registry';
+import { aplicarActualizacion, EVENTO_ACTUALIZACION } from '../lib/pwa';
+import { useInstalacionApp } from '../lib/install';
 import { Badge, ConfirmDialog, Sheet } from './ui';
 import { Drawer } from './Drawer';
 import { ToastHost, toast } from './Toast';
@@ -69,6 +71,19 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const [entitySheetOpen, setEntitySheetOpen] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [confirmLogout, setConfirmLogout] = useState(false);
+
+  // Versión nueva del service worker esperando: se avisa en una franja discreta.
+  // Antes se quedaba esperando para siempre y el teléfono seguía con la vieja.
+  const [hayVersionNueva, setHayVersionNueva] = useState(false);
+  useEffect(() => {
+    const alHaberActualizacion = () => setHayVersionNueva(true);
+    window.addEventListener(EVENTO_ACTUALIZACION, alHaberActualizacion);
+    return () => window.removeEventListener(EVENTO_ACTUALIZACION, alHaberActualizacion);
+  }, []);
+
+  // Instalar en el teléfono: el botón del menú sólo aparece si de verdad se
+  // puede (Chrome con la instalación disponible, o iPhone con instrucciones).
+  const instalacion = useInstalacionApp();
   const menuButtonRef = useRef<HTMLButtonElement | null>(null);
 
   const selectedEntityId = new URLSearchParams(location.search).get('entityId') ?? '';
@@ -297,6 +312,23 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </div>
       ) : null}
 
+      {hayVersionNueva ? (
+        <div className="shrink-0 px-4 pt-3">
+          <div className="flex items-center justify-between gap-2 rounded-xl border border-brand/50 bg-brand/10 p-2.5 text-xs leading-snug text-ink">
+            <span>
+              <strong>Hay una versión nueva de FINANZA.</strong> Actualícela para ver los últimos cambios.
+            </span>
+            <button
+              type="button"
+              onClick={() => void aplicarActualizacion()}
+              className="shrink-0 rounded-full bg-brand px-3 py-1.5 text-xs font-semibold text-white"
+            >
+              Actualizar
+            </button>
+          </div>
+        </div>
+      ) : null}
+
       <main className="page-bottom-space min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4">
         {children}
       </main>
@@ -373,6 +405,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         entityName={activeEntity ? activeEntity.name : 'Todas las unidades'}
         onLogout={() => setConfirmLogout(true)}
         returnFocusTo={menuButtonRef.current}
+        instalacion={instalacion}
       />
 
       {/* Selector de unidad financiera */}

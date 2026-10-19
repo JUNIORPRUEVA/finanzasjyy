@@ -5,6 +5,7 @@ import { BrowserRouter } from 'react-router-dom';
 import App from './App';
 import { AuthProvider } from './store/auth';
 import { mirrorApiDataToLocalCache } from './lib/cache-mirror';
+import { registrarServiceWorker } from './lib/pwa';
 import './index.css';
 
 /**
@@ -58,6 +59,13 @@ const queryClient = new QueryClient({
  * sin conexión (ver `lib/cache-mirror.ts`).
  */
 mirrorApiDataToLocalCache(queryClient);
+
+/**
+ * Service worker: registra la app para funcionar sin conexión y, sobre todo,
+ * para poder AVISAR cuando hay una versión nueva. Sin este registro la
+ * actualización se quedaba esperando indefinidamente dentro del teléfono.
+ */
+registrarServiceWorker();
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

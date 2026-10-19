@@ -24,12 +24,23 @@ const processEnv =
  *   guardar y SIEMPRE lo marca como "sin conexión / provisional".
  */
 export default defineConfig({
+  // La versión y la fecha de compilación se incrustan en el código para poder
+  // verlas dentro de la app y comparar el teléfono con el servidor cuando algo
+  // «no cambia» (casi siempre es una copia vieja guardada por el móvil).
+  define: {
+    __APP_VERSION__: JSON.stringify(processEnv.npm_package_version ?? '0.0.0'),
+    __BUILD_TIME__: JSON.stringify(new Date().toISOString()),
+  },
   plugins: [
     react(),
     tailwindcss(),
     VitePWA({
       registerType: 'prompt',
-      injectRegister: 'auto',
+      // El registro lo hace la aplicación (ver `src/lib/pwa.ts`) para poder
+      // avisar al usuario de que hay una versión nueva. Con 'auto' se registraba
+      // sin avisar y la actualización se quedaba esperando para siempre: la app
+      // del móvil se quedaba en la versión vieja indefinidamente.
+      injectRegister: false,
       includeAssets: ['favicon.svg', 'favicon-32.png', 'apple-touch-icon.png'],
       manifest: {
         name: 'FINANZA — Control financiero',
