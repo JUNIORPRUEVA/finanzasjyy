@@ -99,14 +99,41 @@ test.describe('navegación inferior', () => {
     await expect(page).toHaveURL(/\/$/);
   });
 
-  test('el menú de añadir ofrece las acciones diarias y cada una abre su pantalla', async ({ page }) => {
+  test('el menú de añadir abre el formulario del movimiento sin salir de la pantalla', async ({ page }) => {
+    await ensureAuthenticated(page);
+    await page.goto('/movimientos');
+
+    // Las cuatro acciones de movimiento abren el formulario DENTRO del panel: se
+    // sigue en la misma pantalla, que es lo que hace que apuntar un gasto cueste
+    // dos toques y no una navegación de ida y vuelta.
+    const casos: Array<{ action: RegExp; titulo: string; campo: string }> = [
+      { action: /Registrar ingreso/, titulo: 'Registrar ingreso', campo: '¿Cuánto entró?' },
+      { action: /Registrar gasto/, titulo: 'Registrar gasto', campo: '¿Cuánto salió?' },
+      { action: /Retiro personal/, titulo: 'Retiro personal', campo: '¿Cuánto retiró?' },
+    ];
+
+    for (const caso of casos) {
+      await navAddButton(page).click();
+      await page.getByRole('button', { name: caso.action }).click();
+
+      await expect(page).toHaveURL(/\/movimientos/);
+      const dialogo = page.getByRole('dialog');
+      await expect(dialogo.getByText(caso.titulo, { exact: true })).toBeVisible();
+      await expect(dialogo.getByLabel(caso.campo)).toBeVisible();
+
+      // «Volver» regresa al menú, y desde ahí se cierra sin dejar nada abierto.
+      await page.getByRole('button', { name: 'Volver' }).click();
+      await expect(page.getByText('¿Qué quiere registrar?')).toBeVisible();
+      await page.getByRole('button', { name: 'Cerrar', exact: true }).first().click();
+      await expect(page.getByText('¿Qué quiere registrar?')).toBeHidden();
+    }
+  });
+
+  test('las acciones del menú de añadir que son pantallas navegan a donde dicen', async ({ page }) => {
     await ensureAuthenticated(page);
 
     const cases: Array<{ action: RegExp; url: RegExp; expectedLabel: string }> = [
-      { action: /Registrar ingreso/, url: /\/registrar\?kind=INCOME/, expectedLabel: '¿Cuánto entró?' },
-      { action: /Registrar gasto/, url: /\/registrar\?kind=EXPENSE/, expectedLabel: '¿Cuánto salió?' },
       { action: /Transferir dinero/, url: /\/traspasos/, expectedLabel: 'Traspaso' },
-      { action: /Retiro personal/, url: /\/registrar\?kind=OWNER_WITHDRAWAL/, expectedLabel: 'Retiro' },
       { action: /^Compras/, url: /\/compras/, expectedLabel: 'Nueva' },
       // La pantalla de cierre pide un «Día que se cierra»: es lo primero que se
       // ve siempre, haya o no movimientos ese día.

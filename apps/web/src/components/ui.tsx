@@ -3,6 +3,7 @@ import {
   IconAlert,
   IconCalendar,
   IconCheck,
+  IconChevronLeft,
   IconChevronRight,
   IconClose,
   IconEye,
@@ -909,32 +910,41 @@ export function SuccessMark({ label }: { label: string }) {
 /**
  * PANEL DE COLUMNA COMPLETA
  * -------------------------
- * Igual que la hoja inferior, pero ocupando TODO el alto, como una columna que
- * entra desde la derecha (en móvil, a pantalla completa).
+/**
+ * PANEL
+ * -----
+ * Dos formas de la misma idea:
  *
- * ¿Cuándo se usa uno u otro? La hoja inferior sirve para una decisión corta
- * («¿borrar?», «elige una unidad»). El panel es para formularios con varias
- * opciones —registrar un gasto, por ejemplo—: en una hoja, con el teclado
- * abierto, la mitad de los campos se quedan tapados. Aquí todo cabe, la cabecera
- * y las acciones quedan fijas y sólo se desplaza el contenido.
+ *  · `variant="center"` (por defecto en los menús): una tarjeta centrada, con
+ *    TODO el ancho de la pantalla y el alto de un menú de navegación (el que
+ *    pida el contenido, con tope). El fondo se difumina para que lo de detrás
+ *    no compita con lo que se está decidiendo.
+ *  · `variant="side"`: columna de alto completo que entra desde la derecha.
+ *    Para formularios largos, donde hace falta todo el alto.
  *
- * Se cierra como un menú de verdad: deslizándolo hacia la derecha (el mismo
- * gesto con el que se abre) o con Escape. Se exige recorrido horizontal para no
- * cerrarlo al desplazar la lista de dentro.
+ * En las dos, la cabecera y las acciones quedan fijas y sólo se desplaza el
+ * contenido. Se cierran con Escape, con la ✕ o deslizando hacia la derecha.
  */
 export function Panel({
   open,
   onClose,
+  onBack,
   title,
+  subtitle,
   children,
   footer,
+  variant = 'center',
 }: {
   open: boolean;
   onClose: () => void;
+  /** Si se indica, aparece una flecha para volver al paso anterior. */
+  onBack?: () => void;
   title?: string;
+  subtitle?: string;
   children: ReactNode;
   /** Acciones fijas abajo, siempre visibles. */
   footer?: ReactNode;
+  variant?: 'center' | 'side';
 }) {
   const titleId = useId();
   const gestoCierre = useRef<{ x: number; y: number } | null>(null);
@@ -961,43 +971,66 @@ export function Panel({
     return null;
   }
 
+  const centrado = variant === 'center';
+
+  const cerrarDeslizando = {
+    onTouchStart: (event: React.TouchEvent) => {
+      const punto = event.touches[0];
+      gestoCierre.current = { x: punto.clientX, y: punto.clientY };
+    },
+    onTouchEnd: (event: React.TouchEvent) => {
+      const desde = gestoCierre.current;
+      gestoCierre.current = null;
+      if (!desde) {
+        return;
+      }
+      const punto = event.changedTouches[0];
+      if (punto.clientX - desde.x > 60 && Math.abs(punto.clientY - desde.y) < 60) {
+        onClose();
+      }
+    },
+  };
+
   return (
     <div
-      className="fixed inset-0 z-50 flex justify-end"
+      className={`fixed inset-0 z-50 flex ${centrado ? 'items-center justify-center px-2 py-4' : 'justify-end'}`}
       role="dialog"
       aria-modal="true"
       aria-labelledby={title ? titleId : undefined}
     >
+      {/* El fondo difuminado: se ve que hay algo detrás, pero no distrae. */}
       <button
         type="button"
         aria-label="Cerrar el panel"
         onClick={onClose}
-        className="absolute inset-0 bg-black/60 backdrop-blur-[2px]"
+        className={`absolute inset-0 bg-black/55 ${centrado ? 'backdrop-blur-md' : 'backdrop-blur-[2px]'}`}
       />
 
       <div
-        className="relative flex h-full w-full max-w-lg animate-panel flex-col border-l border-border-soft bg-bg-elevated shadow-elevated"
-        style={{ paddingBottom: 'var(--safe-bottom)' }}
-        onTouchStart={(event) => {
-          const punto = event.touches[0];
-          gestoCierre.current = { x: punto.clientX, y: punto.clientY };
-        }}
-        onTouchEnd={(event) => {
-          const desde = gestoCierre.current;
-          gestoCierre.current = null;
-          if (!desde) {
-            return;
-          }
-          const punto = event.changedTouches[0];
-          if (punto.clientX - desde.x > 60 && Math.abs(punto.clientY - desde.y) < 60) {
-            onClose();
-          }
-        }}
+        {...cerrarDeslizando}
+        className={
+          centrado
+            ? 'relative flex max-h-[88dvh] w-full max-w-md animate-pop flex-col overflow-hidden rounded-[1.6rem] border border-border-soft bg-bg-elevated/95 shadow-elevated backdrop-blur-xl'
+            : 'relative flex h-full w-full max-w-lg animate-panel flex-col border-l border-border-soft bg-bg-elevated shadow-elevated'
+        }
+        style={centrado ? undefined : { paddingBottom: 'var(--safe-bottom)' }}
       >
-        <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border-soft px-4 pb-2 pt-[calc(var(--safe-top)+0.6rem)]">
-          <p id={titleId} className="min-w-0 truncate text-base font-semibold text-ink">
-            {title}
-          </p>
+        <div
+          className={`flex shrink-0 items-center gap-1 border-b border-border-soft ${
+            centrado ? 'px-2 py-1.5' : 'justify-between gap-2 px-4 pb-2 pt-[calc(var(--safe-top)+0.6rem)]'
+          }`}
+        >
+          {onBack ? (
+            <IconButton label="Volver" onClick={onBack}>
+              <IconChevronLeft size={20} />
+            </IconButton>
+          ) : null}
+          <div className="min-w-0 flex-1">
+            <p id={titleId} className="truncate text-base font-semibold text-ink">
+              {title}
+            </p>
+            {subtitle ? <p className="truncate text-xs text-muted">{subtitle}</p> : null}
+          </div>
           <IconButton label="Cerrar" onClick={onClose}>
             <IconClose size={20} />
           </IconButton>

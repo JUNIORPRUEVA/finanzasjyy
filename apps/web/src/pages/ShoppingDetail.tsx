@@ -865,10 +865,7 @@ export function ShoppingDetailPage() {
         }
       >
         <div className="space-y-3">
-          <Notice tone="info">
-            Se creará <strong>un movimiento de gasto</strong> con su asiento contable, igual que si lo registrara a mano.
-            Si vuelve a pulsar, no se duplicará: la lista sólo puede generar un gasto.
-          </Notice>
+          <Notice tone="info">Se registrará <strong>un movimiento de gasto</strong>. No se duplica si vuelve a pulsar.</Notice>
 
           <div className="rounded-xl border border-border-soft bg-surface p-3">
             <p className="text-[0.7rem] uppercase tracking-wide text-faint">Esta compra</p>
@@ -887,21 +884,17 @@ export function ShoppingDetailPage() {
               value: account.id,
               label: `${account.name}${account.isCreditCard ? ' (tarjeta)' : ''} · ${account.balance}`,
             }))}
-            placeholder="— Seleccione la cuenta —"
+            placeholder="Elija la cuenta"
           />
           <Select
             label="Categoría (opcional)"
             value={payCategoryId}
             onChange={setPayCategoryId}
             options={(categoriesQuery.data ?? []).map((category) => ({ value: category.id, label: category.name }))}
-            placeholder="— Sin categoría (se usará «Otros») —"
+            placeholder="Sin categoría"
           />
           <MoneyInput label="Importe pagado" value={payAmount} onChange={setPayAmount} />
           <Field label="Fecha del gasto" value={payDate} onChange={setPayDate} type="date" />
-          <p className="text-xs leading-snug text-faint">
-            El importe propuesto es lo que apuntó como real. Puede ajustarlo: lo que se contabiliza es lo que escriba
-            aquí.
-          </p>
         </div>
       </Panel>
 

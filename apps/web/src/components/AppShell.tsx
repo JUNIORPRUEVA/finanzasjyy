@@ -4,13 +4,14 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../lib/api';
 import { countPendingOperations, countShoppingPending } from '../lib/db';
 import { flushShoppingQueue } from '../lib/shopping-offline';
-import { localSyncStatus, syncPendingOperations } from '../lib/sync';
+import { syncPendingOperations } from '../lib/sync';
 import { useAuth } from '../store/auth';
 import { BOTTOM_NAV } from '../navigation/registry';
 import { aplicarActualizacion, EVENTO_ACTUALIZACION } from '../lib/pwa';
 import { useInstalacionApp } from '../lib/install';
 import { Badge, ConfirmDialog, Panel, Sheet } from './ui';
 import { Drawer } from './Drawer';
+import { MovimientoForm, type EntryKind } from './MovimientoForm';
 import { ToastHost, toast } from './Toast';
 import {
   IconAlert,
@@ -62,23 +63,30 @@ interface PendingTasks {
  * un ancla: se reconoce «el bolso» de Compras antes de leer nada. Van agrupadas
  * por para qué sirven, que es como se piensa al entrar aquí («voy a apuntar un
  * gasto» / «voy a la compra»), no por orden de llegada al código.
+ *
+ * Las cuatro primeras NO navegan: abren el formulario dentro del mismo panel.
+ * Así apuntar un gasto son dos toques (+ → «Registrar gasto») y no se sale de la
+ * pantalla en la que se estaba.
  */
 interface AccionRapida {
-  to: string;
   label: string;
   hint: string;
   icon: (props: IconProps) => React.ReactElement;
+  /** Movimiento: abre el formulario aquí mismo. */
+  kind?: EntryKind;
+  /** Pantalla: navega y cierra el panel. */
+  to?: string;
 }
 
 const QUICK_ACTIONS: Array<{ titulo: string; acciones: AccionRapida[] }> = [
   {
     titulo: 'Movimientos',
     acciones: [
-      { to: '/registrar?kind=INCOME', label: 'Registrar ingreso', hint: 'Entra dinero', icon: IconArrowDown },
-      { to: '/registrar?kind=EXPENSE', label: 'Registrar gasto', hint: 'Sale dinero', icon: IconArrowUp },
+      { kind: 'INCOME', label: 'Registrar ingreso', hint: 'Entra dinero', icon: IconArrowDown },
+      { kind: 'EXPENSE', label: 'Registrar gasto', hint: 'Sale dinero', icon: IconArrowUp },
       { to: '/traspasos', label: 'Transferir dinero', hint: 'Entre sus cuentas o negocios', icon: IconTransfer },
       {
-        to: '/registrar?kind=OWNER_WITHDRAWAL',
+        kind: 'OWNER_WITHDRAWAL',
         label: 'Retiro personal',
         hint: 'Saca dinero para usted, no es gasto',
         icon: IconWallet,
@@ -94,6 +102,14 @@ const QUICK_ACTIONS: Array<{ titulo: string; acciones: AccionRapida[] }> = [
   },
 ];
 
+const TITULO_FORMULARIO: Record<EntryKind, string> = {
+  INCOME: 'Registrar ingreso',
+  EXPENSE: 'Registrar gasto',
+  OWNER_WITHDRAWAL: 'Retiro personal',
+  OWNER_CONTRIBUTION: 'Registrar aporte',
+  ADJUSTMENT: 'Ajuste de saldo',
+};
+
 export function AppShell({ children }: { children: React.ReactNode }) {
   const { user, entities, sessionState, offlineAllowedUntil, reload, logout } = useAuth();
   const location = useLocation();
@@ -105,6 +121,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const [pendingShopping, setPendingShopping] = useState(0);
   const [syncing, setSyncing] = useState(false);
   const [quickOpen, setQuickOpen] = useState(false);
+  // Qué se está registrando dentro del panel del «+». `null` = menú de opciones.
+  const [quickKind, setQuickKind] = useState<EntryKind | null>(null);
   const [entitySheetOpen, setEntitySheetOpen] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [confirmLogout, setConfirmLogout] = useState(false);
@@ -151,6 +169,26 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       setDrawerOpen(true);
     }
   };
+  /**
+   * UNA OPERACIÓN A LA VEZ
+   * ----------------------
+   * Si ya hay un panel, una hoja o un diálogo abierto, el «+» no apila otra capa
+   * encima: primero se termina —o se cierra— lo que se estaba haciendo. Antes se
+   * podía acabar con el menú encima del formulario a medio rellenar.
+   */
+  const abrirAcciones = () => {
+    if (quickOpen || drawerOpen || entitySheetOpen || confirmLogout) {
+      return;
+    }
+    setQuickKind(null);
+    setQuickOpen(true);
+  };
+
+  const cerrarAcciones = () => {
+    setQuickOpen(false);
+    setQuickKind(null);
+  };
+
   const menuButtonRef = useRef<HTMLButtonElement | null>(null);
 
   const selectedEntityId = new URLSearchParams(location.search).get('entityId') ?? '';
@@ -161,12 +199,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     queryFn: () => api.get<PendingTasks>('/notifications/tasks'),
     enabled: Boolean(user) && isOnline,
     refetchInterval: 120_000,
-  });
-
-  const localStatusQuery = useQuery({
-    queryKey: ['local-sync-status'],
-    queryFn: localSyncStatus,
-    refetchInterval: 15_000,
   });
 
   useEffect(() => {
@@ -420,8 +452,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 <button
                   key={entry.id}
                   type="button"
-                  onClick={() => setQuickOpen(true)}
+                  onClick={abrirAcciones}
                   aria-label="Añadir movimiento"
+                  aria-haspopup="dialog"
                   className="flex flex-col items-center justify-center gap-0.5 px-2"
                 >
                   <span className="flex h-12 w-12 items-center justify-center rounded-full bg-brand text-white shadow-elevated transition active:scale-95">
@@ -507,57 +540,57 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </p>
       </Sheet>
 
-      {/* Acciones rápidas del botón central: menú de columna completa */}
+      {/* Acciones rápidas del botón central: tarjeta centrada con el fondo
+          difuminado. Dos pasos en el mismo panel: elegir, y rellenar. */}
       <Panel
         open={quickOpen}
-        onClose={() => setQuickOpen(false)}
-        title="¿Qué quiere registrar?"
-        footer={
-          localStatusQuery.data?.lastSyncedAt ? (
-            <p className="text-[0.7rem] leading-snug text-faint">
-              Última confirmación del servidor: {new Date(localStatusQuery.data.lastSyncedAt).toLocaleString('es-DO')}
-            </p>
-          ) : (
-            <p className="text-[0.7rem] leading-snug text-faint">
-              Lo que registre se guarda en el teléfono y se confirma solo cuando haya conexión.
-            </p>
-          )
-        }
+        onClose={cerrarAcciones}
+        onBack={quickKind ? () => setQuickKind(null) : undefined}
+        title={quickKind ? TITULO_FORMULARIO[quickKind] : '¿Qué quiere registrar?'}
+        subtitle={quickKind ? 'Importe, descripción y cuenta.' : undefined}
       >
-        <div className="space-y-5 pb-1">
-          {QUICK_ACTIONS.map((grupo) => (
-            <section key={grupo.titulo}>
-              <h2 className="px-1 pb-1.5 text-[0.68rem] font-semibold uppercase tracking-[0.08em] text-faint">
-                {grupo.titulo}
-              </h2>
-              <div className="divide-y divide-border-soft overflow-hidden rounded-2xl border border-border-soft bg-surface">
-                {grupo.acciones.map((accion) => {
-                  const Icon = accion.icon;
-                  return (
-                    <button
-                      key={accion.to}
-                      type="button"
-                      onClick={() => {
-                        setQuickOpen(false);
-                        void navigate(accion.to);
-                      }}
-                      className="flex w-full min-h-[3.5rem] items-center gap-3 px-3 py-2.5 text-left transition hover:bg-surface-2 active:bg-surface-2"
-                    >
-                      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-brand-soft text-brand">
-                        <Icon size={20} />
-                      </span>
-                      <span className="min-w-0 flex-1">
-                        <span className="block truncate text-sm font-semibold text-ink">{accion.label}</span>
-                        <span className="block truncate text-[0.72rem] leading-snug text-muted">{accion.hint}</span>
-                      </span>
-                      <IconChevronRight size={18} className="shrink-0 text-faint" />
-                    </button>
-                  );
-                })}
-              </div>
-            </section>
-          ))}
-        </div>
+        {quickKind ? (
+          <MovimientoForm initialKind={quickKind} onSaved={cerrarAcciones} />
+        ) : (
+          <div className="space-y-4">
+            {QUICK_ACTIONS.map((grupo) => (
+              <section key={grupo.titulo}>
+                <h2 className="px-1 pb-1.5 text-[0.68rem] font-semibold uppercase tracking-[0.08em] text-faint">
+                  {grupo.titulo}
+                </h2>
+                <div className="divide-y divide-border-soft overflow-hidden rounded-2xl border border-border-soft bg-surface">
+                  {grupo.acciones.map((accion) => {
+                    const Icon = accion.icon;
+                    return (
+                      <button
+                        key={accion.kind ?? accion.to}
+                        type="button"
+                        onClick={() => {
+                          if (accion.kind) {
+                            setQuickKind(accion.kind);
+                            return;
+                          }
+                          cerrarAcciones();
+                          void navigate(accion.to!);
+                        }}
+                        className="flex min-h-[3.5rem] w-full items-center gap-3 px-3 py-2.5 text-left transition hover:bg-surface-2 active:bg-surface-2"
+                      >
+                        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-brand-soft text-brand">
+                          <Icon size={20} />
+                        </span>
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate text-sm font-semibold text-ink">{accion.label}</span>
+                          <span className="block truncate text-[0.72rem] leading-snug text-muted">{accion.hint}</span>
+                        </span>
+                        <IconChevronRight size={18} className="shrink-0 text-faint" />
+                      </button>
+                    );
+                  })}
+                </div>
+              </section>
+            ))}
+          </div>
+        )}
       </Panel>
 
       <ConfirmDialog
