@@ -33,6 +33,7 @@ import {
 import { countShoppingPending } from '../lib/db';
 import { formatMoney, todayBusinessDate } from '../lib/format';
 import { groupItems, listToPlainText, nutritionAdvice } from '../lib/shopping-assistant';
+import { PLANTILLAS, productosNuevos, type Plantilla } from '../lib/shopping-templates';
 
 /**
  * DETALLE DE UNA LISTA DE COMPRAS
@@ -75,6 +76,10 @@ export function ShoppingDetailPage() {
   // Ordenar la compra por pasillos (encendido por defecto: en la tienda es lo
   // único que permite ir en línea recta en vez de dar vueltas al pasillo 4).
   const [porPasillo, setPorPasillo] = useState(true);
+
+  // Plantillas de compra (compra semanal, despensa, limpieza…).
+  const [plantillasOpen, setPlantillasOpen] = useState(false);
+  const [aplicando, setAplicando] = useState(false);
 
   const [paying, setPaying] = useState(false);
   const [payAccountId, setPayAccountId] = useState('');
@@ -184,6 +189,63 @@ export function ShoppingDetailPage() {
     document.body.classList.add('con-hoja-imprimible');
     return () => document.body.classList.remove('con-hoja-imprimible');
   }, []);
+
+  /**
+   * Añade los productos de una plantilla saltándose los que ya están en la lista.
+   * Con conexión se envía uno a uno al servidor (si algo falla, se sabe cuál);
+   * sin conexión se guardan todos de golpe en el dispositivo.
+   */
+  const aplicarPlantilla = async (plantilla: Plantilla) => {
+    if (!list) {
+      return;
+    }
+    const { nuevos } = productosNuevos(plantilla, list.items);
+    if (nuevos.length === 0) {
+      toast.info('No hay nada que añadir', 'Esos productos ya están en la lista.');
+      return;
+    }
+
+    setAplicando(true);
+    try {
+      if (navigator.onLine && isServerList(list)) {
+        for (const item of nuevos) {
+          await api.post(`/shopping-lists/${list.id}/items`, {
+            name: item.name,
+            quantity: item.quantity,
+            unit: null,
+            estimatedUnitPrice: null,
+          });
+        }
+      } else {
+        await updateLocalList(list.id, (snapshot) => ({
+          ...snapshot,
+          items: [
+            ...snapshot.items,
+            ...nuevos.map((item, index) => ({
+              id: `${snapshot.id}_p${snapshot.items.length + index}_${Date.now().toString(36)}`,
+              name: item.name,
+              quantity: item.quantity,
+              unit: null,
+              estimatedUnitPrice: null,
+              actualUnitPrice: null,
+              isPurchased: false,
+              categoryId: null,
+            })),
+          ],
+        }));
+      }
+      setPlantillasOpen(false);
+      await refresh();
+      toast.success(`${nuevos.length} productos añadidos`, plantilla.label);
+    } catch (error) {
+      toast.error(
+        'No se pudo añadir la plantilla',
+        error instanceof ApiError ? error.message : 'Compruebe su conexión e inténtelo de nuevo.',
+      );
+    } finally {
+      setAplicando(false);
+    }
+  };
 
 
   /** Todo cambio con conexión se envía; sin conexión se guarda y se marca. */
@@ -523,6 +585,15 @@ export function ShoppingDetailPage() {
                   />
                 </div>
               </div>
+
+              {/* Atajo para no teclear veinte productos: plantillas de lo que se repite. */}
+              <button
+                type="button"
+                onClick={() => setPlantillasOpen(true)}
+                className="mt-2 w-full text-center text-[0.7rem] font-medium text-brand underline decoration-dotted underline-offset-2"
+              >
+                Empezar con una plantilla…
+              </button>
             </div>
           ) : null}
 
@@ -589,6 +660,13 @@ export function ShoppingDetailPage() {
           <EmptyState
             title="Lista vacía"
             hint="Añada productos con su cantidad y el precio que espera pagar. Así sabrá cuánto va a gastar antes de salir."
+            action={
+              !registered ? (
+                <Button variant="secondary" onClick={() => setPlantillasOpen(true)}>
+                  Empezar con una plantilla
+                </Button>
+              ) : undefined
+            }
           />
         ) : porPasillo ? (
         <div className="space-y-2.5">
@@ -822,6 +900,45 @@ export function ShoppingDetailPage() {
         onCancel={() => setToDeleteItem(null)}
         onConfirm={() => void deleteItem()}
       />
+
+      {/* Plantillas: lo que se compra igual cada semana o cada mes. */}
+      <Sheet open={plantillasOpen} onClose={() => setPlantillasOpen(false)} title="Empezar con una plantilla">
+        <div className="space-y-2 pb-2">
+          {PLANTILLAS.map((plantilla) => {
+            const { nuevos, repetidos } = productosNuevos(plantilla, list.items);
+            const sinNadaNuevo = nuevos.length === 0;
+            return (
+              <button
+                key={plantilla.id}
+                type="button"
+                disabled={aplicando || sinNadaNuevo}
+                onClick={() => void aplicarPlantilla(plantilla)}
+                className="flex w-full items-start gap-3 rounded-xl border border-border-soft p-3 text-left transition hover:bg-surface-2 active:bg-surface-3 disabled:opacity-50"
+              >
+                <span aria-hidden className="text-xl leading-none">
+                  {plantilla.emoji}
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block text-sm font-semibold text-ink">{plantilla.label}</span>
+                  <span className="mt-0.5 block text-xs leading-snug text-muted">{plantilla.description}</span>
+                  <span className="mt-1 block text-[0.68rem] text-faint">
+                    {sinNadaNuevo
+                      ? 'Ya están todos en la lista'
+                      : `${nuevos.length} producto(s)` +
+                        (repetidos > 0 ? ` · ${repetidos} ya en la lista` : '')}
+                  </span>
+                </span>
+              </button>
+            );
+          })}
+
+          <p className="pt-1 text-[0.7rem] leading-snug text-faint">
+            {aplicando
+              ? 'Añadiendo los productos…'
+              : 'Los precios no vienen rellenos a propósito: se ponen al comprar, o se dejan vacíos.'}
+          </p>
+        </div>
+      </Sheet>
 
       {/*
         HOJA PARA IMPRIMIR O GUARDAR EN PDF
