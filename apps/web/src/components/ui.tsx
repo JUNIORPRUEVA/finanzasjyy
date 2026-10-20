@@ -917,6 +917,10 @@ export function SuccessMark({ label }: { label: string }) {
  * opciones —registrar un gasto, por ejemplo—: en una hoja, con el teclado
  * abierto, la mitad de los campos se quedan tapados. Aquí todo cabe, la cabecera
  * y las acciones quedan fijas y sólo se desplaza el contenido.
+ *
+ * Se cierra como un menú de verdad: deslizándolo hacia la derecha (el mismo
+ * gesto con el que se abre) o con Escape. Se exige recorrido horizontal para no
+ * cerrarlo al desplazar la lista de dentro.
  */
 export function Panel({
   open,
@@ -933,6 +937,7 @@ export function Panel({
   footer?: ReactNode;
 }) {
   const titleId = useId();
+  const gestoCierre = useRef<{ x: number; y: number } | null>(null);
 
   useEffect(() => {
     if (!open) {
@@ -973,6 +978,21 @@ export function Panel({
       <div
         className="relative flex h-full w-full max-w-lg animate-panel flex-col border-l border-border-soft bg-bg-elevated shadow-elevated"
         style={{ paddingBottom: 'var(--safe-bottom)' }}
+        onTouchStart={(event) => {
+          const punto = event.touches[0];
+          gestoCierre.current = { x: punto.clientX, y: punto.clientY };
+        }}
+        onTouchEnd={(event) => {
+          const desde = gestoCierre.current;
+          gestoCierre.current = null;
+          if (!desde) {
+            return;
+          }
+          const punto = event.changedTouches[0];
+          if (punto.clientX - desde.x > 60 && Math.abs(punto.clientY - desde.y) < 60) {
+            onClose();
+          }
+        }}
       >
         <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border-soft px-4 pb-2 pt-[calc(var(--safe-top)+0.6rem)]">
           <p id={titleId} className="min-w-0 truncate text-base font-semibold text-ink">

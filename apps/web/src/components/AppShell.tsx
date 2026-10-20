@@ -9,17 +9,24 @@ import { useAuth } from '../store/auth';
 import { BOTTOM_NAV } from '../navigation/registry';
 import { aplicarActualizacion, EVENTO_ACTUALIZACION } from '../lib/pwa';
 import { useInstalacionApp } from '../lib/install';
-import { Badge, ConfirmDialog, Sheet } from './ui';
+import { Badge, ConfirmDialog, Panel, Sheet } from './ui';
 import { Drawer } from './Drawer';
 import { ToastHost, toast } from './Toast';
 import {
   IconAlert,
+  IconArrowDown,
+  IconArrowUp,
+  IconBag,
   IconBuilding,
   IconCheck,
+  IconChevronRight,
   IconMenu,
   IconRefresh,
+  IconTransfer,
+  IconWallet,
   IconWifiOff,
 } from './icons';
+import type { IconProps } from './icons';
 
 /**
  * ESTRUCTURA DE LA APLICACIÓN
@@ -48,13 +55,43 @@ interface PendingTasks {
   level: string;
 }
 
-const QUICK_ACTIONS = [
-  { to: '/registrar?kind=INCOME', label: 'Registrar ingreso', hint: 'Entra dinero' },
-  { to: '/registrar?kind=EXPENSE', label: 'Registrar gasto', hint: 'Sale dinero' },
-  { to: '/traspasos', label: 'Transferir dinero', hint: 'Entre cuentas o negocios' },
-  { to: '/registrar?kind=OWNER_WITHDRAWAL', label: 'Retiro personal', hint: 'Su dinero, no gasto' },
-  { to: '/compras', label: 'Compras', hint: 'Lista de la compra' },
-  { to: '/cierres', label: 'Cerrar el día', hint: 'Conciliar y confirmar' },
+/**
+ * ACCIONES RÁPIDAS DEL BOTÓN CENTRAL
+ * ----------------------------------
+ * Cada una lleva su icono porque en una lista de seis opciones la vista necesita
+ * un ancla: se reconoce «el bolso» de Compras antes de leer nada. Van agrupadas
+ * por para qué sirven, que es como se piensa al entrar aquí («voy a apuntar un
+ * gasto» / «voy a la compra»), no por orden de llegada al código.
+ */
+interface AccionRapida {
+  to: string;
+  label: string;
+  hint: string;
+  icon: (props: IconProps) => React.ReactElement;
+}
+
+const QUICK_ACTIONS: Array<{ titulo: string; acciones: AccionRapida[] }> = [
+  {
+    titulo: 'Movimientos',
+    acciones: [
+      { to: '/registrar?kind=INCOME', label: 'Registrar ingreso', hint: 'Entra dinero', icon: IconArrowDown },
+      { to: '/registrar?kind=EXPENSE', label: 'Registrar gasto', hint: 'Sale dinero', icon: IconArrowUp },
+      { to: '/traspasos', label: 'Transferir dinero', hint: 'Entre sus cuentas o negocios', icon: IconTransfer },
+      {
+        to: '/registrar?kind=OWNER_WITHDRAWAL',
+        label: 'Retiro personal',
+        hint: 'Saca dinero para usted, no es gasto',
+        icon: IconWallet,
+      },
+    ],
+  },
+  {
+    titulo: 'Otros',
+    acciones: [
+      { to: '/compras', label: 'Compras', hint: 'Lista de la compra', icon: IconBag },
+      { to: '/cierres', label: 'Cerrar el día', hint: 'Cuadrar las cuentas del día', icon: IconCheck },
+    ],
+  },
 ];
 
 export function AppShell({ children }: { children: React.ReactNode }) {
@@ -470,30 +507,58 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </p>
       </Sheet>
 
-      {/* Acciones rápidas del botón central */}
-      <Sheet open={quickOpen} onClose={() => setQuickOpen(false)} title="¿Qué quiere registrar?">
-        <div className="grid grid-cols-2 gap-2 pb-3">
-          {QUICK_ACTIONS.map((action) => (
-            <button
-              key={action.to}
-              type="button"
-              onClick={() => {
-                setQuickOpen(false);
-                void navigate(action.to);
-              }}
-              className="flex min-h-[4.25rem] flex-col items-start gap-0.5 rounded-xl border border-border-soft bg-surface p-3 text-left transition active:bg-surface-2"
-            >
-              <span className="text-sm font-semibold text-ink">{action.label}</span>
-              <span className="text-[0.7rem] leading-snug text-muted">{action.hint}</span>
-            </button>
+      {/* Acciones rápidas del botón central: menú de columna completa */}
+      <Panel
+        open={quickOpen}
+        onClose={() => setQuickOpen(false)}
+        title="¿Qué quiere registrar?"
+        footer={
+          localStatusQuery.data?.lastSyncedAt ? (
+            <p className="text-[0.7rem] leading-snug text-faint">
+              Última confirmación del servidor: {new Date(localStatusQuery.data.lastSyncedAt).toLocaleString('es-DO')}
+            </p>
+          ) : (
+            <p className="text-[0.7rem] leading-snug text-faint">
+              Lo que registre se guarda en el teléfono y se confirma solo cuando haya conexión.
+            </p>
+          )
+        }
+      >
+        <div className="space-y-5 pb-1">
+          {QUICK_ACTIONS.map((grupo) => (
+            <section key={grupo.titulo}>
+              <h2 className="px-1 pb-1.5 text-[0.68rem] font-semibold uppercase tracking-[0.08em] text-faint">
+                {grupo.titulo}
+              </h2>
+              <div className="divide-y divide-border-soft overflow-hidden rounded-2xl border border-border-soft bg-surface">
+                {grupo.acciones.map((accion) => {
+                  const Icon = accion.icon;
+                  return (
+                    <button
+                      key={accion.to}
+                      type="button"
+                      onClick={() => {
+                        setQuickOpen(false);
+                        void navigate(accion.to);
+                      }}
+                      className="flex w-full min-h-[3.5rem] items-center gap-3 px-3 py-2.5 text-left transition hover:bg-surface-2 active:bg-surface-2"
+                    >
+                      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-brand-soft text-brand">
+                        <Icon size={20} />
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-sm font-semibold text-ink">{accion.label}</span>
+                        <span className="block truncate text-[0.72rem] leading-snug text-muted">{accion.hint}</span>
+                      </span>
+                      <IconChevronRight size={18} className="shrink-0 text-faint" />
+                    </button>
+                  );
+                })}
+              </div>
+            </section>
           ))}
         </div>
-        {localStatusQuery.data?.lastSyncedAt ? (
-          <p className="pb-2 text-[0.68rem] text-faint">
-            Última confirmación del servidor: {new Date(localStatusQuery.data.lastSyncedAt).toLocaleString('es-DO')}
-          </p>
-        ) : null}
-      </Sheet>
+      </Panel>
 
       <ConfirmDialog
         open={confirmLogout}
