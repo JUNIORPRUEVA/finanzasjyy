@@ -64,12 +64,19 @@ Las claves **no** están en este repositorio ni en este documento. En el servido
 
 ### Compras: lo que ya está y cómo funciona
 
+- **Modo tienda** (pestaña en Compras): deja de esperar al servidor para las listas. Todo se guarda en el
+  teléfono al instante y se envía solo al desactivarlo (o a las 3 horas). Pensado para cuando en el súper
+  la señal va y viene. Fuera de las listas, la app no cambia de comportamiento.
+- **Sin señal no se espera**: si el teléfono sabe que no hay red, la petición falla al instante (antes se
+  quedaba «cargando» hasta 20 s; ahora el límite es 8 s). Las pantallas siguen con lo último conocido.
 - **Repartir la compra**: parte lo que falta por comprar en dos, **por pasillos** (un pasillo nunca se
   parte entre dos personas). Cada parte se puede compartir como texto (WhatsApp, Bluetooth, nota), así
   la otra persona compra sin tener la app ni conexión. No modifica la lista.
 - **Dos teléfonos con internet**: la lista abierta se vuelve a leer cada 7 s con la pantalla a la vista,
   así lo que marca uno aparece en el otro sin recargar. Con cambios propios sin enviar, no se refresca
   (esos se mandan primero).
+- **Antes de salir de casa**: abra la lista una vez con conexión; queda guardada en el teléfono y en el
+  súper se abre sin red.
 - **Sin internet**: cada teléfono guarda lo suyo y se junta al volver la conexión. No hay sincronía en
   vivo entre dos teléfonos sin red (ver pendiente 4).
 

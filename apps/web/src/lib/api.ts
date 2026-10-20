@@ -77,6 +77,60 @@ export class OfflineError extends Error {
 }
 
 /**
+ * MODO TIENDA (trabajar sin conexión en el supermercado)
+ * =====================================================
+ * En un súper la señal va y viene. Cuando el usuario activa el modo tienda, la
+ * app NO espera al servidor para lo relativo a las listas de compras: trabaja
+ * contra la copia del teléfono al instante y lo deja en la cola para enviarlo
+ * cuando vuelva la red.
+ *
+ * Se guarda con caducidad para que nadie se quede «sin conexión» para siempre
+ * por haberse olvidado de apagarlo.
+ */
+const MODO_TIENDA_KEY = 'finanza.modoTiendaHasta';
+
+/** Milisegundos de caducidad si no se indica otra cosa (3 horas de compra). */
+export const MODO_TIENDA_HORAS = 3;
+
+export function modoTiendaHasta(): number | null {
+  try {
+    const guardado = Number(localStorage.getItem(MODO_TIENDA_KEY));
+    if (!Number.isFinite(guardado) || guardado <= 0) {
+      return null;
+    }
+    if (guardado <= Date.now()) {
+      localStorage.removeItem(MODO_TIENDA_KEY);
+      return null;
+    }
+    return guardado;
+  } catch {
+    return null;
+  }
+}
+
+export function modoTiendaActivo(): boolean {
+  return modoTiendaHasta() !== null;
+}
+
+export function activarModoTienda(horas = MODO_TIENDA_HORAS): number {
+  const hasta = Date.now() + horas * 3_600_000;
+  try {
+    localStorage.setItem(MODO_TIENDA_KEY, String(hasta));
+  } catch {
+    // Sin almacenamiento: el modo vale sólo para esta pantalla.
+  }
+  return hasta;
+}
+
+export function desactivarModoTienda(): void {
+  try {
+    localStorage.removeItem(MODO_TIENDA_KEY);
+  } catch {
+    // Nada que limpiar.
+  }
+}
+
+/**
  * El servidor no ha podido confirmar la sesión por un problema temporal
  * (timeout, 502/503, red intermitente). NO es un cierre de sesión: se conserva el
  * estado y se reintenta.
@@ -319,6 +373,19 @@ export async function startSession(
 export async function apiRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const { method = 'GET', body, skipRefresh = false, signal } = options;
 
+  // SIN SEÑAL NO SE ESPERA: si el teléfono dice que no hay red, se falla al
+  // instante y la capa de compras trabaja con la copia del teléfono. Antes se
+  // intentaba igual y la pantalla se quedaba «cargando» hasta el límite.
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+    throw new OfflineError();
+  }
+
+  // MODO TIENDA: sólo afecta a las listas de compras (lo que se usa en la
+  // tienda). El resto de la app sigue hablando con el servidor como siempre.
+  if (path.startsWith('/shopping-lists') && modoTiendaActivo()) {
+    throw new OfflineError('Modo tienda: se guarda en el teléfono y se envía al desactivarlo.');
+  }
+
   const headers: Record<string, string> = {
     'X-Device-Id': deviceInfo.deviceId(),
   };
@@ -335,7 +402,7 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
   // colgada indefinidamente. Sin límite, la pantalla se queda «cargando» para
   // siempre y el usuario no sabe si el movimiento se registró. Con límite, falla
   // rápido, se conserva en la cola y se reintenta.
-  const timeoutMs = Number((import.meta as { env?: Record<string, string> }).env?.VITE_API_TIMEOUT_MS ?? 20_000);
+  const timeoutMs = Number((import.meta as { env?: Record<string, string> }).env?.VITE_API_TIMEOUT_MS ?? 8_000);
   const controller = signal ? null : new AbortController();
   const effectiveSignal = signal ?? controller?.signal;
   let timedOut = false;

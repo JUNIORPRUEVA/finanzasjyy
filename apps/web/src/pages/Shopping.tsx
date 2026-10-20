@@ -1,6 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { api, ApiError } from '../lib/api';
+import {
+  activarModoTienda,
+  api,
+  ApiError,
+  desactivarModoTienda,
+  modoTiendaActivo,
+} from '../lib/api';
 import { useAuth } from '../store/auth';
 import {
   Badge,
@@ -53,6 +59,8 @@ export function ShoppingPage() {
   const [busqueda, setBusqueda] = useState('');
   const [buscando, setBuscando] = useState(false);
   const [pending, setPending] = useState(0);
+  // Modo tienda: trabajar sin esperar al servidor (la señal del súper va y viene).
+  const [modoTienda, setModoTienda] = useState(() => modoTiendaActivo());
 
   const [creating, setCreating] = useState(false);
   const [newName, setNewName] = useState('');
@@ -112,6 +120,27 @@ export function ShoppingPage() {
   const cerrarBusqueda = () => {
     setBuscando(false);
     setBusqueda('');
+  };
+
+  /**
+   * Modo tienda: se activa antes de entrar al súper para que la app no espere al
+   * servidor (la señal allí va y viene). Al desactivarlo se envían de golpe los
+   * cambios que quedaron guardados.
+   */
+  const alternarModoTienda = async () => {
+    if (modoTienda) {
+      desactivarModoTienda();
+      setModoTienda(false);
+      const resultado = await flushShoppingQueue();
+      if (resultado.sent > 0) {
+        toast.success(`${resultado.sent} cambio(s) enviados al servidor.`);
+      }
+      await refresh();
+      return;
+    }
+    activarModoTienda();
+    setModoTienda(true);
+    toast.info('Modo tienda activado', 'Los cambios se guardan en el teléfono y se envían al desactivarlo.');
   };
 
   const create = async () => {
@@ -321,6 +350,22 @@ export function ShoppingPage() {
                 {opcion.label}
               </button>
             ))}
+
+            {/* En el súper la señal va y viene. Con esto la app deja de esperar al
+                servidor para las listas y trabaja contra el teléfono al instante. */}
+            <button
+              type="button"
+              onClick={() => void alternarModoTienda()}
+              aria-pressed={modoTienda}
+              title="Trabajar sin esperar al servidor (la compra se guarda en el teléfono)"
+              className={`ml-auto rounded-full px-3 py-1.5 text-xs font-semibold transition ${
+                modoTienda
+                  ? 'bg-warning/20 text-ink ring-1 ring-warning/50'
+                  : 'text-muted ring-1 ring-border-soft hover:text-ink'
+              }`}
+            >
+              {modoTienda ? 'Modo tienda: sí' : 'Modo tienda'}
+            </button>
           </div>
         </>
       }

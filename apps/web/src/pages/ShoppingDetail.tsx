@@ -2,7 +2,7 @@ import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { api, ApiError } from '../lib/api';
+import { api, ApiError, desactivarModoTienda, modoTiendaActivo } from '../lib/api';
 import { useAuth } from '../store/auth';
 import {
   Button,
@@ -90,6 +90,10 @@ export function ShoppingDetailPage() {
 
   // Repartir la compra entre dos personas (por pasillos, sin partir ninguno).
   const [repartirOpen, setRepartirOpen] = useState(false);
+
+  // Modo tienda: no se espera al servidor para las listas (la señal del súper va
+  // y viene). Se activa desde la pantalla de Compras.
+  const [modoTienda, setModoTienda] = useState(() => modoTiendaActivo());
 
   // Plantillas de compra (compra semanal, despensa, limpieza…).
   const [plantillasOpen, setPlantillasOpen] = useState(false);
@@ -236,6 +240,17 @@ export function ShoppingDetailPage() {
     enlace.download = `${list.name.replace(/[^\w\s-]/g, '').trim() || 'lista-de-compras'}.txt`;
     enlace.click();
     URL.revokeObjectURL(url);
+  };
+
+  /** Salir del modo tienda: se envían de golpe los cambios guardados. */
+  const salirDeModoTienda = async () => {
+    desactivarModoTienda();
+    setModoTienda(false);
+    const resultado = await flushShoppingQueue();
+    if (resultado.sent > 0) {
+      toast.success(`${resultado.sent} cambio(s) enviados al servidor.`);
+    }
+    await refresh();
   };
 
   /** Imprimir o guardar como PDF con el diálogo del navegador (sin servidores). */
@@ -737,6 +752,20 @@ export function ShoppingDetailPage() {
         <Notice tone="warning" title="Sin conexión con el servidor">
           Puede seguir preparando y editando la lista: los cambios se guardan en este dispositivo y se enviarán solos.
           Para <strong>registrar el gasto</strong> hace falta conexión, porque mueve dinero real.
+        </Notice>
+      ) : null}
+
+      {modoTienda ? (
+        <Notice tone="info" title="Modo tienda activo">
+          La app no espera al servidor: lo que marque se guarda en este teléfono y se envía solo al desactivar el
+          modo.{' '}
+          <button
+            type="button"
+            onClick={() => void salirDeModoTienda()}
+            className="font-semibold text-brand underline"
+          >
+            Salir del modo tienda
+          </button>
         </Notice>
       ) : null}
 
