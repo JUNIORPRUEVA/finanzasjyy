@@ -1,7 +1,6 @@
 import type { ComponentType } from 'react';
 import {
   IconBag,
-  IconBell,
   IconBuilding,
   IconCalendar,
   IconChart,
@@ -136,16 +135,9 @@ export const DRAWER_ENTRIES: NavEntry[] = [
     availability: 'ready',
     order: 10,
   },
-  {
-    id: 'compras-listas',
-    label: 'Listas de compras',
-    hint: 'Qué falta y cuánto costará',
-    icon: IconBag,
-    to: '/compras',
-    group: 'gestion',
-    availability: 'ready',
-    order: 11,
-  },
+  // «Listas de compras» se retiró del menú: Compras ya está en la barra inferior
+  // y tenerlo dos veces era ruido (el dueño lo señaló). Las listas se abren
+  // desde el propio módulo de Compras.
   {
     id: 'traspasos',
     label: 'Traspasos',
@@ -166,35 +158,17 @@ export const DRAWER_ENTRIES: NavEntry[] = [
     availability: 'ready',
     order: 13,
   },
+  // «Por cobrar», «por pagar» y «recurrentes» son tres pestañas de la MISMA
+  // pantalla: se quedan en una entrada, como en Ajustes.
   {
-    id: 'cobrar',
-    label: 'Cuentas por cobrar',
-    hint: 'Lo que le deben',
+    id: 'obligaciones',
+    label: 'Obligaciones',
+    hint: 'Por cobrar, por pagar y recurrentes',
     icon: IconChart,
-    to: '/obligaciones?tab=receivables',
+    to: '/obligaciones',
     group: 'gestion',
     availability: 'ready',
     order: 14,
-  },
-  {
-    id: 'pagar',
-    label: 'Cuentas por pagar',
-    hint: 'Lo que usted debe',
-    icon: IconChart,
-    to: '/obligaciones?tab=payables',
-    group: 'gestion',
-    availability: 'ready',
-    order: 15,
-  },
-  {
-    id: 'recurrentes',
-    label: 'Obligaciones recurrentes',
-    hint: 'Lo que se repite cada mes',
-    icon: IconCalendar,
-    to: '/obligaciones?tab=recurring',
-    group: 'gestion',
-    availability: 'ready',
-    order: 16,
   },
   {
     id: 'presupuestos',
@@ -271,55 +245,17 @@ export const DRAWER_ENTRIES: NavEntry[] = [
   },
 
   // --- Configuración --------------------------------------------------------
+  // Un solo acceso: perfil, apariencia, moneda, avisos y seguridad son pestañas
+  // de la misma pantalla. Cinco entradas para lo mismo era ruido en el menú.
   {
-    id: 'perfil',
-    label: 'Perfil',
-    hint: 'Su nombre, correo y contraseña',
+    id: 'ajustes',
+    label: 'Ajustes',
+    hint: 'Perfil, apariencia, moneda y seguridad',
     icon: IconSettings,
     to: '/ajustes',
     group: 'config',
     availability: 'ready',
     order: 30,
-  },
-  {
-    id: 'apariencia',
-    label: 'Apariencia',
-    hint: 'Claro, oscuro o como el sistema',
-    icon: IconSettings,
-    to: '/ajustes?tab=apariencia',
-    group: 'config',
-    availability: 'ready',
-    order: 31,
-  },
-  {
-    id: 'preferencias',
-    label: 'Configuración general',
-    hint: 'Moneda, zona horaria y avisos',
-    icon: IconSettings,
-    to: '/ajustes?tab=preferencias',
-    group: 'config',
-    availability: 'ready',
-    order: 32,
-  },
-  {
-    id: 'notificaciones',
-    label: 'Notificaciones',
-    hint: 'Avisos en este dispositivo',
-    icon: IconBell,
-    to: '/ajustes?tab=notificaciones',
-    group: 'config',
-    availability: 'ready',
-    order: 33,
-  },
-  {
-    id: 'seguridad',
-    label: 'Seguridad y dispositivos',
-    hint: 'Contraseña y sesiones abiertas',
-    icon: IconLock,
-    to: '/ajustes?tab=seguridad',
-    group: 'config',
-    availability: 'ready',
-    order: 34,
   },
   {
     id: 'sincronizacion',

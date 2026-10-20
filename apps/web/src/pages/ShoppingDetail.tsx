@@ -23,7 +23,7 @@ import {
 } from '../components/ui';
 import { toast } from '../components/Toast';
 import { BotonNuevaCategoria, NuevaCategoriaSheet } from '../components/NuevaCategoriaSheet';
-import { IconArrowDown, IconCheck, IconChevronLeft, IconClose, IconFile, IconPlus, IconShare } from '../components/icons';
+import { IconArrowDown, IconCheck, IconChevronLeft, IconClose, IconFile, IconPlus, IconSearch, IconShare } from '../components/icons';
 import {
   flushShoppingQueue,
   isServerList,
@@ -34,8 +34,9 @@ import {
 } from '../lib/shopping-offline';
 import { countShoppingPending } from '../lib/db';
 import { formatMoney, todayBusinessDate } from '../lib/format';
-import { groupItems, listToPlainText, nutritionAdvice } from '../lib/shopping-assistant';
+import { groupItems, fold, listToPlainText, nutritionAdvice } from '../lib/shopping-assistant';
 import { PLANTILLAS, productosNuevos, type Plantilla } from '../lib/shopping-templates';
+import { repartirCompra, textoDeParte, type ParteCompra } from '../lib/shopping-split';
 
 /**
  * DETALLE DE UNA LISTA DE COMPRAS
@@ -65,6 +66,9 @@ export function ShoppingDetailPage() {
   const [addQuantity, setAddQuantity] = useState('1');
   const [addPrice, setAddPrice] = useState('');
   const [adding, setAdding] = useState(false);
+  // Añadir vive en su propio diágolo, que abre el botón flotante: en la
+  // pantalla sólo queda la lupa y la lista, que es lo que se mira en la tienda.
+  const [addOpen, setAddOpen] = useState(false);
 
   const [editing, setEditing] = useState<RemoteShoppingItem | null>(null);
   const [editName, setEditName] = useState('');
@@ -78,6 +82,14 @@ export function ShoppingDetailPage() {
   // Ordenar la compra por pasillos (encendido por defecto: en la tienda es lo
   // único que permite ir en línea recta en vez de dar vueltas al pasillo 4).
   const [porPasillo, setPorPasillo] = useState(true);
+
+  // Buscar dentro de la lista: con 20 productos, encontrar «el papel» de un
+  // tirón es lo que evita recorrer la lista entera en mitad del pasillo.
+  const [buscarItem, setBuscarItem] = useState('');
+  const [buscandoItem, setBuscandoItem] = useState(false);
+
+  // Repartir la compra entre dos personas (por pasillos, sin partir ninguno).
+  const [repartirOpen, setRepartirOpen] = useState(false);
 
   // Plantillas de compra (compra semanal, despensa, limpieza…).
   const [plantillasOpen, setPlantillasOpen] = useState(false);
@@ -118,6 +130,40 @@ export function ShoppingDetailPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
+  /**
+   * DOS PERSONAS EN LA MISMA LISTA
+   * ------------------------------
+   * Si dos teléfonos tienen la lista abierta (por ejemplo, dos personas en el
+   * súper), lo que marca una tiene que verse en la otra sin recargar. Se vuelve
+   * a leer cada pocos segundos, SÓLO con conexión, con la pantalla a la vista y
+   * sin cambios propios pendientes de enviar (esos se envían primero, para no
+   * pisarlos con la copia del servidor).
+   *
+   * No es una conexión directa entre los teléfonos: hace falta internet en los
+   * dos. Sin red, cada uno sigue trabajando en su teléfono y se junta al volver.
+   */
+  useEffect(() => {
+    const refrescarSiSePuede = async () => {
+      if (document.visibilityState !== 'visible' || !navigator.onLine) {
+        return;
+      }
+      if ((await countShoppingPending()) > 0) {
+        return;
+      }
+      const resultado = await loadShoppingList(id);
+      if (!resultado.fromCache && resultado.list) {
+        setList(resultado.list);
+      }
+    };
+
+    const intervalo = setInterval(() => void refrescarSiSePuede(), 7_000);
+    document.addEventListener('visibilitychange', refrescarSiSePuede);
+    return () => {
+      clearInterval(intervalo);
+      document.removeEventListener('visibilitychange', refrescarSiSePuede);
+    };
+  }, [id]);
+
   useEffect(() => {
     void (async () => setPending((await countShoppingPending()) > 0))();
   }, [list]);
@@ -133,8 +179,17 @@ export function ShoppingDetailPage() {
   const registered = list?.expense.registered === true;
 
   // Pasillos de esta compra y consejos para que la lista sea sensata.
-  const grupos = useMemo(() => (list ? groupItems(list.items) : []), [list]);
+  const itemsVisibles = useMemo(() => {
+    const texto = fold(buscarItem.trim());
+    if (!list) {
+      return [];
+    }
+    return texto ? list.items.filter((item) => fold(item.name).includes(texto)) : list.items;
+  }, [list, buscarItem]);
+  const grupos = useMemo(() => groupItems(itemsVisibles), [itemsVisibles]);
   const consejos = useMemo(() => (list ? nutritionAdvice(list.items) : []), [list]);
+  const pendientes = useMemo(() => (list ? list.items.filter((item) => !item.isPurchased).length : 0), [list]);
+  const partes = useMemo(() => repartirCompra(list?.items ?? [], 2), [list]);
 
   /**
    * Compartir la lista tal cual, para marcarla en la tienda.
@@ -185,6 +240,43 @@ export function ShoppingDetailPage() {
 
   /** Imprimir o guardar como PDF con el diálogo del navegador (sin servidores). */
   const imprimir = () => window.print();
+
+  /**
+   * Enviar una parte de la compra a la otra persona (WhatsApp, Bluetooth, nota).
+   * No hace falta que la otra persona tenga la app ni conexión: recibe el texto
+   * con sus pasillos y sus productos.
+   */
+  const compartirParte = async (parte: ParteCompra<RemoteShoppingItem>) => {
+    if (!list) {
+      return;
+    }
+    const texto = textoDeParte(parte, list.name);
+
+    if (typeof navigator !== 'undefined' && 'share' in navigator) {
+      try {
+        await navigator.share({ title: `${list.name} — ${parte.etiqueta}`, text: texto });
+        return;
+      } catch {
+        // Canceló o el sistema no pudo: se sigue con las alternativas.
+      }
+    }
+
+    try {
+      await navigator.clipboard.writeText(texto);
+      toast.success(`${parte.etiqueta} copiada`, 'Péguela en WhatsApp o en una nota del teléfono.');
+      return;
+    } catch {
+      // Sin portapapeles: se descarga.
+    }
+
+    const blob = new Blob([texto], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const enlace = document.createElement('a');
+    enlace.href = url;
+    enlace.download = `${list.name.replace(/[^\w\s-]/g, '').trim() || 'compra'}-parte-${parte.numero}.txt`;
+    enlace.click();
+    URL.revokeObjectURL(url);
+  };
 
   // Mientras esta pantalla está abierta se marca el <body>, para que al imprimir
   // se imprima SÓLO la hoja de la compra y no toda la aplicación.
@@ -306,6 +398,7 @@ export function ShoppingDetailPage() {
       setAddName('');
       setAddQuantity('1');
       setAddPrice('');
+      setAddOpen(false);
     } finally {
       setAdding(false);
     }
@@ -482,123 +575,107 @@ export function ShoppingDetailPage() {
     <ListScreen
       toolbar={
         <>
-          {/* Encabezado compacto: de dónde vengo, qué lista es y las salidas. */}
-          <div className="flex items-center gap-1.5">
-            <Link
-              to="/compras"
-              aria-label="Volver a Compras"
-              className="-ml-1.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-muted transition hover:bg-surface-2 hover:text-ink"
-            >
-              <IconChevronLeft size={20} />
-            </Link>
-            <div className="min-w-0 flex-1">
-              <h1 className="truncate text-base font-semibold leading-tight tracking-tight text-ink">{list.name}</h1>
-              <p className="flex items-center gap-1.5 truncate text-[0.7rem] text-muted">
-                {list.entityName ?? entity?.name ?? 'Unidad financiera'}
-                {list.plannedDate ? <span>· {list.plannedDate}</span> : null}
-                {registered ? <span className="text-positive">· gasto registrado</span> : null}
-                {fromCache ? <span className="text-warning">· sin conexión</span> : null}
-              </p>
-            </div>
-            {total > 0 ? (
-              <>
+          {/*
+            BARRA DE LA PANTALLA (appbar)
+            ----------------------------
+            Una sola barra: volver, nombre de la lista, lupa y las dos salidas
+            (PDF y compartir). Antes había dos cabeceras apiladas (la de la app y
+            la de la lista) y la lista perdía media pantalla.
+          */}
+          <div className="-mx-4 border-b border-border-soft bg-bg/95 px-2 pb-1.5 pt-[calc(var(--safe-top)+0.3rem)] backdrop-blur-md">
+            {buscandoItem ? (
+              <div className="flex items-center gap-1.5">
                 <button
                   type="button"
-                  onClick={imprimir}
-                  aria-label="Imprimir o guardar en PDF"
+                  onClick={() => {
+                    setBuscandoItem(false);
+                    setBuscarItem('');
+                  }}
+                  aria-label="Cerrar la búsqueda"
                   className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-muted transition hover:bg-surface-2 hover:text-ink"
                 >
-                  <IconFile size={19} />
+                  <IconChevronLeft size={20} />
                 </button>
-                <button
-                  type="button"
-                  onClick={() => void compartir()}
-                  aria-label="Compartir la lista"
+                <div className="relative min-w-0 flex-1">
+                  <IconSearch
+                    size={16}
+                    className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-faint"
+                  />
+                  <input
+                    autoFocus
+                    value={buscarItem}
+                    onChange={(event) => setBuscarItem(event.target.value)}
+                    aria-label="Buscar producto en la lista"
+                    placeholder="Buscar producto en la lista…"
+                    autoComplete="off"
+                    enterKeyHint="search"
+                    className="h-10 w-full rounded-full border border-border-soft bg-surface-2 pl-9 pr-9 text-sm text-ink outline-none transition placeholder:text-faint focus:border-brand"
+                  />
+                  {buscarItem ? (
+                    <button
+                      type="button"
+                      onClick={() => setBuscarItem('')}
+                      aria-label="Borrar lo escrito"
+                      className="absolute right-1 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full text-faint transition hover:text-ink"
+                    >
+                      <IconClose size={16} />
+                    </button>
+                  ) : null}
+                </div>
+              </div>
+            ) : (
+              <div className="flex items-center gap-0.5">
+                <Link
+                  to="/compras"
+                  aria-label="Volver a Compras"
                   className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-muted transition hover:bg-surface-2 hover:text-ink"
                 >
-                  <IconShare size={19} />
-                </button>
-              </>
-            ) : null}
+                  <IconChevronLeft size={20} />
+                </Link>
+                <div className="min-w-0 flex-1">
+                  <h1 className="truncate text-base font-semibold leading-tight tracking-tight text-ink">{list.name}</h1>
+                  <p className="truncate text-[0.68rem] leading-snug text-muted">
+                    {list.entityName ?? entity?.name ?? 'Unidad financiera'}
+                    {list.plannedDate ? ` · ${list.plannedDate}` : ''}
+                    {registered ? ' · gasto registrado' : ''}
+                    {fromCache ? ' · sin conexión' : ''}
+                  </p>
+                </div>
+                {total > 0 ? (
+                  <button
+                    type="button"
+                    onClick={() => setBuscandoItem(true)}
+                    aria-label="Buscar producto en la lista"
+                    className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-muted transition hover:bg-surface-2 hover:text-ink"
+                  >
+                    <IconSearch size={19} />
+                  </button>
+                ) : null}
+                {total > 0 ? (
+                  <button
+                    type="button"
+                    onClick={imprimir}
+                    aria-label="Imprimir o guardar en PDF"
+                    className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-muted transition hover:bg-surface-2 hover:text-ink"
+                  >
+                    <IconFile size={19} />
+                  </button>
+                ) : null}
+                {total > 0 ? (
+                  <button
+                    type="button"
+                    onClick={() => void compartir()}
+                    aria-label="Compartir la lista"
+                    className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-muted transition hover:bg-surface-2 hover:text-ink"
+                  >
+                    <IconShare size={19} />
+                  </button>
+                ) : null}
+              </div>
+            )}
           </div>
 
-          {/* Añadir producto: SIEMPRE visible. Es lo que más se usa y antes
-              quedaba al final del listado, obligando a bajar con el dedo. */}
-          {!registered ? (
-            <div className="rounded-2xl border border-border-soft bg-surface p-2.5 shadow-card">
-              <div className="flex items-center gap-2">
-                <label htmlFor="nuevo-producto" className="sr-only">
-                  ¿Qué necesita?
-                </label>
-                <input
-                  id="nuevo-producto"
-                  value={addName}
-                  onChange={(event) => setAddName(event.target.value)}
-                  onKeyDown={(event) => {
-                    if (event.key === 'Enter') {
-                      void addItem();
-                    }
-                  }}
-                  placeholder="¿Qué necesita? Ej.: arroz, plátano, detergente…"
-                  autoComplete="off"
-                  enterKeyHint="done"
-                  className="h-11 min-w-0 flex-1 rounded-xl border border-border-soft bg-surface-2 px-3 text-base text-ink outline-none transition placeholder:text-faint focus:border-brand"
-                />
-                <button
-                  type="button"
-                  onClick={() => void addItem()}
-                  disabled={adding || addName.trim().length < 1}
-                  aria-label="Añadir a la lista"
-                  className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-brand text-white transition active:scale-95 disabled:opacity-40"
-                >
-                  <IconPlus size={22} />
-                </button>
-              </div>
-
-              <div className="mt-2 flex items-end gap-2">
-                <div className="w-[4.75rem] shrink-0">
-                  <label
-                    htmlFor="nuevo-cantidad"
-                    className="mb-1 block text-[0.62rem] font-semibold uppercase tracking-wide text-faint"
-                  >
-                    Cantidad
-                  </label>
-                  <input
-                    id="nuevo-cantidad"
-                    value={addQuantity}
-                    onChange={(event) => setAddQuantity(event.target.value)}
-                    inputMode="decimal"
-                    className="h-10 w-full rounded-lg border border-border-soft bg-surface-2 px-2 text-center text-base tabular-nums text-ink outline-none transition focus:border-brand"
-                  />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <label
-                    htmlFor="nuevo-precio"
-                    className="mb-1 block text-[0.62rem] font-semibold uppercase tracking-wide text-faint"
-                  >
-                    Precio estimado
-                  </label>
-                  <input
-                    id="nuevo-precio"
-                    value={addPrice}
-                    onChange={(event) => setAddPrice(event.target.value)}
-                    inputMode="decimal"
-                    placeholder="opcional"
-                    className="h-10 w-full rounded-lg border border-border-soft bg-surface-2 px-3 text-base tabular-nums text-ink outline-none transition placeholder:text-faint focus:border-brand"
-                  />
-                </div>
-              </div>
-
-              {/* Atajo para no teclear veinte productos: plantillas de lo que se repite. */}
-              <button
-                type="button"
-                onClick={() => setPlantillasOpen(true)}
-                className="mt-2 w-full text-center text-[0.7rem] font-medium text-brand underline decoration-dotted underline-offset-2"
-              >
-                Empezar con una plantilla…
-              </button>
-            </div>
-          ) : null}
+          {/* El añadir vive en el botón flotante; aquí sólo queda el resumen. */}
 
           {/* Resumen en una línea: cuánto llevo y cuánto suman. */}
           <div className="space-y-1">
@@ -629,16 +706,27 @@ export function ShoppingDetailPage() {
                 ) : null}
               </span>
               {total > 0 ? (
-                <button
-                  type="button"
-                  onClick={() => setPorPasillo((valor) => !valor)}
-                  aria-pressed={porPasillo}
-                  className={`shrink-0 rounded-full border px-2.5 py-0.5 text-[0.7rem] ${
-                    porPasillo ? 'border-brand/60 bg-brand/15 text-brand' : 'border-border-soft text-muted'
-                  }`}
-                >
-                  {porPasillo ? 'Por pasillos' : 'En orden'}
-                </button>
+                <div className="flex shrink-0 items-center gap-1">
+                  {pendientes > 0 && !registered ? (
+                    <button
+                      type="button"
+                      onClick={() => setRepartirOpen(true)}
+                      className="rounded-full border border-border-soft px-2.5 py-0.5 text-[0.7rem] text-muted transition hover:text-ink"
+                    >
+                      Repartir
+                    </button>
+                  ) : null}
+                  <button
+                    type="button"
+                    onClick={() => setPorPasillo((valor) => !valor)}
+                    aria-pressed={porPasillo}
+                    className={`rounded-full border px-2.5 py-0.5 text-[0.7rem] ${
+                      porPasillo ? 'border-brand/60 bg-brand/15 text-brand' : 'border-border-soft text-muted'
+                    }`}
+                  >
+                    {porPasillo ? 'Por pasillos' : 'En orden'}
+                  </button>
+                </div>
               ) : null}
             </div>
           </div>
@@ -671,18 +759,26 @@ export function ShoppingDetailPage() {
               ) : undefined
             }
           />
-        ) : porPasillo ? (
-        <div className="space-y-2.5">
+        ) : itemsVisibles.length === 0 ? (
+        <EmptyState
+          title="Ningún producto coincide"
+          hint={`No hay nada en esta lista que se parezca a «${buscarItem.trim()}».`}
+          action={<Button variant="secondary" onClick={() => setBuscarItem('')}>Quitar la búsqueda</Button>}
+        />
+      ) : porPasillo ? (
+        <div className="space-y-3">
           {grupos.map((grupo) => (
-            <Card key={grupo.id} className="overflow-hidden p-0">
-              <div className="flex items-baseline justify-between gap-2 bg-surface-2 px-3 py-1.5">
-                <p className="flex items-center gap-1.5 text-[0.66rem] font-semibold uppercase tracking-wide text-muted">
+            <section key={grupo.id}>
+              {/* El pasillo, como etiqueta fina: separa sin llenar la pantalla de
+                  franjas de color. */}
+              <div className="flex items-baseline justify-between gap-2 px-1 pb-1">
+                <p className="flex items-center gap-1.5 text-[0.64rem] font-semibold uppercase tracking-[0.08em] text-faint">
                   <span aria-hidden>{grupo.emoji}</span>
                   {grupo.label}
                 </p>
-                <span className="text-[0.66rem] tabular-nums text-faint">{grupo.items.length}</span>
+                <span className="text-[0.64rem] tabular-nums text-faint">{grupo.items.length}</span>
               </div>
-              <div className="divide-y divide-border-soft">
+              <div className="divide-y divide-border-soft overflow-hidden rounded-2xl border border-border-soft bg-surface">
                 {grupo.items.map((item) => (
                   <FilaProducto
                     key={item.id}
@@ -702,13 +798,13 @@ export function ShoppingDetailPage() {
                   />
                 ))}
               </div>
-            </Card>
+            </section>
           ))}
         </div>
       ) : (
         <Card className="overflow-hidden p-0">
           <div className="divide-y divide-border-soft">
-            {list.items.map((item) => (
+            {itemsVisibles.map((item) => (
               <FilaProducto
                 key={item.id}
                 item={item}
@@ -928,6 +1024,110 @@ export function ShoppingDetailPage() {
         onConfirm={() => void deleteItem()}
       />
 
+      {/* Espacio al final para que el botón flotante no tape el último producto. */}
+      <div className="h-20" aria-hidden="true" />
+
+      {/* BOTÓN FLOTANTE PARA AÑADIR (estilo AppSheet)
+          ------------------------------------------
+          La pantalla se queda con la lista y la lupa; añadir producto —con su
+          cantidad, su precio y las plantillas— vive en este botón, que abre el
+          formulario en una hoja. Así la lista ocupa casi toda la pantalla, que
+          es lo que se mira en la tienda. */}
+      {!registered ? (
+        <button
+          type="button"
+          onClick={() => setAddOpen(true)}
+          aria-label="Añadir producto a la lista"
+          className="fixed bottom-[calc(var(--safe-bottom)+1.25rem)] right-4 z-30 flex h-14 items-center gap-1.5 rounded-full bg-brand pl-4 pr-5 text-sm font-semibold text-white shadow-elevated transition active:scale-95"
+        >
+          <IconPlus size={22} />
+          Añadir
+        </button>
+      ) : null}
+
+      {/* Añadir a la lista: todo en el mismo sitio (nombre, cantidad y precio). */}
+      <Sheet open={addOpen} onClose={() => setAddOpen(false)} title="Añadir a la lista">
+        <form
+          className="space-y-3 pb-3"
+          onSubmit={(event) => {
+            event.preventDefault();
+            void addItem();
+          }}
+        >
+          <Field
+            label="¿Qué necesita?"
+            value={addName}
+            onChange={setAddName}
+            placeholder="Ej.: arroz, plátano, detergente…"
+            autoComplete="off"
+            enterKeyHint="done"
+          />
+          <div className="flex items-end gap-2">
+            <div className="w-24 shrink-0">
+              <Field label="Cantidad" value={addQuantity} onChange={setAddQuantity} inputMode="decimal" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <Field
+                label="Precio estimado"
+                value={addPrice}
+                onChange={setAddPrice}
+                inputMode="decimal"
+                placeholder="opcional"
+              />
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setPlantillasOpen(true)}
+            className="w-full text-center text-[0.7rem] font-medium text-brand underline decoration-dotted underline-offset-2"
+          >
+            Empezar con una plantilla…
+          </button>
+          <Button type="submit" fullWidth size="lg" disabled={adding || addName.trim().length < 1} aria-label="Añadir a la lista">
+            {adding ? 'Añadiendo…' : 'Añadir a la lista'}
+          </Button>
+        </form>
+      </Sheet>
+
+      {/* REPARTIR LA COMPRA ENTRE DOS
+          ----------------------------
+          Se reparte lo que FALTA por pasillos: cada persona coge una parte y no
+          se pisan. No cambia nada de la lista ni necesita conexión; la parte 2 se
+          puede enviar por WhatsApp o Bluetooth para que la lleve la otra persona
+          en su teléfono (no hace falta que tenga la app). */}
+      <Sheet open={repartirOpen} onClose={() => setRepartirOpen(false)} title="Repartir la compra">
+        <div className="space-y-3 pb-2">
+          <p className="text-xs leading-snug text-muted">
+            Se reparte lo que falta por comprar <strong>por pasillos</strong>: cada uno coge una parte y no se pisan
+            dentro del súper.
+          </p>
+          {partes.map((parte) => (
+            <div key={parte.numero} className="rounded-xl border border-border-soft p-3">
+              <div className="flex items-baseline justify-between gap-2">
+                <p className="text-sm font-semibold text-ink">{parte.etiqueta}</p>
+                <span className="shrink-0 text-xs tabular-nums text-muted">
+                  {parte.items.length} producto(s)
+                </span>
+              </div>
+              <p className="mt-1 text-[0.7rem] leading-snug text-muted">
+                {parte.grupos.length > 0
+                  ? parte.grupos.map((grupo) => `${grupo.emoji} ${grupo.label}`).join(' · ')
+                  : 'Sin productos pendientes'}
+              </p>
+              {parte.items.length > 0 ? (
+                <button
+                  type="button"
+                  onClick={() => void compartirParte(parte)}
+                  className="mt-2 text-xs font-semibold text-brand underline decoration-dotted underline-offset-2"
+                >
+                  Compartir esta parte
+                </button>
+              ) : null}
+            </div>
+          ))}
+        </div>
+      </Sheet>
+
       {/* Plantillas: lo que se compra igual cada semana o cada mes. */}
       <Sheet open={plantillasOpen} onClose={() => setPlantillasOpen(false)} title="Empezar con una plantilla">
         <div className="space-y-2 pb-2">
@@ -1109,17 +1309,23 @@ function FilaProducto({
       </button>
 
       <div className="min-w-0 flex-1">
-        <p className={`text-sm font-medium ${item.isPurchased ? 'text-muted line-through' : 'text-ink'}`}>{item.name}</p>
-        <p className="mt-0.5 text-xs text-muted">
+        <p
+          className={`truncate text-[0.9rem] font-medium leading-snug ${
+            item.isPurchased ? 'text-muted line-through' : 'text-ink'
+          }`}
+        >
+          {item.name}
+        </p>
+        <p className="mt-0.5 text-[0.7rem] tabular-nums text-muted">
           {item.quantity}
           {item.unit ? ` ${item.unit}` : ''}
-          {item.estimatedUnitPrice ? ` × ${formatMoney(item.estimatedUnitPrice, currency)}` : ' · sin precio estimado'}
+          {item.estimatedUnitPrice ? ` × ${formatMoney(item.estimatedUnitPrice, currency)}` : ''}
           {item.isPurchased && item.actualUnitPrice ? ` · pagado ${formatMoney(item.actualUnitPrice, currency)}` : ''}
         </p>
       </div>
 
       <div className="shrink-0 text-right">
-        <p className="text-sm font-semibold">
+        <p className="text-[0.85rem] font-semibold tabular-nums">
           <Money
             value={item.isPurchased ? item.actualTotal : item.estimatedTotal}
             currency={currency}
@@ -1127,19 +1333,25 @@ function FilaProducto({
           />
         </p>
         {!registered ? (
-          <button type="button" onClick={onEdit} className="mt-1 text-xs text-brand underline">
-            Editar
-          </button>
-        ) : null}
-        {!registered && !item.isPurchased ? (
-          <button
-            type="button"
-            onClick={onDelete}
-            className="mt-1 ml-2 text-xs text-negative underline"
-            aria-label={`Borrar ${item.name}`}
-          >
-            Borrar
-          </button>
+          <div className="mt-0.5 flex items-center justify-end gap-2.5">
+            <button
+              type="button"
+              onClick={onEdit}
+              className="text-[0.66rem] text-faint transition hover:text-ink"
+            >
+              Editar
+            </button>
+            {!item.isPurchased ? (
+              <button
+                type="button"
+                onClick={onDelete}
+                aria-label={`Borrar ${item.name}`}
+                className="text-[0.66rem] text-faint transition hover:text-negative"
+              >
+                Borrar
+              </button>
+            ) : null}
+          </div>
         ) : null}
       </div>
     </div>

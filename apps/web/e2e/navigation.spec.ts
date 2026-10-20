@@ -44,9 +44,16 @@ test.describe('recorrido de todas las pantallas', () => {
       await expectNoHorizontalOverflow(page, `${route.name} @ ${page.viewportSize()?.width}px`);
       await expectNoWideElement(page, `${route.name} @ ${page.viewportSize()?.width}px`);
 
-      // Toda pantalla conserva la barra inferior y el botón de añadir.
-      await expect(navAddButton(page)).toBeVisible();
-      await expect(page.getByRole('link', { name: 'Inicio', exact: true })).toBeVisible();
+      // Toda pantalla conserva la barra inferior y el botón de añadir… salvo
+      // Compras, que es una tarea aparte: se entra a comprar, se marca en el
+      // carrito y se sale con la flecha. Allí se exige justo lo contrario.
+      if (route.path.startsWith('/compras')) {
+        await expect(page.getByRole('navigation', { name: 'Navegación principal' })).toHaveCount(0);
+        await expect(navAddButton(page)).toHaveCount(0);
+      } else {
+        await expect(navAddButton(page)).toBeVisible();
+        await expect(page.getByRole('link', { name: 'Inicio', exact: true })).toBeVisible();
+      }
 
       expect(consoleErrors, `${route.name}: errores de consola → ${consoleErrors.join(' | ')}`).toEqual([]);
     });
@@ -95,7 +102,14 @@ test.describe('navegación inferior', () => {
     await expect(page).toHaveURL(/\/compras/);
     await expect(page.getByRole('heading', { name: 'Compras' })).toBeVisible();
 
-    await page.getByRole('link', { name: 'Inicio', exact: true }).click();
+    // Compras es una tarea aparte y no lleva la barra de destinos: en el
+    // supermercado se pulsaba sin querer. Se comprueba que de verdad no está (y
+    // que «Añadir» tampoco), para que nadie la reponga sin darse cuenta.
+    await expect(page.getByRole('navigation', { name: 'Navegación principal' })).toHaveCount(0);
+    await expect(navAddButton(page)).toHaveCount(0);
+
+    // Para salir queda el menú lateral, que sigue estando.
+    await page.goto('/');
     await expect(page).toHaveURL(/\/$/);
   });
 
@@ -154,6 +168,9 @@ test.describe('navegación inferior', () => {
     ];
 
     for (const item of cases) {
+      // Se parte del inicio en cada vuelta: Compras se queda sin barra inferior,
+      // así que el botón «Añadir» no está en esa pantalla.
+      await page.goto('/');
       await navAddButton(page).click();
       await page.getByRole('button', { name: item.action }).click();
       await expect(page).toHaveURL(item.url);

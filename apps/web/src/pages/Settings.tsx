@@ -113,7 +113,9 @@ export function SettingsPage() {
     mutationFn: (values: Preferences) =>
       api.patch('/auth/preferences', {
         timezone: values.timezone,
-        currency: values.currency,
+        // Siempre pesos dominicanos: la aplicación no trabaja en otra moneda y
+        // el selector se retiró para que nadie la deje en dólares sin querer.
+        currency: 'DOP',
         theme: values.theme,
         closingReminderHour: values.closingReminderHour,
         closingReminderMinute: values.closingReminderMinute,
@@ -275,16 +277,16 @@ export function SettingsPage() {
               ]}
             />
 
-            <Select
-              label="Moneda principal"
-              value={form.currency}
-              onChange={(value) => setForm({ ...form, currency: value })}
-              options={[
-                { value: 'DOP', label: 'Peso dominicano (DOP)' },
-                { value: 'USD', label: 'Dólar (USD)' },
-                { value: 'EUR', label: 'Euro (EUR)' },
-              ]}
-            />
+            {/* La moneda no se elige: FINANZA trabaja sólo en pesos dominicanos.
+                Tener un selector aquí sólo servía para acabar con cuentas en
+                dólares sin querer. */}
+            <div className="rounded-xl border border-border-soft bg-surface-2 px-3 py-2.5">
+              <p className="text-sm font-medium text-ink">Moneda</p>
+              <p className="mt-0.5 text-sm text-muted">Peso dominicano (RD$)</p>
+              <p className="mt-1 text-xs text-faint">
+                Todos los saldos, cuentas y movimientos se llevan en pesos dominicanos.
+              </p>
+            </div>
 
             <Field
               label="Hora del recordatorio de cierre (0-23)"

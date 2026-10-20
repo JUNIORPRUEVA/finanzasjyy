@@ -304,13 +304,25 @@ export function AppShell({ children }: { children: React.ReactNode }) {  const {
     return location.pathname === path || location.pathname.startsWith(`${path}/`);
   };
 
+  /**
+   * COMPRAS SE QUEDA SIN BARRA INFERIOR
+   * -----------------------------------
+   * Comprar es una tarea aparte: se entra, se marca lo que se lleva en el
+   * carrito y se sale. La barra de destinos distrae y, en el supermercado, se
+   * pulsa sin querer. Para volver está la flecha de la lista y el menú lateral.
+   */
+  const enCompras = location.pathname === '/compras' || location.pathname.startsWith('/compras/');
+
   return (
     <div
       className="mx-auto flex h-[100dvh] w-full max-w-3xl flex-col overflow-hidden"
       onTouchStart={(event) => empezarGesto(event, true)}
       onTouchEnd={terminarGesto}
     >
-      {/* CABECERA: baja, con lo que se usa a diario */}
+      {/* CABECERA: baja, con lo que se usa a diario.
+          En Compras NO se pinta: esa pantalla trae su propia barra (volver,
+          «Compras» y la lupa) y así se queda casi toda la pantalla para la lista. */}
+      {enCompras ? null : (
       <header className="z-30 shrink-0 border-b border-border-soft bg-bg/95 backdrop-blur-md">
         <div className="flex items-center gap-1 px-2 pb-1.5 pt-[calc(var(--safe-top)+0.35rem)]">
           <button
@@ -372,6 +384,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {  const {
           </button>
         </div>
       </header>
+      )}
 
       {serverUnreachable ? (
         <div className="shrink-0 px-4 pt-3">
@@ -429,11 +442,16 @@ export function AppShell({ children }: { children: React.ReactNode }) {  const {
         </div>
       ) : null}
 
-      <main className="page-bottom-space min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4">
+      <main
+        className={`min-h-0 flex-1 overscroll-contain px-4 ${
+          enCompras ? 'overflow-hidden pb-3 pt-0' : 'overflow-y-auto page-bottom-space py-4'
+        }`}
+      >
         {children}
       </main>
 
       {/* BARRA INFERIOR: cinco destinos, el central para añadir */}
+      {enCompras ? null : (
       <nav
         aria-label="Navegación principal"
         className="fixed inset-x-0 bottom-0 z-40 border-t border-border-soft bg-bg/95 pb-[var(--safe-bottom)] backdrop-blur-md"
@@ -496,6 +514,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {  const {
           })}
         </div>
       </nav>
+      )}
 
       {/* Menú lateral con todo lo demás */}
       <Drawer

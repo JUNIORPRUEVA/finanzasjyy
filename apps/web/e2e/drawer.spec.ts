@@ -24,19 +24,25 @@ test.describe('menú lateral', () => {
 
     // «Gestión financiera» viene abierta (es lo de todos los días).
     await expect(drawer.getByRole('link', { name: /Cuentas y bancos/ })).toBeVisible();
-    await expect(drawer.getByRole('link', { name: /Listas de compras/ })).toBeVisible();
+    await expect(drawer.getByRole('link', { name: /Deudas y préstamos/ })).toBeVisible();
+
+    // Compras NO se repite aquí: ya está en la barra inferior y el dueño pidió
+    // quitarla del menú. Si alguien la devolviera, esta prueba lo avisa.
+    await expect(drawer.getByRole('link', { name: /Listas de compras/ })).toHaveCount(0);
 
     // Las otras dos vienen plegadas: sus opciones no se ven hasta abrirlas, y por
     // eso el menú cabe en una pantalla de teléfono sin ser una lista infinita.
     await expect(drawer.getByRole('link', { name: /Auditoría/ })).toBeHidden();
-    await expect(drawer.getByRole('link', { name: /Seguridad y dispositivos/ })).toBeHidden();
+    await expect(drawer.getByRole('link', { name: /^Ajustes/ })).toBeHidden();
 
     await drawer.getByRole('button', { name: /Análisis y documentos/ }).click();
     await expect(drawer.getByRole('link', { name: /Auditoría/ })).toBeVisible();
 
+    // Perfil, apariencia, moneda y seguridad son pestañas de la MISMA pantalla:
+    // una sola entrada en el menú, no cinco.
     await drawer.getByRole('button', { name: /Configuración/ }).click();
-    await expect(drawer.getByRole('link', { name: /Seguridad y dispositivos/ })).toBeVisible();
-    await expect(drawer.getByRole('link', { name: /Apariencia/ })).toBeVisible();
+    await expect(drawer.getByRole('link', { name: /^Ajustes/ })).toBeVisible();
+    await expect(drawer.getByRole('link', { name: /Apariencia/ })).toHaveCount(0);
 
     // El pie recuerda que no se pierde trabajo al cerrar sesión: es la duda que
     // tiene cualquiera antes de pulsar ese botón.
@@ -116,9 +122,9 @@ test.describe('menú lateral', () => {
     await ensureAuthenticated(page);
 
     await openMenu(page);
-    await menu(page).getByRole('link', { name: /Listas de compras/ }).click();
+    await menu(page).getByRole('link', { name: /Cuentas y bancos/ }).click();
 
-    await expect(page).toHaveURL(/\/compras/);
+    await expect(page).toHaveURL(/\/cuentas/);
     await expect(menu(page)).toBeHidden();
   });
 

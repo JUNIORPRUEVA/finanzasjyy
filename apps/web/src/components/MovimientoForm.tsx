@@ -47,6 +47,28 @@ export const KINDS: EntryKind[] = ['INCOME', 'EXPENSE', 'OWNER_WITHDRAWAL', 'OWN
 
 const METHOD_OPTIONS = ['EFECTIVO', 'TRANSFERENCIA', 'TARJETA', 'BIZUM', 'CHEQUE', 'DEPOSITO', 'CREDITO', 'OTRO'];
 
+/**
+ * «¿Esto es de la casa o del negocio?» se responde eligiendo la unidad
+ * financiera, y el tipo es lo único que lo dice. Sin esto, «FINANZAS PERSONALES»
+ * y «FULLPOS CLOUD» se veían igual en la lista.
+ */
+function etiquetaTipoUnidad(tipo: string): string {
+  switch (tipo) {
+    case 'PERSONAL':
+      return 'personal';
+    case 'BUSINESS':
+      return 'negocio';
+    case 'RENTAL':
+      return 'alquiler';
+    case 'SERVICE':
+      return 'servicios';
+    case 'INVESTMENT':
+      return 'inversión';
+    default:
+      return 'otra unidad';
+  }
+}
+
 const PREGUNTA_IMPORTE: Record<EntryKind, string> = {
   INCOME: '¿Cuánto entró?',
   EXPENSE: '¿Cuánto salió?',
@@ -255,7 +277,10 @@ export function MovimientoForm({ kind, initialEntityId }: MovimientoFormProps) {
           label="Unidad financiera"
           value={entityId}
           onChange={setEntityId}
-          options={entities.map((entity) => ({ value: entity.id, label: `${entity.name} (${entity.code})` }))}
+          options={entities.map((entity) => ({
+            value: entity.id,
+            label: `${entity.name} · ${etiquetaTipoUnidad(entity.type)}`,
+          }))}
           action={
             <Link
               to="/unidades"
@@ -265,6 +290,19 @@ export function MovimientoForm({ kind, initialEntityId }: MovimientoFormProps) {
             </Link>
           }
         />
+      ) : null}
+
+      {/* Una unidad sin cuentas no puede registrar nada: en vez de dejar el
+          desplegable vacío y un botón gris sin explicación, se dice qué falta y
+          se lleva a crearlo. */}
+      {entityId && !accountsQuery.isLoading && accounts.length === 0 ? (
+        <Notice tone="warning" title="Esta unidad todavía no tiene cuentas">
+          Para apuntar un gasto hace falta saber de dónde sale el dinero. Cree, por ejemplo, una cuenta de
+          <strong> efectivo</strong> en esta unidad y vuelva aquí.{' '}
+          <Link to="/cuentas" className="font-semibold text-brand underline">
+            Ir a Cuentas
+          </Link>
+        </Notice>
       ) : null}
 
       <MoneyInput label={PREGUNTA_IMPORTE[kind]} value={amount} onChange={setAmount} autoFocus />

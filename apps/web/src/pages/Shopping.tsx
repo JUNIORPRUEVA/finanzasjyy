@@ -13,13 +13,11 @@ import {
   Money,
   Notice,
   ProgressBar,
-  SearchBox,
-  SegmentedControl,
   Sheet,
   Skeleton,
 } from '../components/ui';
 import { toast } from '../components/Toast';
-import { IconPlus } from '../components/icons';
+import { IconChevronLeft, IconChevronRight, IconClose, IconPlus, IconSearch } from '../components/icons';
 import {
   createListOffline,
   flushShoppingQueue,
@@ -53,6 +51,7 @@ export function ShoppingPage() {
   const [fromCache, setFromCache] = useState(false);
   const [filtro, setFiltro] = useState<Filtro>('ABIERTAS');
   const [busqueda, setBusqueda] = useState('');
+  const [buscando, setBuscando] = useState(false);
   const [pending, setPending] = useState(0);
 
   const [creating, setCreating] = useState(false);
@@ -108,6 +107,12 @@ export function ShoppingPage() {
     }
     return lists;
   }, [lists, filtro]);
+
+  /** Salir de la búsqueda deja la barra como estaba y la lista completa. */
+  const cerrarBusqueda = () => {
+    setBuscando(false);
+    setBusqueda('');
+  };
 
   const create = async () => {
     const name = newName.trim();
@@ -211,16 +216,73 @@ export function ShoppingPage() {
     <ListScreen
       toolbar={
         <>
-          <div className="flex items-center justify-between gap-2">
-            <div className="min-w-0">
-              <h1 className="text-lg font-semibold tracking-tight text-ink">Compras</h1>
-              <p className="text-xs leading-snug text-muted">
-                Prepare lo que necesita; el gasto se registra aparte, cuando usted lo decide.
-              </p>
+          {/*
+            BARRA DE LA PANTALLA (appbar)
+            ----------------------------
+            Volver a la izquierda, el nombre de la pantalla y la lupa. Al pulsar
+            la lupa, la barra ENTERA se convierte en el buscador: no se apila un
+            campo debajo del título, se sustituye. Se sale con la flecha o con ✕.
+            Va de borde a borde (-mx-4) para que parezca la barra de la app y no
+            una tarjeta más.
+          */}
+          <div className="-mx-4 border-b border-border-soft bg-bg/95 px-2 pb-1.5 pt-[calc(var(--safe-top)+0.3rem)] backdrop-blur-md">
+          {buscando ? (
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={cerrarBusqueda}
+                aria-label="Cerrar la búsqueda"
+                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-muted transition hover:bg-surface-2 hover:text-ink"
+              >
+                <IconChevronLeft size={20} />
+              </button>
+              <div className="relative min-w-0 flex-1">
+                <IconSearch
+                  size={16}
+                  className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-faint"
+                />
+                <input
+                  autoFocus
+                  value={busqueda}
+                  onChange={(event) => setBusqueda(event.target.value)}
+                  aria-label="Buscar en las listas"
+                  placeholder="Buscar lista o producto…"
+                  autoComplete="off"
+                  enterKeyHint="search"
+                  className="h-10 w-full rounded-full border border-border-soft bg-surface-2 pl-9 pr-9 text-sm text-ink outline-none transition placeholder:text-faint focus:border-brand"
+                />
+                {busqueda ? (
+                  <button
+                    type="button"
+                    onClick={() => setBusqueda('')}
+                    aria-label="Borrar lo escrito"
+                    className="absolute right-1 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full text-faint transition hover:text-ink"
+                  >
+                    <IconClose size={16} />
+                  </button>
+                ) : null}
+              </div>
             </div>
-            <Button onClick={() => setCreating(true)} className="shrink-0" size="sm">
-              <IconPlus size={18} /> Nueva
-            </Button>
+          ) : (
+            <div className="flex items-center gap-2">
+              <Link
+                to="/"
+                aria-label="Volver al inicio"
+                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-muted transition hover:bg-surface-2 hover:text-ink"
+              >
+                <IconChevronLeft size={20} />
+              </Link>
+              <h1 className="min-w-0 flex-1 truncate text-lg font-semibold tracking-tight text-ink">Compras</h1>
+              <button
+                type="button"
+                onClick={() => setBuscando(true)}
+                aria-label="Buscar en las listas"
+                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-muted transition hover:bg-surface-2 hover:text-ink"
+              >
+                <IconSearch size={19} />
+              </button>
+            </div>
+          )}
           </div>
 
           {fromCache ? (
@@ -236,22 +298,30 @@ export function ShoppingPage() {
             </Notice>
           ) : null}
 
-          <SearchBox
-            value={busqueda}
-            onChange={setBusqueda}
-            label="Buscar en las listas"
-            placeholder="Buscar lista o producto…"
-          />
-
-          <SegmentedControl
-            options={[
-              { value: 'ABIERTAS' as Filtro, label: 'Abiertas' },
-              { value: 'FINALIZADAS' as Filtro, label: 'Finalizadas' },
-              { value: 'TODAS' as Filtro, label: 'Todas' },
-            ]}
-            value={filtro}
-            onChange={setFiltro}
-          />
+          {/* Filtro: tres píldoras en una sola línea, sin caja alrededor. */}
+          <div className="flex items-center gap-1.5" role="group" aria-label="Filtrar las listas">
+            {(
+              [
+                { value: 'ABIERTAS', label: 'Abiertas' },
+                { value: 'FINALIZADAS', label: 'Finalizadas' },
+                { value: 'TODAS', label: 'Todas' },
+              ] as Array<{ value: Filtro; label: string }>
+            ).map((opcion) => (
+              <button
+                key={opcion.value}
+                type="button"
+                onClick={() => setFiltro(opcion.value)}
+                aria-pressed={filtro === opcion.value}
+                className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${
+                  filtro === opcion.value
+                    ? 'bg-brand text-white shadow-card'
+                    : 'bg-surface-2 text-muted hover:text-ink'
+                }`}
+              >
+                {opcion.label}
+              </button>
+            ))}
+          </div>
         </>
       }
     >
@@ -280,58 +350,64 @@ export function ShoppingPage() {
             const isLocal = localOnly.includes(list.id);
 
             return (
-              <Card key={list.id} className="space-y-3">
-                <div className="flex items-start justify-between gap-2">
-                  <div className="min-w-0">
-                    <Link to={`/compras/${list.id}`} className="block">
-                      <p className="truncate text-base font-semibold text-ink">{list.name}</p>
-                    </Link>
-                    <p className="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs text-muted">
-                      {list.entityName ? <span className="truncate">{list.entityName}</span> : null}
-                      {list.plannedDate ? <span>· prevista {list.plannedDate}</span> : null}
-                    </p>
+              <Card key={list.id} className="space-y-2.5 py-3">
+                {/* La tarjeta entera abre la lista: el nombre grande es el
+                    enlace, no hace falta buscar un botón «Abrir». */}
+                <Link to={`/compras/${list.id}`} className="block space-y-2.5">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="truncate text-[0.95rem] font-semibold leading-tight tracking-tight text-ink">
+                        {list.name}
+                      </p>
+                      <p className="mt-0.5 flex items-center gap-1 truncate text-[0.7rem] text-muted">
+                        <span className="tabular-nums">
+                          {comprados} de {total || 0}
+                        </span>
+                        {list.plannedDate ? <span>· {list.plannedDate}</span> : null}
+                        {list.entityName ? <span className="truncate">· {list.entityName}</span> : null}
+                      </p>
+                    </div>
+                    <div className="flex shrink-0 items-center gap-1">
+                      {isLocal ? (
+                        <Badge tone="warning">pendiente de enviar</Badge>
+                      ) : list.status === 'COMPLETED' ? (
+                        <Badge tone="positive">registrada</Badge>
+                      ) : list.status === 'ARCHIVED' ? (
+                        <Badge tone="neutral">archivada</Badge>
+                      ) : null}
+                      <IconChevronRight size={16} className="mt-0.5 shrink-0 text-faint" />
+                    </div>
                   </div>
-                  <div className="flex shrink-0 flex-col items-end gap-1">
-                    {list.status === 'COMPLETED' ? (
-                      <Badge tone="positive">registrada</Badge>
-                    ) : list.status === 'ARCHIVED' ? (
-                      <Badge tone="neutral">archivada</Badge>
-                    ) : (
-                      <Badge tone="info">{comprados}/{total || 0} comprados</Badge>
-                    )}
-                    {isLocal ? <Badge tone="warning">pendiente de enviar</Badge> : null}
-                  </div>
-                </div>
 
-                <ProgressBar percent={percent} tone={percent >= 100 ? 'positive' : 'neutral'} />
+                  <ProgressBar percent={percent} tone={percent >= 100 ? 'positive' : 'neutral'} />
 
-                <div className="grid grid-cols-[repeat(auto-fit,minmax(7rem,1fr))] gap-2 text-sm">
-                  <div>
-                    <p className="text-[0.7rem] uppercase tracking-wide text-faint">Estimado</p>
-                    <p className="mt-0.5 font-semibold">
-                      <Money value={list.totals.estimated} currency={currency} />
-                    </p>
+                  <div className="flex items-baseline justify-between gap-2 text-[0.7rem]">
+                    <span className="text-faint">
+                      Estimado{' '}
+                      <span className="font-semibold tabular-nums text-ink">
+                        <Money value={list.totals.estimated} currency={currency} />
+                      </span>
+                    </span>
+                    <span className="text-faint">
+                      Pagado{' '}
+                      <span className="font-semibold tabular-nums text-ink">
+                        <Money
+                          value={list.totals.actual}
+                          currency={currency}
+                          tone={list.totals.actual === '0.00' ? 'neutral' : 'negative'}
+                        />
+                      </span>
+                    </span>
+                    <span className="text-faint">
+                      Falta{' '}
+                      <span className="font-semibold tabular-nums text-ink">
+                        <Money value={list.totals.pending} currency={currency} />
+                      </span>
+                    </span>
                   </div>
-                  <div>
-                    <p className="text-[0.7rem] uppercase tracking-wide text-faint">Pagado</p>
-                    <p className="mt-0.5 font-semibold">
-                      <Money value={list.totals.actual} currency={currency} tone={list.totals.actual === '0.00' ? 'neutral' : 'negative'} />
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-[0.7rem] uppercase tracking-wide text-faint">Falta por comprar</p>
-                    <p className="mt-0.5 font-semibold">
-                      <Money value={list.totals.pending} currency={currency} />
-                    </p>
-                  </div>
-                </div>
+                </Link>
 
-                <div className="flex flex-wrap gap-2 border-t border-border-soft pt-3">
-                  <Link to={`/compras/${list.id}`}>
-                    <Button variant="secondary" size="sm">
-                      Abrir
-                    </Button>
-                  </Link>
+                <div className="flex flex-wrap items-center gap-1 border-t border-border-soft pt-2">
                   <Button variant="ghost" size="sm" disabled={busyId === list.id || isLocal} onClick={() => void duplicate(list)}>
                     Duplicar
                   </Button>
@@ -346,7 +422,7 @@ export function ShoppingPage() {
                       size="sm"
                       disabled={busyId === list.id || isLocal}
                       onClick={() => setToDelete(list)}
-                      className="text-negative"
+                      className="ml-auto text-negative"
                     >
                       Borrar
                     </Button>
@@ -354,9 +430,8 @@ export function ShoppingPage() {
                 </div>
 
                 {list.expense.registered ? (
-                  <p className="text-[0.7rem] leading-snug text-faint">
-                    Esta compra ya está registrada como gasto en FINANZA, por eso no se puede borrar: forma parte del
-                    rastro de un movimiento real. Puede archivarla para quitarla de la vista.
+                  <p className="text-[0.68rem] leading-snug text-faint">
+                    Ya está registrada como gasto: no se puede borrar, pero sí archivar.
                   </p>
                 ) : null}
               </Card>
@@ -364,6 +439,22 @@ export function ShoppingPage() {
           })}
         </div>
       )}
+
+      {/* Espacio al final para que el botón flotante no tape la última tarjeta. */}
+      <div className="h-20" aria-hidden="true" />
+
+      {/* BOTÓN FLOTANTE PARA CREAR (estilo AppSheet)
+          ------------------------------------------
+          Antes vivía en la barra de arriba, compitiendo con el título. Flotando
+          abajo a la derecha está siempre a mano del pulgar y no ocupa la barra. */}
+      <button
+        type="button"
+        onClick={() => setCreating(true)}
+        className="fixed bottom-[calc(var(--safe-bottom)+1.25rem)] right-4 z-30 flex h-14 items-center gap-1.5 rounded-full bg-brand pl-4 pr-5 text-sm font-semibold text-white shadow-elevated transition active:scale-95"
+      >
+        <IconPlus size={22} />
+        Nueva
+      </button>
 
       {/* Nueva lista */}
       <Sheet open={creating} onClose={() => setCreating(false)} title="Nueva lista de compras">

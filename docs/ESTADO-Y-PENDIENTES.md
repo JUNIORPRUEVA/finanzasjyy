@@ -60,6 +60,18 @@ Las claves **no** están en este repositorio ni en este documento. En el servido
 | 1 | **Notificaciones push** | Faltan las claves VAPID en producción; sin ellas no se envían avisos. | Bajo |
 | 2 | **Dominio propio** | Ahora usa el subdominio del panel. | Bajo (suyo: DNS) |
 | 3 | **Precio recordado por producto** | Sugerir el último precio y avisar si subió. | Medio |
+| 4 | **Compra en vivo entre dos teléfonos (sin internet)** | Dos personas, misma WiFi, cambios al instante. Requiere WebRTC + emparejar con dos QR; depende de que el router no bloquee el descubrimiento local. **Pendiente de decisión y presupuesto.** | Alto |
+
+### Compras: lo que ya está y cómo funciona
+
+- **Repartir la compra**: parte lo que falta por comprar en dos, **por pasillos** (un pasillo nunca se
+  parte entre dos personas). Cada parte se puede compartir como texto (WhatsApp, Bluetooth, nota), así
+  la otra persona compra sin tener la app ni conexión. No modifica la lista.
+- **Dos teléfonos con internet**: la lista abierta se vuelve a leer cada 7 s con la pantalla a la vista,
+  así lo que marca uno aparece en el otro sin recargar. Con cambios propios sin enviar, no se refresca
+  (esos se mandan primero).
+- **Sin internet**: cada teléfono guarda lo suyo y se junta al volver la conexión. No hay sincronía en
+  vivo entre dos teléfonos sin red (ver pendiente 4).
 
 ### Descartado por decisión del dueño (20/10/2026)
 

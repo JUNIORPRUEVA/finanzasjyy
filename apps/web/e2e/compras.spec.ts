@@ -23,10 +23,14 @@ async function openShoppingList(page: Page, name: string): Promise<void> {
 }
 
 async function addItem(page: Page, name: string, quantity: string, price: string): Promise<void> {
-  await page.getByLabel('¿Qué necesita?').fill(name);
-  await page.getByLabel('Cantidad').fill(quantity);
-  await page.getByLabel('Precio estimado').fill(price);
-  await page.getByRole('button', { name: 'Añadir a la lista' }).click();
+  // Añadir vive en el botón flotante: la pantalla sólo muestra la lista y la lupa.
+  await page.getByRole('button', { name: 'Añadir producto a la lista' }).click();
+  const hoja = page.getByRole('dialog', { name: 'Añadir a la lista' });
+  await expect(hoja).toBeVisible();
+  await hoja.getByLabel('¿Qué necesita?').fill(name);
+  await hoja.getByLabel('Cantidad').fill(quantity);
+  await hoja.getByLabel('Precio estimado').fill(price);
+  await hoja.getByRole('button', { name: 'Añadir a la lista' }).click();
   await expect(page.getByText(name, { exact: false }).first()).toBeVisible({ timeout: 15_000 });
 }
 
@@ -129,6 +133,29 @@ test.describe('compras personales', () => {
     await expect(page.getByText('100.50', { exact: false }).first()).toBeVisible();
   });
 
+  test('la compra se puede repartir entre dos personas por pasillos', async ({ page }) => {
+    await ensureAuthenticated(page);
+    await ensureTestAccount(page);
+
+    const listName = await createList(page, 'Compra repartida E2E');
+    await addItem(page, 'Plátano verde', '6', '25');
+    await addItem(page, 'Detergente', '1', '180');
+    await addItem(page, 'Pechuga de pollo', '2', '290');
+
+    await page.getByRole('button', { name: 'Repartir' }).first().click();
+    const hoja = page.getByRole('dialog', { name: 'Repartir la compra' });
+    await expect(hoja).toBeVisible();
+
+    // Dos partes, y cada una con su enlace para enviarla (WhatsApp/Bluetooth).
+    await expect(hoja.getByText('Parte 1')).toBeVisible();
+    await expect(hoja.getByText('Parte 2')).toBeVisible();
+    await expect(hoja.getByRole('button', { name: 'Compartir esta parte' }).first()).toBeVisible();
+
+    // Lo que ya está comprado no se reparte: se marca todo y no debe haber partes.
+    await hoja.getByRole('button', { name: 'Cerrar', exact: true }).click();
+    await expect(hoja).toBeHidden();
+  });
+
   test('una lista vacía no se puede contabilizar y se dice por qué', async ({ page }) => {
     await ensureAuthenticated(page);
 
@@ -182,9 +209,6 @@ test.describe('compras personales', () => {
     // Y la lista existe en el servidor: se puede abrir y añadirle productos.
     await page.getByRole('link', { name: new RegExp(listName) }).first().click();
     await expect(page.getByRole('heading', { name: listName })).toBeVisible();
-    await page.getByLabel('¿Qué necesita?').fill('Producto tras reconectar');
-    await page.getByLabel('Precio estimado').fill('99.99');
-    await page.getByRole('button', { name: 'Añadir a la lista' }).click();
-    await expect(page.getByText('Producto tras reconectar').first()).toBeVisible({ timeout: 15_000 });
+    await addItem(page, 'Producto tras reconectar', '1', '99.99');
   });
 });
