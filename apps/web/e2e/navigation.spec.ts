@@ -99,33 +99,46 @@ test.describe('navegación inferior', () => {
     await expect(page).toHaveURL(/\/$/);
   });
 
-  test('el menú de añadir abre el formulario del movimiento sin salir de la pantalla', async ({ page }) => {
+  test('el menú de añadir abre cada operación a pantalla completa y sin pestañas de tipo', async ({ page }) => {
     await ensureAuthenticated(page);
-    await page.goto('/movimientos');
 
-    // Las cuatro acciones de movimiento abren el formulario DENTRO del panel: se
-    // sigue en la misma pantalla, que es lo que hace que apuntar un gasto cueste
-    // dos toques y no una navegación de ida y vuelta.
-    const casos: Array<{ action: RegExp; titulo: string; campo: string }> = [
-      { action: /Registrar ingreso/, titulo: 'Registrar ingreso', campo: '¿Cuánto entró?' },
-      { action: /Registrar gasto/, titulo: 'Registrar gasto', campo: '¿Cuánto salió?' },
-      { action: /Retiro personal/, titulo: 'Retiro personal', campo: '¿Cuánto retiró?' },
+    // Cada opción de movimiento abre SU pantalla: lo que se eligió es lo que se
+    // abre, con su título. Dentro no hay pestañas para cambiar de tipo (entrar a
+    // «Retiro» y acabar registrando un gasto es justo lo que se quitó).
+    const casos: Array<{ action: RegExp; url: RegExp; titulo: string; campo: string }> = [
+      {
+        action: /Registrar ingreso/,
+        url: /\/registrar\?kind=INCOME/,
+        titulo: 'Registrar ingreso',
+        campo: '¿Cuánto entró?',
+      },
+      {
+        action: /Registrar gasto/,
+        url: /\/registrar\?kind=EXPENSE/,
+        titulo: 'Registrar gasto',
+        campo: '¿Cuánto salió?',
+      },
+      {
+        action: /Retiro personal/,
+        url: /\/registrar\?kind=OWNER_WITHDRAWAL/,
+        titulo: 'Retiro personal',
+        campo: '¿Cuánto retiró?',
+      },
     ];
 
     for (const caso of casos) {
       await navAddButton(page).click();
       await page.getByRole('button', { name: caso.action }).click();
 
-      await expect(page).toHaveURL(/\/movimientos/);
-      const dialogo = page.getByRole('dialog');
-      await expect(dialogo.getByText(caso.titulo, { exact: true })).toBeVisible();
-      await expect(dialogo.getByLabel(caso.campo)).toBeVisible();
+      await expect(page).toHaveURL(caso.url);
+      await expect(page.getByRole('heading', { name: caso.titulo })).toBeVisible();
+      await expect(page.getByLabel(caso.campo)).toBeVisible();
 
-      // «Volver» regresa al menú, y desde ahí se cierra sin dejar nada abierto.
-      await page.getByRole('button', { name: 'Volver' }).click();
-      await expect(page.getByText('¿Qué quiere registrar?')).toBeVisible();
-      await page.getByRole('button', { name: 'Cerrar', exact: true }).first().click();
-      await expect(page.getByText('¿Qué quiere registrar?')).toBeHidden();
+      for (const otro of ['Ingreso', 'Gasto', 'Retiro', 'Aporte']) {
+        await expect(page.getByRole('button', { name: otro, exact: true })).toHaveCount(0);
+      }
+
+      await page.goto('/');
     }
   });
 

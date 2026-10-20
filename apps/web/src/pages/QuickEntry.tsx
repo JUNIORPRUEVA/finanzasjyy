@@ -1,37 +1,42 @@
-import { useSearchParams } from 'react-router-dom';
-import { KIND_TABS, MovimientoForm, type EntryKind } from '../components/MovimientoForm';
+import { Link, useSearchParams } from 'react-router-dom';
+import { KINDS, MovimientoForm, TITULO_MOVIMIENTO, type EntryKind } from '../components/MovimientoForm';
+import { IconChevronLeft } from '../components/icons';
 
 /**
- * PANTALLA «REGISTRAR»
- * --------------------
- * El formulario de verdad vive en `components/MovimientoForm.tsx`, porque es el
- * mismo que abre el botón «+» dentro de su panel: una sola versión, un solo
- * comportamiento. Aquí sólo se resuelve el enlace directo
- * (`/registrar?kind=EXPENSE&entityId=…`), que es el que usan los accesos del
- * inicio y los marcadores del navegador.
+ * PANTALLA DE REGISTRO (página completa)
+ * --------------------------------------
+ * Aquí se registra un movimiento, a pantalla completa y sin pestañas: lo que se
+ * abre es exactamente lo que se eligió («Registrar gasto» es un gasto, no un
+ * formulario para cambiar de tipo dentro). El tipo llega por el enlace
+ * (`?kind=EXPENSE`), que es lo que usan el menú del «+» y los accesos del inicio.
  *
- * Se quitaron de esta pantalla la tarjeta de «Cuentas disponibles» y las notas
- * de pie (fecha de negocio, zona horaria): eran ruido al lado de lo único que se
- * viene a hacer aquí, que es apuntar un movimiento.
+ * Se quitaron la tarjeta de «Cuentas disponibles» y las notas de pie (fecha de
+ * negocio, zona horaria): eran ruido al lado de lo único que se viene a hacer.
  */
 export function QuickEntryPage() {
   const [params] = useSearchParams();
 
   const pedido = params.get('kind') as EntryKind | null;
-  const initialKind: EntryKind = KIND_TABS.some((tab) => tab.id === pedido) ? (pedido as EntryKind) : 'EXPENSE';
+  const kind: EntryKind = pedido && KINDS.includes(pedido) ? pedido : 'EXPENSE';
   const entityId = params.get('entityId') ?? '';
 
   return (
     <div className="mx-auto w-full max-w-md space-y-3">
-      <div>
-        <h1 className="text-lg font-bold tracking-tight text-ink">Registrar</h1>
-        <p className="text-xs text-muted">Importe, descripción y cuenta. Nada más hace falta.</p>
+      <div className="flex items-center gap-2">
+        <Link
+          to="/"
+          aria-label="Volver al inicio"
+          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-muted transition hover:bg-surface-2 hover:text-ink"
+        >
+          <IconChevronLeft size={20} />
+        </Link>
+        <div className="min-w-0">
+          <h1 className="truncate text-base font-bold tracking-tight text-ink">{TITULO_MOVIMIENTO[kind]}</h1>
+          <p className="truncate text-xs text-muted">Importe, descripción y cuenta. Nada más hace falta.</p>
+        </div>
       </div>
-      <MovimientoForm
-        initialKind={initialKind}
-        initialEntityId={entityId}
-        kinds={KIND_TABS.map((tab) => tab.id)}
-      />
+
+      <MovimientoForm kind={kind} initialEntityId={entityId} />
     </div>
   );
 }

@@ -4,7 +4,7 @@ import { api, ApiError, OfflineError } from '../lib/api';
 import { getCachedAccounts, getCachedCategories } from '../lib/db';
 import { canOperateOffline, submitOrQueue } from '../lib/sync';
 import { useAuth } from '../store/auth';
-import { Button, Field, MoneyInput, Notice, Select, Tabs } from './ui';
+import { Button, Field, MoneyInput, Notice, Select } from './ui';
 import { IconChevronDown } from './icons';
 import { todayBusinessDate } from '../lib/format';
 
@@ -23,23 +23,25 @@ import { todayBusinessDate } from '../lib/format';
  *  · Se quitaron los textos de ayuda largos: un formulario con seis párrafos de
  *    explicación no se lee, se abandona.
  *
- * El mismo formulario se usa dentro del panel del botón «+» y en la pantalla
- * `/registrar` (enlaces directos y marcadores), para que no haya dos versiones
- * que se comporten distinto.
+ * El TIPO de movimiento no se elige aquí: viene decidido por la pantalla que lo
+ * abre («Registrar gasto» registra un gasto y nada más). Antes había pestañas
+ * dentro con Ingreso/Gasto/Retiro/Aporte, y eso obligaba a volver a comprobar en
+ * qué se estaba: si entré a «Retiro», lo que hay delante es un retiro.
  */
 
 export type EntryKind = 'INCOME' | 'EXPENSE' | 'OWNER_WITHDRAWAL' | 'OWNER_CONTRIBUTION' | 'ADJUSTMENT';
 
-export const KIND_TABS: Array<{ id: EntryKind; label: string }> = [
-  { id: 'INCOME', label: 'Ingreso' },
-  { id: 'EXPENSE', label: 'Gasto' },
-  { id: 'OWNER_WITHDRAWAL', label: 'Retiro' },
-  { id: 'OWNER_CONTRIBUTION', label: 'Aporte' },
-  { id: 'ADJUSTMENT', label: 'Ajuste' },
-];
+/** Cómo se llama cada operación donde se elige y en su pantalla. */
+export const TITULO_MOVIMIENTO: Record<EntryKind, string> = {
+  INCOME: 'Registrar ingreso',
+  EXPENSE: 'Registrar gasto',
+  OWNER_WITHDRAWAL: 'Retiro personal',
+  OWNER_CONTRIBUTION: 'Registrar aporte',
+  ADJUSTMENT: 'Ajuste de saldo',
+};
 
-/** Los cuatro movimientos del día a día: sin el ajuste contable. */
-export const KINDS_DIARIOS: EntryKind[] = ['INCOME', 'EXPENSE', 'OWNER_WITHDRAWAL', 'OWNER_CONTRIBUTION'];
+/** Los tipos válidos, para validar el enlace directo (`?kind=…`). */
+export const KINDS: EntryKind[] = ['INCOME', 'EXPENSE', 'OWNER_WITHDRAWAL', 'OWNER_CONTRIBUTION', 'ADJUSTMENT'];
 
 const METHOD_OPTIONS = ['EFECTIVO', 'TRANSFERENCIA', 'TARJETA', 'BIZUM', 'CHEQUE', 'DEPOSITO', 'CREDITO', 'OTRO'];
 
@@ -75,26 +77,16 @@ interface Category {
 }
 
 export interface MovimientoFormProps {
-  /** Qué se está registrando al abrirlo. */
-  initialKind: EntryKind;
+  /** Qué se está registrando: lo decide la pantalla que abre el formulario. */
+  kind: EntryKind;
   /** Unidad con la que empieza (enlaces directos con `?entityId=`). */
   initialEntityId?: string;
-  /** Qué se puede elegir. En el panel del «+» son los cuatro del día a día. */
-  kinds?: EntryKind[];
-  /** Se llama al terminar bien: el panel que lo contiene se cierra. */
-  onSaved?: () => void;
 }
 
-export function MovimientoForm({
-  initialKind,
-  initialEntityId,
-  kinds = KINDS_DIARIOS,
-  onSaved,
-}: MovimientoFormProps) {
+export function MovimientoForm({ kind, initialEntityId }: MovimientoFormProps) {
   const { entities, preferences } = useAuth();
   const queryClient = useQueryClient();
 
-  const [kind, setKind] = useState<EntryKind>(initialKind);
   const [entityId, setEntityId] = useState(initialEntityId || entities[0]?.id || '');
   const [accountId, setAccountId] = useState('');
   const [categoryId, setCategoryId] = useState('');
@@ -111,12 +103,6 @@ export function MovimientoForm({
   const [cuentasLocales, setCuentasLocales] = useState<Account[]>([]);
   const [categoriasLocales, setCategoriasLocales] = useState<Category[]>([]);
   const [sinConexion, setSinConexion] = useState<{ allowed: boolean; reason: string } | null>(null);
-
-  // Si el panel abre directamente «Retiro» y luego se cambia a «Gasto», el
-  // formulario tiene que reflejarlo: es el mismo estado, no una copia.
-  useEffect(() => {
-    setKind(initialKind);
-  }, [initialKind]);
 
   const accountsQuery = useQuery<Account[]>({
     queryKey: ['accounts', entityId],
@@ -214,13 +200,9 @@ export function MovimientoForm({
       void queryClient.invalidateQueries({ queryKey: ['accounts'] });
       void queryClient.invalidateQueries({ queryKey: ['transactions'] });
 
-      // Si el servidor lo confirmó, la operación está terminada y el panel se
-      // cierra. Si quedó SIN CONFIRMAR o fue rechazado, el panel se queda
-      // abierto con el motivo a la vista: cerrarlo de golpe escondería lo único
-      // que importa en ese momento (que el dinero aún no está registrado).
-      if (result.sentNow) {
-        onSaved?.();
-      }
+      // Si el servidor lo confirmó, la operación está terminada. Si quedó SIN
+      // CONFIRMAR o fue rechazado, la pantalla NO se va: el motivo tiene que
+      // quedar a la vista, porque el dinero aún no está registrado.
     },
     onError: (error) => {
       if (error instanceof OfflineError) {
@@ -240,7 +222,6 @@ export function MovimientoForm({
     (kind !== 'ADJUSTMENT' ||
       (ajusteCargo.length === 4 && ajusteAbono.length === 4 && ajusteMotivo.length >= 5));
 
-  const pestañas = KIND_TABS.filter((tab) => kinds.includes(tab.id));
   const resumenOpciones = [businessDate === todayBusinessDate(preferences?.timezone) ? 'Hoy' : businessDate, method]
     .join(' · ')
     .toLowerCase();
@@ -255,10 +236,6 @@ export function MovimientoForm({
         }
       }}
     >
-      {pestañas.length > 1 ? (
-        <Tabs tabs={pestañas} active={kind} onChange={(id) => { setKind(id); setMessage(null); }} />
-      ) : null}
-
       {sinConexion && !sinConexion.allowed ? (
         <Notice tone="warning" title="Sin conexión no se puede registrar">
           {sinConexion.reason}
@@ -266,6 +243,16 @@ export function MovimientoForm({
       ) : null}
 
       {message ? <Notice tone={message.tone}>{message.text}</Notice> : null}
+
+      {/* Con una sola unidad no se pregunta nada: sería un campo de más. */}
+      {entities.length > 1 ? (
+        <Select
+          label="Unidad financiera"
+          value={entityId}
+          onChange={setEntityId}
+          options={entities.map((entity) => ({ value: entity.id, label: `${entity.name} (${entity.code})` }))}
+        />
+      ) : null}
 
       <MoneyInput label={PREGUNTA_IMPORTE[kind]} value={amount} onChange={setAmount} autoFocus />
 
@@ -342,20 +329,14 @@ export function MovimientoForm({
               options={METHOD_OPTIONS.map((option) => ({ value: option, label: option.toLowerCase() }))}
             />
           ) : null}
-          {entities.length > 1 ? (
-            <Select
-              label="Unidad financiera"
-              value={entityId}
-              onChange={setEntityId}
-              options={entities.map((entity) => ({ value: entity.id, label: `${entity.name} (${entity.code})` }))}
-            />
-          ) : null}
         </div>
       ) : null}
 
       {/* El botón de guardar queda pegado abajo: con el teclado abierto y el
-          panel lleno, siempre está a la vista sin tener que desplazar. */}
-      <div className="sticky bottom-0 -mx-4 -mb-3 border-t border-border-soft bg-bg-elevated/95 px-4 py-3 backdrop-blur">
+          panel lleno, siempre está a la vista sin tener que desplazar. El
+          degradado (en vez de una línea) hace que no parezca un corte cuando el
+          formulario es corto. */}
+      <div className="sticky bottom-0 -mx-4 -mb-3 bg-gradient-to-t from-bg-elevated via-bg-elevated/95 to-transparent px-4 pb-3 pt-4">
         <Button type="submit" className="w-full" size="lg" disabled={!listo || createMutation.isPending}>
           {createMutation.isPending ? 'Registrando…' : 'Registrar movimiento'}
         </Button>

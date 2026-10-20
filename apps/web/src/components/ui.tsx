@@ -994,7 +994,7 @@ export function Panel({
             onClose();
           }
         }}
-        className="relative flex h-full w-full max-w-lg animate-panel flex-col border-l border-border-soft bg-bg-elevated shadow-elevated"
+        className="relative flex h-full w-[86%] max-w-[22rem] animate-panel flex-col border-l border-border-soft bg-bg-elevated shadow-elevated"
         style={{ paddingBottom: 'var(--safe-bottom)' }}
       >
         <div className="flex shrink-0 items-center gap-1 border-b border-border-soft px-2 pb-2 pt-[calc(var(--safe-top)+0.4rem)]">

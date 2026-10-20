@@ -11,7 +11,6 @@ import { aplicarActualizacion, EVENTO_ACTUALIZACION } from '../lib/pwa';
 import { useInstalacionApp } from '../lib/install';
 import { Badge, ConfirmDialog, Panel, Sheet } from './ui';
 import { Drawer } from './Drawer';
-import { MovimientoForm, type EntryKind } from './MovimientoForm';
 import { ToastHost, toast } from './Toast';
 import {
   IconAlert,
@@ -64,29 +63,27 @@ interface PendingTasks {
  * por para qué sirven, que es como se piensa al entrar aquí («voy a apuntar un
  * gasto» / «voy a la compra»), no por orden de llegada al código.
  *
- * Las cuatro primeras NO navegan: abren el formulario dentro del mismo panel.
- * Así apuntar un gasto son dos toques (+ → «Registrar gasto») y no se sale de la
- * pantalla en la que se estaba.
+ * Las de movimiento abren su PÁGINA COMPLETA (`/registrar?kind=…`): el formulario
+ * necesita sitio para todo lo que hay que poder revisar antes de guardar, y así
+ * lo que se abre es exactamente lo que se eligió, sin pestañas para cambiar de
+ * tipo dentro.
  */
 interface AccionRapida {
   label: string;
   hint: string;
   icon: (props: IconProps) => React.ReactElement;
-  /** Movimiento: abre el formulario aquí mismo. */
-  kind?: EntryKind;
-  /** Pantalla: navega y cierra el panel. */
-  to?: string;
+  to: string;
 }
 
 const QUICK_ACTIONS: Array<{ titulo: string; acciones: AccionRapida[] }> = [
   {
     titulo: 'Movimientos',
     acciones: [
-      { kind: 'INCOME', label: 'Registrar ingreso', hint: 'Entra dinero', icon: IconArrowDown },
-      { kind: 'EXPENSE', label: 'Registrar gasto', hint: 'Sale dinero', icon: IconArrowUp },
+      { to: '/registrar?kind=INCOME', label: 'Registrar ingreso', hint: 'Entra dinero', icon: IconArrowDown },
+      { to: '/registrar?kind=EXPENSE', label: 'Registrar gasto', hint: 'Sale dinero', icon: IconArrowUp },
       { to: '/traspasos', label: 'Transferir dinero', hint: 'Entre sus cuentas o negocios', icon: IconTransfer },
       {
-        kind: 'OWNER_WITHDRAWAL',
+        to: '/registrar?kind=OWNER_WITHDRAWAL',
         label: 'Retiro personal',
         hint: 'Saca dinero para usted, no es gasto',
         icon: IconWallet,
@@ -102,16 +99,7 @@ const QUICK_ACTIONS: Array<{ titulo: string; acciones: AccionRapida[] }> = [
   },
 ];
 
-const TITULO_FORMULARIO: Record<EntryKind, string> = {
-  INCOME: 'Registrar ingreso',
-  EXPENSE: 'Registrar gasto',
-  OWNER_WITHDRAWAL: 'Retiro personal',
-  OWNER_CONTRIBUTION: 'Registrar aporte',
-  ADJUSTMENT: 'Ajuste de saldo',
-};
-
-export function AppShell({ children }: { children: React.ReactNode }) {
-  const { user, entities, sessionState, offlineAllowedUntil, reload, logout } = useAuth();
+export function AppShell({ children }: { children: React.ReactNode }) {  const { user, entities, sessionState, offlineAllowedUntil, reload, logout } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -121,8 +109,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const [pendingShopping, setPendingShopping] = useState(0);
   const [syncing, setSyncing] = useState(false);
   const [quickOpen, setQuickOpen] = useState(false);
-  // Qué se está registrando dentro del panel del «+». `null` = menú de opciones.
-  const [quickKind, setQuickKind] = useState<EntryKind | null>(null);
   const [entitySheetOpen, setEntitySheetOpen] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [confirmLogout, setConfirmLogout] = useState(false);
@@ -180,13 +166,24 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     if (quickOpen || drawerOpen || entitySheetOpen || confirmLogout) {
       return;
     }
-    setQuickKind(null);
     setQuickOpen(true);
   };
 
   const cerrarAcciones = () => {
     setQuickOpen(false);
-    setQuickKind(null);
+  };
+
+  /**
+   * Lleva la unidad financiera que se está viendo a la pantalla de registrar:
+   * si estaba trabajando con «[DEMO] Banco», el formulario abre en esa misma
+   * unidad y no en la primera de la lista.
+   */
+  const conUnidad = (to: string) => {
+    const unidad = new URLSearchParams(location.search).get('entityId');
+    if (!unidad || !to.startsWith('/registrar')) {
+      return to;
+    }
+    return `${to}&entityId=${encodeURIComponent(unidad)}`;
   };
 
   const menuButtonRef = useRef<HTMLButtonElement | null>(null);
@@ -540,57 +537,43 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </p>
       </Sheet>
 
-      {/* Acciones rápidas del botón central: tarjeta centrada con el fondo
-          difuminado. Dos pasos en el mismo panel: elegir, y rellenar. */}
-      <Panel
-        open={quickOpen}
-        onClose={cerrarAcciones}
-        onBack={quickKind ? () => setQuickKind(null) : undefined}
-        title={quickKind ? TITULO_FORMULARIO[quickKind] : '¿Qué quiere registrar?'}
-        subtitle={quickKind ? 'Importe, descripción y cuenta.' : undefined}
-      >
-        {quickKind ? (
-          <MovimientoForm initialKind={quickKind} onSaved={cerrarAcciones} />
-        ) : (
-          <div className="space-y-4">
-            {QUICK_ACTIONS.map((grupo) => (
-              <section key={grupo.titulo}>
-                <h2 className="px-1 pb-1.5 text-[0.68rem] font-semibold uppercase tracking-[0.08em] text-faint">
-                  {grupo.titulo}
-                </h2>
-                <div className="divide-y divide-border-soft overflow-hidden rounded-2xl border border-border-soft bg-surface">
-                  {grupo.acciones.map((accion) => {
-                    const Icon = accion.icon;
-                    return (
-                      <button
-                        key={accion.kind ?? accion.to}
-                        type="button"
-                        onClick={() => {
-                          if (accion.kind) {
-                            setQuickKind(accion.kind);
-                            return;
-                          }
-                          cerrarAcciones();
-                          void navigate(accion.to!);
-                        }}
-                        className="flex min-h-[3.5rem] w-full items-center gap-3 px-3 py-2.5 text-left transition hover:bg-surface-2 active:bg-surface-2"
-                      >
-                        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-brand-soft text-brand">
-                          <Icon size={20} />
-                        </span>
-                        <span className="min-w-0 flex-1">
-                          <span className="block truncate text-sm font-semibold text-ink">{accion.label}</span>
-                          <span className="block truncate text-[0.72rem] leading-snug text-muted">{accion.hint}</span>
-                        </span>
-                        <IconChevronRight size={18} className="shrink-0 text-faint" />
-                      </button>
-                    );
-                  })}
-                </div>
-              </section>
-            ))}
-          </div>
-        )}
+      {/* Acciones rápidas del botón central. Cada una abre su pantalla: lo que se
+          elige es lo que se abre, sin pestañas para cambiar de tipo dentro. */}
+      <Panel open={quickOpen} onClose={cerrarAcciones} title="¿Qué quiere registrar?">
+        <div className="space-y-4">
+          {QUICK_ACTIONS.map((grupo) => (
+            <section key={grupo.titulo}>
+              <h2 className="px-1 pb-1.5 text-[0.68rem] font-semibold uppercase tracking-[0.08em] text-faint">
+                {grupo.titulo}
+              </h2>
+              <div className="divide-y divide-border-soft overflow-hidden rounded-2xl border border-border-soft bg-surface">
+                {grupo.acciones.map((accion) => {
+                  const Icon = accion.icon;
+                  return (
+                    <button
+                      key={accion.to}
+                      type="button"
+                      onClick={() => {
+                        cerrarAcciones();
+                        void navigate(conUnidad(accion.to));
+                      }}
+                      className="flex min-h-[3.5rem] w-full items-center gap-3 px-3 py-2.5 text-left transition hover:bg-surface-2 active:bg-surface-2"
+                    >
+                      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-brand-soft text-brand">
+                        <Icon size={20} />
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-sm font-semibold text-ink">{accion.label}</span>
+                        <span className="block truncate text-[0.72rem] leading-snug text-muted">{accion.hint}</span>
+                      </span>
+                      <IconChevronRight size={18} className="shrink-0 text-faint" />
+                    </button>
+                  );
+                })}
+              </div>
+            </section>
+          ))}
+        </div>
       </Panel>
 
       <ConfirmDialog
