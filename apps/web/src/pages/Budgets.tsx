@@ -183,7 +183,18 @@ export function BudgetsPage() {
       <Card>
         <SectionTitle title="Mis presupuestos" hint="Límite por categoría comparado con el gasto real" />
         {budgetsQuery.isLoading ? <Spinner /> : null}
-        {budgets.length === 0 && !budgetsQuery.isLoading ? (
+        {budgetsQuery.isError && !budgetsQuery.data ? (
+          <EmptyState
+            title="No se pudieron consultar los presupuestos"
+            hint="Sin conexión y sin copia guardada no se puede saber si tiene límites puestos. Conéctese una vez para descargar la copia."
+            action={
+              <Button variant="secondary" onClick={() => void budgetsQuery.refetch()}>
+                Reintentar
+              </Button>
+            }
+          />
+        ) : null}
+        {budgets.length === 0 && !budgetsQuery.isLoading && !budgetsQuery.isError ? (
           <EmptyState title="Todavía no hay presupuestos" hint="Empiece por la categoría en la que más gasta." />
         ) : null}
 

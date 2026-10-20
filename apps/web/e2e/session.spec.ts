@@ -6,6 +6,7 @@ import {
   isLoginVisible,
   loginEmailField,
   navAddButton,
+  quickMenu,
   sessionIndicator,
 } from './helpers';
 
@@ -154,7 +155,7 @@ test.describe('nada se pierde', () => {
     // 2) Registra un gasto con el botón central.
     await navAddButton(page).click();
     // El nombre accesible de la acción incluye su explicación («Registrar gasto Sale dinero»).
-    await page.getByRole('button', { name: /Registrar gasto/ }).click();
+    await quickMenu(page).getByRole('button', { name: /Registrar gasto/ }).click();
     await page.getByLabel('¿Cuánto salió?').fill('1250.50');
     await page.getByLabel('Descripción').fill('Compra de combustible');
     await page.getByRole('button', { name: 'Registrar movimiento' }).click();

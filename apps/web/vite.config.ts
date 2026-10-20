@@ -99,6 +99,18 @@ export default defineConfig({
     sourcemap: true,
     chunkSizeWarningLimit: 900,
   },
+  // Sirve la versión COMPILADA con el mismo proxy que el servidor de desarrollo.
+  // Sirve para comprobar de verdad el funcionamiento sin conexión (el Service
+  // Worker sólo existe en la compilación; en `npm run dev` está desactivado).
+  preview: {
+    port: 4173,
+    proxy: {
+      '/api': {
+        target: processEnv.VITE_PROXY_TARGET ?? 'http://localhost:3010',
+        changeOrigin: true,
+      },
+    },
+  },
   test: {
     environment: 'jsdom',
     globals: true,

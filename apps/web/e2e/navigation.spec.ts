@@ -7,6 +7,7 @@ import {
   expectNoHorizontalOverflow,
   expectNoWideElement,
   navAddButton,
+  quickMenu,
 } from './helpers';
 
 /**
@@ -142,7 +143,7 @@ test.describe('navegación inferior', () => {
 
     for (const caso of casos) {
       await navAddButton(page).click();
-      await page.getByRole('button', { name: caso.action }).click();
+      await quickMenu(page).getByRole('button', { name: caso.action }).click();
 
       await expect(page).toHaveURL(caso.url);
       await expect(page.getByRole('heading', { name: caso.titulo })).toBeVisible();
@@ -172,7 +173,7 @@ test.describe('navegación inferior', () => {
       // así que el botón «Añadir» no está en esa pantalla.
       await page.goto('/');
       await navAddButton(page).click();
-      await page.getByRole('button', { name: item.action }).click();
+      await quickMenu(page).getByRole('button', { name: item.action }).click();
       await expect(page).toHaveURL(item.url);
       await expect(page.getByText(item.expectedLabel, { exact: false }).first()).toBeVisible({ timeout: 15_000 });
     }

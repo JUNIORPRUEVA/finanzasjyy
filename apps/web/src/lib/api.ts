@@ -6,9 +6,18 @@
  *   petición (el usuario no nota nada).
  * · Si no hay conexión, lanza `OfflineError` para que la capa de sincronización
  *   decida si la operación puede guardarse localmente.
+ * · Las LECTURAS se guardan en una caché con fecha: si el servidor no puede
+ *   contestar, se devuelve la última respuesta buena (ver `lib/read-cache.ts`).
  * · Nunca inventa respuestas: si el servidor no confirma, la operación queda
  *   como pendiente.
  */
+
+import {
+  avisarDatosGuardados,
+  olvidarDatosGuardados,
+  readCachedResponse,
+  rememberResponse,
+} from './read-cache';
 
 const API_URL = (import.meta.env.VITE_API_URL as string | undefined) ?? '/api/v1';
 
@@ -73,6 +82,18 @@ export class OfflineError extends Error {
   constructor(message = 'Sin conexión con el servidor') {
     super(message);
     this.name = 'OfflineError';
+  }
+}
+
+/**
+ * El usuario ha activado el modo tienda: NO se habla con el servidor a propósito.
+ * Es distinto de «no hay red», y por eso no se recurre a la caché: las listas de
+ * compras tienen su propia copia local, más completa que cualquier respuesta.
+ */
+export class ModoTiendaOfflineError extends OfflineError {
+  constructor(message = 'Modo tienda: se guarda en el teléfono y se envía al desactivarlo.') {
+    super(message);
+    this.name = 'ModoTiendaOfflineError';
   }
 }
 
@@ -370,7 +391,7 @@ export async function startSession(
 }
 
 /** Petición cruda a la API con renovación automática de sesión. */
-export async function apiRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
+async function apiRequestDirect<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const { method = 'GET', body, skipRefresh = false, signal } = options;
 
   // SIN SEÑAL NO SE ESPERA: si el teléfono dice que no hay red, se falla al
@@ -383,7 +404,7 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
   // MODO TIENDA: sólo afecta a las listas de compras (lo que se usa en la
   // tienda). El resto de la app sigue hablando con el servidor como siempre.
   if (path.startsWith('/shopping-lists') && modoTiendaActivo()) {
-    throw new OfflineError('Modo tienda: se guarda en el teléfono y se envía al desactivarlo.');
+    throw new ModoTiendaOfflineError();
   }
 
   const headers: Record<string, string> = {
@@ -444,7 +465,7 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
     const outcome = await refreshSession();
 
     if (outcome.status === 'refreshed') {
-      return apiRequest<T>(path, { ...options, skipRefresh: true });
+      return apiRequestDirect<T>(path, { ...options, skipRefresh: true });
     }
 
     if (outcome.status === 'session-fatal') {
@@ -485,6 +506,81 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
   }
 
   return (await response.json()) as T;
+}
+
+/**
+ * CONSULTAS CON CACHÉ: PARA SEGUIR LEYENDO SIN CONEXIÓN
+ * ====================================================
+ * Todas las consultas de la app pasan por aquí. El comportamiento es sencillo a
+ * propósito:
+ *
+ *  · Con servidor: se pregunta SIEMPRE al servidor y, si contesta bien, se guarda
+ *    una copia con su hora. La caché nunca sustituye a una respuesta real.
+ *  · Sin servidor (sin red, timeout, 5xx, sesión no comprobable): se devuelve la
+ *    última respuesta buena de ESA misma consulta y se avisa a la interfaz para
+ *    que lo diga con la hora que tiene.
+ *  · Si no hay copia: se lanza el error de siempre, y la pantalla explica que
+ *    hace falta conexión. Nunca se inventa un cero.
+ *
+ * Sólo se cachean LECTURAS. Un POST/PATCH/DELETE jamás se sirve de la caché: el
+ * dinero no se mueve con una copia.
+ */
+export async function apiRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
+  const method = options.method ?? 'GET';
+
+  if (method !== 'GET' || !rutaCacheable(path)) {
+    return apiRequestDirect<T>(path, options);
+  }
+
+  try {
+    const data = await apiRequestDirect<T>(path, options);
+    void rememberResponse(path, data);
+    // El servidor ha respondido: lo que hubiera guardado ya no hace falta decirlo.
+    olvidarDatosGuardados();
+    return data;
+  } catch (error) {
+    if (!esFalloDeConexion(error)) {
+      throw error;
+    }
+    const guardado = await readCachedResponse<T>(path);
+    if (guardado) {
+      avisarDatosGuardados(guardado.cachedAt, path);
+      return guardado.data;
+    }
+    throw error;
+  }
+}
+
+/**
+ * ¿Se puede guardar una copia de esta consulta?
+ *
+ * Quedan fuera, a propósito:
+ *  · las listas de compras (tienen su propia copia local, más completa y con los
+ *    cambios hechos en el teléfono), salvo el resumen que se ve en el panel;
+ *  · la sincronización y la cola de envíos (son estado vivo de este dispositivo);
+ *  · la preparación de cierres (un cierre se calcula con los saldos de AHORA:
+ *    reutilizar uno viejo daría una diferencia falsa);
+ *  · el estado de la sesión y el inicio/cierre de sesión.
+ */
+function rutaCacheable(path: string): boolean {
+  if (path.startsWith('/closings/prepare')) return false;
+  if (path.startsWith('/shopping-lists') && !path.startsWith('/shopping-lists/summary')) return false;
+  if (path.startsWith('/sync')) return false;
+  if (path.startsWith('/auth/login') || path.startsWith('/auth/register')) return false;
+  if (path.startsWith('/auth/logout') || path.startsWith('/auth/refresh')) return false;
+  return true;
+}
+
+/** ¿El fallo significa «no se pudo hablar con el servidor» (y no otra cosa)? */
+function esFalloDeConexion(error: unknown): boolean {
+  if (error instanceof ModoTiendaOfflineError) return false;
+  if (error instanceof OfflineError) return true;
+  if (error instanceof SessionTemporarilyUnavailableError) return true;
+  if (error instanceof ApiError) {
+    // 408 = tardó demasiado; 5xx = el servidor no puede atender ahora.
+    return error.status === 408 || error.status >= 500;
+  }
+  return false;
 }
 
 /** Descarga un archivo (CSV) respetando la autenticación. */

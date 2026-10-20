@@ -215,6 +215,22 @@ export function SetupPage() {
   }, [draft]);
 
   if (!draft) {
+    // El asistente necesita la fecha de negocio del servidor. Sin conexión y sin
+    // copia guardada no se puede empezar: se dice, en lugar de dejar el cartel
+    // «Preparando el asistente…» girando para siempre.
+    if (statusQuery.isError) {
+      return (
+        <EmptyState
+          title="No se pudo preparar el asistente"
+          hint="Organizar el dinero cambia saldos reales, así que necesita conexión con el servidor. Vuelva a intentarlo cuando tenga señal."
+          action={
+            <Button variant="secondary" onClick={() => void statusQuery.refetch()}>
+              Reintentar
+            </Button>
+          }
+        />
+      );
+    }
     return <Spinner label="Preparando el asistente…" />;
   }
 

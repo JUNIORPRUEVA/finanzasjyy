@@ -41,6 +41,30 @@ Las claves **no** están en este repositorio ni en este documento. En el servido
 | Instalación | Botón discreto en el menú, sólo cuando la app no está instalada |
 | Impresión | Hoja de compra limpia (se oculta toda la app al imprimir) |
 | Plantillas de compra | 5 plantillas; aplicar dos veces no duplica (17 productos, 6 pasillos) |
+| Trabajo sin internet | Recorrido real con el service worker activo y el navegador en modo sin conexión: panel, movimientos, control, cuentas, deudas, presupuestos, obligaciones, traspasos, unidades y ajustes muestran las **cifras guardadas** (con su hora) en lugar de ceros o de una pantalla vacía. Un gasto registrado sin conexión quedó «SIN CONFIRMAR» y se envió solo al volver la red |
+
+---
+
+## 2.1 Trabajar sin internet: cómo funciona (y qué no es)
+
+La app funciona sin conexión **durante 24 h** (ventana configurable en el servidor, `offlineWindowHours`).
+No hay una «base de datos local» paralela con la que haya que conciliar nada: hay **caché con fecha**.
+
+| Pieza | Qué hace | Dónde |
+| --- | --- | --- |
+| Pantallas sin red | El service worker guarda la aplicación (HTML, JS, CSS). Sin conexión la app abre igual. | `dist/sw.js` (sólo archivos propios, nunca respuestas de la API) |
+| Lecturas | Cada consulta que el servidor contesta bien se guarda con su hora. Si el servidor no puede contestar (sin red, timeout, 502/503) se devuelve **esa** copia, y la cabecera dice de cuándo es. | `lib/read-cache.ts` + `lib/api.ts` |
+| Copia preparada | Con conexión, la app descarga en segundo plano las consultas de las pantallas principales (panel, cuentas, deudas, presupuestos, obligaciones, control, historial, traspasos). Así no hay huecos aunque nunca se haya abierto esa pantalla. Como mucho una vez cada 10 minutos. | `lib/prewarm.ts` |
+| Escrituras | Gastos, ingresos, retiros y traspasos se guardan en el dispositivo con un identificador único (idempotencia) y se envían solos al recuperar la conexión. Nada se marca como enviado hasta que el servidor lo confirma. | `lib/sync.ts` + `lib/db.ts` |
+| Nunca de la caché | Escrituras (POST/PATCH/DELETE), preparación de cierres (se calcula con saldos del momento), sincronización y listas de compras (tienen su propia copia). **Un error de datos (400) tampoco se tapa con la caché.** | `rutaCacheable()` en `lib/api.ts` |
+| Sin copia guardada | No se inventa un cero: la pantalla dice que hace falta una primera conexión. | Panel, Cuentas, Movimientos, Deudas, Presupuestos, Unidades, Traspasos, Ajustes, Organizar |
+| Caducidad | Una respuesta guardada deja de usarse a los 7 días, y hay un tope de 400 respuestas guardadas. Al cerrar sesión se borran. | `CADUCIDAD_CACHE_MS`, `MAX_RESPUESTAS` |
+
+Limitaciones conocidas y aceptadas: el cierre del día y la auditoría necesitan conexión (se calculan en el
+servidor); la sincronía en vivo entre dos teléfonos sin red sigue pendiente (ver más abajo); si el sistema
+operativo borra el almacenamiento del navegador, se pierde la copia (por eso la app pide almacenamiento
+persistente al entrar y ofrece exportar los pendientes).
+
 
 ---
 

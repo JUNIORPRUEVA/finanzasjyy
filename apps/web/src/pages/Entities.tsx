@@ -123,7 +123,20 @@ export function EntitiesPage() {
           hint="Cada una con sus propias cuentas, deudas, presupuestos y cierres"
         />
         {entitiesQuery.isLoading ? <Spinner /> : null}
-        {entities.length === 0 && !entitiesQuery.isLoading ? <EmptyState title="No hay unidades" /> : null}
+        {entitiesQuery.isError && !entitiesQuery.data ? (
+          <EmptyState
+            title="No se pudieron consultar las unidades"
+            hint="Hace falta conexión la primera vez. Las unidades que ya tiene se guardan en el dispositivo para consultarlas sin internet."
+            action={
+              <Button variant="secondary" onClick={() => void entitiesQuery.refetch()}>
+                Reintentar
+              </Button>
+            }
+          />
+        ) : null}
+        {entities.length === 0 && !entitiesQuery.isLoading && !entitiesQuery.isError ? (
+          <EmptyState title="No hay unidades" />
+        ) : null}
 
         <div className="space-y-2">
           {entities.map((entity) => {

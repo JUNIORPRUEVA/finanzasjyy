@@ -239,7 +239,20 @@ export function DebtsPage() {
       <Card className="space-y-3">
         <SectionTitle title="Préstamos y deudas" hint="Toque una deuda para registrar el pago de una cuota" />
         {loansQuery.isLoading ? <Spinner /> : null}
-        {loans.length === 0 && !loansQuery.isLoading ? (
+        {/* Sin conexión y sin copia guardada, «no hay deudas» sería falso: lo que
+            pasa es que no se pudo preguntar. Se dice así. */}
+        {loansQuery.isError && !loansQuery.data ? (
+          <EmptyState
+            title="No se pudieron consultar las deudas"
+            hint="Este dispositivo todavía no tiene una copia de sus préstamos. Conéctese una vez para descargarla y después podrá consultarlas sin internet."
+            action={
+              <Button variant="secondary" onClick={() => void loansQuery.refetch()}>
+                Reintentar
+              </Button>
+            }
+          />
+        ) : null}
+        {loans.length === 0 && !loansQuery.isLoading && !loansQuery.isError ? (
           <EmptyState
             title="No hay deudas registradas"
             hint="Registre abajo un préstamo o una tarjeta, o use el asistente «Organizar mi dinero»."

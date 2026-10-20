@@ -40,6 +40,7 @@ Thumbs.db
 # Temporales
 .tmp/
 tmp/
+.tmp-playwright/
 
 # Sesión guardada de las pruebas de navegador (contiene cookies)
 apps/web/e2e/.auth/

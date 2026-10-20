@@ -11,6 +11,11 @@ import Dexie, { type Table } from 'dexie';
  *     `clientOperationId`, que hace que reenviarlo sea seguro (idempotencia).
  *  2. `cacheMeta`, `cacheEntities`, `cacheAccounts`, `cacheCategories`:
  *     copias de sólo lectura para poder MOVERSE por la app sin conexión.
+ *  3. `cacheResponses`: la última respuesta buena de cada consulta (panel,
+ *     cuentas, deudas, presupuestos…). Es una CACHÉ, no una base de datos
+ *     paralela: guarda lo que el servidor ya contestó, con la hora a la que lo
+ *     contestó, y sólo se usa cuando el servidor no puede responder. Sirve para
+ *     que la app siga mostrando cifras reales durante esas 24 horas.
  *
  * DECISIONES DELIBERADAS:
  *  · NO se guardan tokens, contraseñas ni secretos aquí.
@@ -76,12 +81,25 @@ export interface CacheMeta {
   updatedAt: string;
 }
 
+/**
+ * Última respuesta correcta de una consulta (GET) del servidor.
+ *
+ * `key` es la ruta con su cadena de consulta tal cual se pidió. `body` es el
+ * JSON serializado. No se guarda nada que el servidor no haya confirmado.
+ */
+export interface CacheResponse {
+  key: string;
+  body: string;
+  cachedAt: string;
+}
+
 export class FinanzaDatabase extends Dexie {
   queuedOperations!: Table<QueuedOperation, string>;
   cacheEntities!: Table<CacheEntity, string>;
   cacheAccounts!: Table<CacheAccount, string>;
   cacheCategories!: Table<CacheCategory, string>;
   cacheMeta!: Table<CacheMeta, string>;
+  cacheResponses!: Table<CacheResponse, string>;
   shoppingLists!: Table<ShoppingListSnapshot, string>;
   shoppingPending!: Table<ShoppingPendingSave, string>;
 
@@ -103,6 +121,12 @@ export class FinanzaDatabase extends Dexie {
     this.version(2).stores({
       shoppingLists: 'id, entityId, status, updatedAt, pendingSync, deviceListId',
       shoppingPending: 'id, listId, createdAt',
+    });
+
+    // Versión 3: caché de respuestas para leer sin conexión.
+    // Se añade igual que la 2, sin tocar lo anterior.
+    this.version(3).stores({
+      cacheResponses: 'key, cachedAt',
     });
   }
 }
@@ -368,7 +392,42 @@ export async function clearReadCache(): Promise<void> {
     db.cacheEntities.clear(),
     db.cacheAccounts.clear(),
     db.cacheCategories.clear(),
+    // Las respuestas guardadas son datos financieros del usuario: al cerrar
+    // sesión desaparecen, igual que las cuentas y las categorías.
+    db.cacheResponses.clear(),
   ]);
+}
+
+// ---------------------------------------------------------------------------
+// Caché de respuestas (lo que se ve sin conexión)
+// ---------------------------------------------------------------------------
+
+/** Guarda la respuesta de una consulta. */
+export async function putCachedResponse(key: string, body: string): Promise<void> {
+  await db.cacheResponses.put({ key, body, cachedAt: new Date().toISOString() });
+}
+
+export async function getCachedResponse(key: string): Promise<CacheResponse | null> {
+  return (await db.cacheResponses.get(key)) ?? null;
+}
+
+export async function countCachedResponses(): Promise<number> {
+  return db.cacheResponses.count();
+}
+
+/** Elimina respuestas más viejas que `maxAgeMs` y recorta las más antiguas si sobran. */
+export async function pruneCachedResponses(maxAgeMs: number, maxEntries: number): Promise<void> {
+  const limite = new Date(Date.now() - maxAgeMs).toISOString();
+  await db.cacheResponses.where('cachedAt').below(limite).delete();
+
+  const total = await db.cacheResponses.count();
+  if (total <= maxEntries) {
+    return;
+  }
+  // `cachedAt` es ISO 8601: ordenar como texto equivale a ordenar por fecha.
+  const sobran = total - maxEntries;
+  const antiguas = await db.cacheResponses.orderBy('cachedAt').limit(sobran).toArray();
+  await db.cacheResponses.bulkDelete(antiguas.map((row) => row.key));
 }
 
 /** Estado del almacenamiento persistente (el navegador puede borrarlo si no se concede). */

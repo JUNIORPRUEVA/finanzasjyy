@@ -55,6 +55,18 @@ export function navAddButton(page: Page) {
   return page.getByRole('button', { name: 'Añadir movimiento' });
 }
 
+/**
+ * Panel de acciones rápidas que abre «Añadir».
+ *
+ * Se busca por su nombre porque dentro hay etiquetas que también existen en las
+ * pantallas («Cerrar el día» está en el panel y en el propio panel de inicio).
+ * Sin acotar, el selector encuentra dos botones y la prueba falla por ambigüedad
+ * aunque la aplicación esté perfecta.
+ */
+export function quickMenu(page: Page) {
+  return page.getByRole('dialog', { name: '¿Qué quiere registrar?' });
+}
+
 /** Botón de tres líneas que abre el menú lateral. */
 export function menuButton(page: Page) {
   return page.getByRole('button', { name: 'Abrir el menú' });

@@ -161,7 +161,8 @@ export function DashboardPage() {
         streaks: { consecutiveClosedDays: number };
       }>('/daily-control'),
     refetchInterval: 120_000,
-    enabled: navigator.onLine,
+    // Se consulta también sin conexión: así se usa la copia guardada del día en
+    // lugar de dejar el bloque vacío (ver `lib/read-cache.ts`).
   });
 
   // Listas de compras abiertas: es trabajo vivo del día, por eso se ve en el inicio.
@@ -214,10 +215,14 @@ export function DashboardPage() {
 
   if (summaryQuery.isError || !summary) {
     return (
-      <Notice tone="warning" title="No se pudo cargar el panel">
+      <Notice tone="warning" title="El panel necesita una primera conexión">
         <p>
-          No se pudo contactar con el servidor. Puede seguir consultando los últimos datos guardados en este dispositivo
-          desde «Movimientos» y «Cierre».
+          Todavía no hay cifras guardadas en este dispositivo: el panel se calcula en el servidor y se guarda aquí cada
+          vez que se abre con conexión. Conéctese un momento y a partir de ahí podrá consultarlo sin internet.
+        </p>
+        <p className="mt-2 text-xs leading-snug">
+          Mientras tanto, puede seguir <strong>registrando gastos e ingresos</strong> sin conexión desde «Añadir»: se
+          guardan en el teléfono y se envían solos al recuperar la señal.
         </p>
         <div className="mt-3">
           <Button variant="secondary" size="sm" onClick={() => void summaryQuery.refetch()}>

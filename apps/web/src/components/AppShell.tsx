@@ -9,6 +9,9 @@ import { useAuth } from '../store/auth';
 import { BOTTOM_NAV } from '../navigation/registry';
 import { aplicarActualizacion, EVENTO_ACTUALIZACION } from '../lib/pwa';
 import { useInstalacionApp } from '../lib/install';
+import { useDatosGuardados } from '../lib/read-cache';
+import { prepararCopiaSinConexion } from '../lib/prewarm';
+import { formatDateTime } from '../lib/format';
 import { Badge, ConfirmDialog, Panel, Sheet } from './ui';
 import { Drawer } from './Drawer';
 import { ToastHost, toast } from './Toast';
@@ -125,6 +128,31 @@ export function AppShell({ children }: { children: React.ReactNode }) {  const {
   // Instalar en el teléfono: el botón del menú sólo aparece si de verdad se
   // puede (Chrome con la instalación disponible, o iPhone con instrucciones).
   const instalacion = useInstalacionApp();
+
+  // ¿Se está viendo una copia guardada? Si es así hay que decirlo, con la hora.
+  const datosGuardados = useDatosGuardados();
+
+  /**
+   * PREPARAR LA COPIA MIENTRAS HAY CONEXIÓN
+   * ---------------------------------------
+   * Quedarse sin señal no avisa. Por eso, con sesión y con red, la app descarga
+   * en segundo plano las consultas que sostienen las pantallas principales y las
+   * guarda con su hora (ver `lib/prewarm.ts`). Así, cuando el teléfono se queda
+   * sin datos en el súper, no hay huecos: hay cifras reales de hace un rato.
+   *
+   * Se hace como mucho cada 10 minutos y nunca bloquea la interfaz.
+   */
+  useEffect(() => {
+    if (!isOnline || !user || sessionState !== 'authenticated') {
+      return;
+    }
+    // Primera vez de la sesión: se prepara sin esperar; después, como mucho cada
+    // 10 minutos (la propia función lo controla).
+    void prepararCopiaSinConexion(false);
+    const handleOnline = () => void prepararCopiaSinConexion(false);
+    window.addEventListener('online', handleOnline);
+    return () => window.removeEventListener('online', handleOnline);
+  }, [isOnline, user, sessionState]);
 
   /**
    * ABRIR EL MENÚ DESLIZANDO DESDE EL BORDE IZQUIERDO
@@ -404,6 +432,38 @@ export function AppShell({ children }: { children: React.ReactNode }) {  const {
             {offlineHoursLeft !== null && offlineHoursLeft > 0 ? (
               <span className="mt-1 block">Puede seguir registrando durante {Math.floor(offlineHoursLeft)} hora(s) más.</span>
             ) : null}
+            {datosGuardados ? (
+              <span className="mt-1 block">
+                Las cifras que ve son las guardadas en este dispositivo el{' '}
+                <strong>{formatDateTime(datosGuardados.cachedAt)}</strong>.
+              </span>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
+
+      {/*
+        DATOS GUARDADOS CON EL SERVIDOR DISPONIBLE
+        ------------------------------------------
+        Caso poco habitual pero importante: hay red, pero una consulta concreta no
+        llegó al servidor (un 502, un corte momentáneo) y se está mostrando su
+        copia. Se dice igual, porque el usuario tiene derecho a saber que esa
+        cifra no es de ahora mismo, sin asustarlo con un cartel de «sin conexión».
+      */}
+      {datosGuardados && !serverUnreachable ? (
+        <div className="shrink-0 px-4 pt-3">
+          <div className="flex items-center justify-between gap-2 rounded-xl border border-border-soft bg-surface-2 p-2.5 text-xs leading-snug text-muted">
+            <span>
+              Parte de lo que ve son datos guardados el{' '}
+              <strong className="text-ink">{formatDateTime(datosGuardados.cachedAt)}</strong>.
+            </span>
+            <button
+              type="button"
+              onClick={() => void reload()}
+              className="shrink-0 rounded-full border border-border-soft px-3 py-1 text-xs font-semibold text-ink"
+            >
+              Actualizar
+            </button>
           </div>
         </div>
       ) : null}

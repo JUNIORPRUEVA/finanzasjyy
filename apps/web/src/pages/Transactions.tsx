@@ -167,6 +167,20 @@ export function TransactionsPage() {
 
       {listQuery.isLoading ? <Spinner /> : null}
 
+      {/* Sin conexión y sin copia guardada de esta consulta: se dice, en lugar de
+          dejar la pantalla en blanco como si no hubiera movimientos. */}
+      {listQuery.isError && !listQuery.data ? (
+        <EmptyState
+          title="No se pudo consultar el historial"
+          hint="Sin conexión se muestra la última lista guardada en el dispositivo. Ábrala una vez con conexión (o espere a que la app prepare la copia) y después podrá consultarla sin internet."
+          action={
+            <Button variant="secondary" onClick={() => void listQuery.refetch()}>
+              Reintentar
+            </Button>
+          }
+        />
+      ) : null}
+
       {listQuery.data && listQuery.data.data.length === 0 ? (
         <EmptyState title="No hay movimientos con estos filtros" hint="Pruebe a ampliar el rango de fechas." />
       ) : null}

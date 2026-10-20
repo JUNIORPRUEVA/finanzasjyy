@@ -3,7 +3,8 @@ import { useLocation, useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, ApiError } from '../lib/api';
 import { useAuth } from '../store/auth';
-import { Badge, Button, Card, Field, Notice, SectionTitle, Select, Spinner, Tabs } from '../components/ui';
+import type { SessionPreferences } from '../store/auth';
+import { Badge, Button, Card, EmptyState, Field, Notice, SectionTitle, Select, Spinner, Tabs } from '../components/ui';
 import { formatDateTime } from '../lib/format';
 import { deviceThemePreference, setThemePreference, type ThemePreference } from '../lib/theme';
 
@@ -221,6 +222,33 @@ export function SettingsPage() {
   });
 
   if (!form || preferencesQuery.isLoading) {
+    // Si el servidor no contesta, se usan las preferencias que la sesión ya
+    // guardó en el dispositivo (se descargan al entrar). Así esta pantalla no se
+    // queda «Cargando ajustes…» para siempre cuando no hay conexión.
+    if (preferencesQuery.isError && sessionPreferences) {
+      return (
+        <div className="space-y-4">
+          <Notice tone="warning">
+            Sin conexión: lo que ve son las preferencias guardadas en este dispositivo. Los cambios no se podrán
+            guardar hasta que vuelva la conexión.
+          </Notice>
+          <AjustesBasicos preferences={sessionPreferences} />
+        </div>
+      );
+    }
+    if (preferencesQuery.isError) {
+      return (
+        <EmptyState
+          title="No se pudieron cargar los ajustes"
+          hint="Hace falta conexión la primera vez. Sus preferencias se guardan en el dispositivo y luego se consultan sin internet."
+          action={
+            <Button variant="secondary" onClick={() => void preferencesQuery.refetch()}>
+              Reintentar
+            </Button>
+          }
+        />
+      );
+    }
     return <Spinner label="Cargando ajustes…" />;
   }
 
@@ -532,6 +560,53 @@ export function SettingsPage() {
         </p>
       ) : null}
     </div>
+  );
+}
+
+/**
+ * AJUSTES SIN CONEXIÓN (sólo consulta)
+ * ------------------------------------
+ * Cuando el servidor no responde, esta pantalla no puede editar nada (guardar
+ * sin confirmar preferencias sería peor que no guardarlas). Lo que sí puede
+ * hacer es decir con claridad cómo está configurada la aplicación, con los datos
+ * que la sesión ya tiene en el teléfono.
+ */
+function AjustesBasicos({ preferences }: { preferences: SessionPreferences }) {
+  return (
+    <Card className="space-y-3">
+      <SectionTitle title="Cómo está configurada la app" hint="Datos guardados en este dispositivo" />
+      <div className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
+        <div>
+          <p className="text-xs uppercase text-muted">Zona horaria</p>
+          <p className="text-ink">{preferences.timezone}</p>
+        </div>
+        <div>
+          <p className="text-xs uppercase text-muted">Moneda</p>
+          <p className="text-ink">Peso dominicano (RD$)</p>
+        </div>
+        <div>
+          <p className="text-xs uppercase text-muted">Cierre del día</p>
+          <p className="text-ink">
+            {String(preferences.closingReminderHour).padStart(2, '0')}:
+            {String(preferences.closingReminderMinute).padStart(2, '0')}
+          </p>
+        </div>
+        <div>
+          <p className="text-xs uppercase text-muted">Trabajo sin conexión</p>
+          <p className="text-ink">{preferences.offlineWindowHours} h</p>
+        </div>
+        <div>
+          <p className="text-xs uppercase text-muted">Aviso de presupuesto</p>
+          <p className="text-ink">
+            {preferences.budgetWarnPct}% · alerta {preferences.budgetAlertPct}%
+          </p>
+        </div>
+        <div>
+          <p className="text-xs uppercase text-muted">Notificaciones</p>
+          <p className="text-ink">{preferences.pushEnabled ? 'Activadas' : 'Desactivadas'}</p>
+        </div>
+      </div>
+    </Card>
   );
 }
 

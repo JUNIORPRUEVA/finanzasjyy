@@ -69,6 +69,10 @@ beforeEach(async () => {
   document.cookie = 'finanza_csrf=; expires=Thu, 01 Jan 1970 00:00:00 GMT';
   document.cookie = 'finanza_sesion=; expires=Thu, 01 Jan 1970 00:00:00 GMT';
   await db.queuedOperations.clear();
+  // La caché de lectura guarda las respuestas buenas: si no se limpia entre
+  // pruebas, un 502 posterior devolvería la respuesta de la prueba anterior (que
+  // es justo lo que hace en producción, pero aquí falsearía el caso a probar).
+  await db.cacheResponses.clear();
   Object.defineProperty(window.navigator, 'onLine', { value: true, writable: true, configurable: true });
 });
 

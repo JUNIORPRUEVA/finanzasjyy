@@ -35,6 +35,21 @@ interface AccountsResponse {
   meta?: { total: number };
 }
 
+/**
+ * `GET /accounts` responde con la LISTA directamente (no envuelta en `data`).
+ * Aquí se aceptan las dos formas: antes se leía sólo `data`, así que la pantalla
+ * decía «Todavía no hay cuentas» aunque las hubiera, y no se podía traspasar.
+ */
+function comoLista(valor: unknown): AccountRow[] {
+  if (Array.isArray(valor)) {
+    return valor as AccountRow[];
+  }
+  if (valor && typeof valor === 'object' && Array.isArray((valor as { data?: unknown }).data)) {
+    return (valor as { data: AccountRow[] }).data;
+  }
+  return [];
+}
+
 interface TransferRow {
   id: string;
   amount: string;
@@ -57,9 +72,9 @@ export function TransfersPage() {
   const queryClient = useQueryClient();
   const currency = preferences?.currency ?? 'DOP';
 
-  const accountsQuery = useQuery<AccountsResponse>({
+  const accountsQuery = useQuery<AccountsResponse | AccountRow[]>({
     queryKey: ['accounts-all'],
-    queryFn: () => api.get<AccountsResponse>('/accounts'),
+    queryFn: () => api.get<AccountsResponse | AccountRow[]>('/accounts'),
   });
 
   const transfersQuery = useQuery<TransfersResponse>({
@@ -78,7 +93,7 @@ export function TransfersPage() {
 
   // `?? []` dentro de un useMemo: si se dejara en línea, cada render crearía un
   // array nuevo y la lista agrupada de abajo se recalcularía sin motivo.
-  const accounts = useMemo(() => accountsQuery.data?.data ?? [], [accountsQuery.data]);
+  const accounts = useMemo(() => comoLista(accountsQuery.data), [accountsQuery.data]);
 
   // Las cuentas se agrupan por unidad financiera: al elegir origen y destino se
   // ve de inmediato si el traspaso cruza de un negocio a otro.
@@ -177,7 +192,16 @@ export function TransfersPage() {
 
         {accountsQuery.isLoading ? <Spinner label="Cargando cuentas…" /> : null}
 
-        {accounts.length === 0 && !accountsQuery.isLoading ? (
+        {/* Sin conexión y sin copia: no es que no haya cuentas, es que no se pudo
+            preguntar. Un traspaso necesita los saldos del servidor de verdad. */}
+        {accountsQuery.isError && !accountsQuery.data ? (
+          <EmptyState
+            title="No se pudieron consultar las cuentas"
+            hint="Un traspaso necesita los saldos reales del servidor. Conéctese para hacerlo; sin conexión puede seguir registrando gastos e ingresos."
+          />
+        ) : null}
+
+        {accounts.length === 0 && !accountsQuery.isLoading && !accountsQuery.isError ? (
           <EmptyState
             title="Todavía no hay cuentas"
             hint="Cree sus cuentas en la pantalla de Cuentas (o con el asistente «Organizar mi dinero») antes de traspasar."

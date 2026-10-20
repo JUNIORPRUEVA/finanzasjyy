@@ -3,7 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, ApiError } from '../lib/api';
 import { useAuth } from '../store/auth';
-import { Badge, Button, Card, Field, Money, MoneyInput, Notice, SectionTitle, Select, Spinner } from '../components/ui';
+import { Badge, Button, Card, EmptyState, Field, Money, MoneyInput, Notice, SectionTitle, Select, Spinner } from '../components/ui';
 import { todayBusinessDate } from '../lib/format';
 
 interface Account {
@@ -93,6 +93,23 @@ export function AccountsPage() {
 
   if (accountsQuery.isLoading) {
     return <Spinner label="Cargando cuentas…" />;
+  }
+
+  // SIN DATOS NO SE ENSEÑAN CEROS. Si no hay conexión y este dispositivo no
+  // llegó a guardar las cuentas, un «Disponible RD$ 0.00» sería una mentira: no
+  // es que no haya dinero, es que no se ha podido preguntar.
+  if (accountsQuery.isError && !accountsQuery.data) {
+    return (
+      <EmptyState
+        title="No se pudieron consultar las cuentas"
+        hint="Hace falta conexión la primera vez, para que este dispositivo guarde una copia de los saldos. Después podrá consultarlos sin internet."
+        action={
+          <Button variant="secondary" onClick={() => void accountsQuery.refetch()}>
+            Reintentar
+          </Button>
+        }
+      />
+    );
   }
 
   const accounts = accountsQuery.data ?? [];
