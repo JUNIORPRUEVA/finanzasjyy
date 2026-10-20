@@ -40,6 +40,7 @@ Las claves **no** están en este repositorio ni en este documento. En el servido
 | Actualizaciones | La app avisa de versión nueva, la aplica y permite forzarla a mano |
 | Instalación | Botón discreto en el menú, sólo cuando la app no está instalada |
 | Impresión | Hoja de compra limpia (se oculta toda la app al imprimir) |
+| Plantillas de compra | 5 plantillas; aplicar dos veces no duplica (17 productos, 6 pasillos) |
 
 ---
 
@@ -56,15 +57,21 @@ Las claves **no** están en este repositorio ni en este documento. En el servido
 
 | # | Qué | Por qué importa | Esfuerzo |
 | --- | --- | --- | --- |
-| 1 | **Compra a crédito de proveedor** | Hoy crear una «cuenta por pagar» no genera asiento: el gasto no se reconoce y la cuenta 2100 queda en negativo al pagarla. Es un hueco contable real. | Medio (migración + regla de asiento) |
-| 2 | **Copias de seguridad automáticas** | La base vive en un solo servidor sin respaldo programado. | Bajo |
-| 3 | **Inventario** | «Compras de inventario» va a 5100 (costo del período). No hay existencias ni costo de lo vendido. | Alto (módulo) |
-| 4 | **Ficha de suplidores** | La deuda guarda a quién se le debe, pero no hay historial por proveedor. | Medio |
-| 5 | **Notificaciones push** | Faltan las claves VAPID en producción; sin ellas no se envían avisos. | Bajo |
-| 6 | **Dominio propio** | Ahora usa el subdominio del panel. | Bajo (suyo: DNS) |
-| 7 | **Plantillas de compra** | «Despensa básica», «limpieza del mes»: añadir 20 productos de un toque. | Bajo |
-| 8 | **Precio recordado por producto** | Sugerir el último precio y avisar si subió. | Medio |
-| 9 | **Prueba inestable** | `offline.test.ts` falló una vez de forma intermitente (no se ha reproducido). | Bajo |
+| 1 | **Notificaciones push** | Faltan las claves VAPID en producción; sin ellas no se envían avisos. | Bajo |
+| 2 | **Dominio propio** | Ahora usa el subdominio del panel. | Bajo (suyo: DNS) |
+| 3 | **Precio recordado por producto** | Sugerir el último precio y avisar si subió. | Medio |
+
+### Descartado por decisión del dueño (20/10/2026)
+
+No se hará, y queda escrito para que nadie lo reabra por iniciativa propia:
+
+- **Inventario / existencias.** «Compras de inventario» seguirá yendo a la cuenta 5100 (costo del
+  período). No habrá control de unidades ni costo de lo vendido.
+- **Compra a crédito de proveedor.** La cuenta por pagar queda como registro de deuda, sin asiento
+  contable propio. **Consecuencia conocida y aceptada:** al pagarla, la cuenta 2100 puede quedar en
+  negativo porque el gasto no se reconoce en el momento de la compra. Para esos casos, registre el
+  gasto directamente (con la cuenta de dinero que corresponda) en vez de usar la cuenta por pagar.
+- **Copias de seguridad automáticas.** No se programan por ahora.
 
 ### C. Decisiones que solo usted puede tomar
 
