@@ -28,9 +28,9 @@
   --text: #eef2f9;
   --text-muted: #a7b3c8;
   --text-faint: #6f7d95;
-  --brand: #10b981;
-  --brand-strong: #059669;
-  --brand-soft: rgba(16, 185, 129, 0.14);
+  --brand: #3b82f6;
+  --brand-strong: #2563eb;
+  --brand-soft: rgba(59, 130, 246, 0.16);
   --positive: #34d399;
   --negative: #fb7185;
   --warning: #fbbf24;
@@ -63,9 +63,9 @@ html[data-theme='light'] {
   --text: #0b1220;
   --text-muted: #45536b;
   --text-faint: #6b7a90;
-  --brand: #047857;
-  --brand-strong: #065f46;
-  --brand-soft: rgba(4, 120, 87, 0.1);
+  --brand: #1d4ed8;
+  --brand-strong: #1e40af;
+  --brand-soft: rgba(29, 78, 216, 0.1);
   --positive: #047857;
   --negative: #be123c;
   --warning: #b45309;

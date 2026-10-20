@@ -52,19 +52,19 @@ const THEME_OPTIONS: Array<{ id: ThemePreference; label: string; hint: string; s
     id: 'light',
     label: 'Claro',
     hint: 'Fondo claro. Se lee mejor con mucha luz, en la calle o junto a una ventana.',
-    swatch: ['#f4f6fb', '#ffffff', '#0b3b2a'],
+    swatch: ['#f4f6fb', '#ffffff', '#1d4ed8'],
   },
   {
     id: 'dark',
     label: 'Oscuro',
     hint: 'Fondo oscuro. Más cómodo de noche y gasta menos batería en pantallas OLED.',
-    swatch: ['#0a0f1c', '#131a2b', '#3ddc97'],
+    swatch: ['#0a0f1c', '#131a2b', '#3b82f6'],
   },
   {
     id: 'system',
     label: 'Como el sistema',
     hint: 'FINANZA cambia sola cuando el teléfono cambia de modo claro a oscuro (o al revés).',
-    swatch: ['#0a0f1c', '#f4f6fb', '#3ddc97'],
+    swatch: ['#0a0f1c', '#f4f6fb', '#3b82f6'],
   },
 ];
 

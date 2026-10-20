@@ -49,10 +49,10 @@ export default defineConfig({
           'Control de ingresos, gastos, cuentas, deudas y cierres diarios por unidad financiera, con funcionamiento sin conexión.',
         lang: 'es-DO',
         dir: 'ltr',
-        // El color del tema es el verde del logotipo: el mismo que usa la pantalla
-        // de arranque del móvil y la barra del navegador.
-        theme_color: '#0B3B2A',
-        background_color: '#0B3B2A',
+        // Color de la barra del navegador y del arranque del móvil: el azul de
+        // la identidad (antes era verde).
+        theme_color: '#0B2748',
+        background_color: '#0B2748',
         display: 'standalone',
         orientation: 'portrait',
         start_url: '/',
