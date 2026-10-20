@@ -353,9 +353,13 @@ export function MovimientoForm({
         </div>
       ) : null}
 
-      <Button type="submit" className="w-full" size="lg" disabled={!listo || createMutation.isPending}>
-        {createMutation.isPending ? 'Registrando…' : 'Registrar movimiento'}
-      </Button>
+      {/* El botón de guardar queda pegado abajo: con el teclado abierto y el
+          panel lleno, siempre está a la vista sin tener que desplazar. */}
+      <div className="sticky bottom-0 -mx-4 -mb-3 border-t border-border-soft bg-bg-elevated/95 px-4 py-3 backdrop-blur">
+        <Button type="submit" className="w-full" size="lg" disabled={!listo || createMutation.isPending}>
+          {createMutation.isPending ? 'Registrando…' : 'Registrar movimiento'}
+        </Button>
+      </div>
     </form>
   );
 }
