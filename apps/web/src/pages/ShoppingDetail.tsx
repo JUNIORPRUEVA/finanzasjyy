@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
@@ -14,6 +14,7 @@ import {
   Money,
   MoneyInput,
   Notice,
+  Panel,
   ProgressBar,
   SectionTitle,
   Select,
@@ -845,13 +846,39 @@ export function ShoppingDetailPage() {
         </div>
       </Sheet>
 
-      {/* Registrar el gasto */}
-      <Sheet open={paying} onClose={() => setPaying(false)} title="Registrar el gasto en FINANZA">
-        <div className="space-y-3 pb-3">
+      {/* Registrar el gasto: columna a todo el alto, con todas las opciones a la
+          vista y las acciones fijas abajo (en una hoja, con el teclado abierto,
+          la mitad de los campos quedaban tapados). */}
+      <Panel
+        open={paying}
+        onClose={() => setPaying(false)}
+        title="Registrar el gasto en FINANZA"
+        footer={
+          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+            <Button variant="secondary" onClick={() => setPaying(false)}>
+              Cancelar
+            </Button>
+            <Button disabled={payingBusy || !payAccountId || !payAmount} onClick={() => void registerExpense()}>
+              {payingBusy ? 'Registrando…' : 'Registrar gasto'}
+            </Button>
+          </div>
+        }
+      >
+        <div className="space-y-3">
           <Notice tone="info">
             Se creará <strong>un movimiento de gasto</strong> con su asiento contable, igual que si lo registrara a mano.
             Si vuelve a pulsar, no se duplicará: la lista sólo puede generar un gasto.
           </Notice>
+
+          <div className="rounded-xl border border-border-soft bg-surface p-3">
+            <p className="text-[0.7rem] uppercase tracking-wide text-faint">Esta compra</p>
+            <p className="mt-0.5 truncate text-sm font-semibold text-ink">{list.name}</p>
+            <p className="mt-1 text-xs text-muted">
+              {comprados} de {total || 0} productos marcados · estimado{' '}
+              <Money value={list.totals.estimated} currency={currency} />
+            </p>
+          </div>
+
           <Select
             label="¿De qué cuenta sale el dinero?"
             value={payAccountId}
@@ -875,16 +902,8 @@ export function ShoppingDetailPage() {
             El importe propuesto es lo que apuntó como real. Puede ajustarlo: lo que se contabiliza es lo que escriba
             aquí.
           </p>
-          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-            <Button variant="secondary" onClick={() => setPaying(false)}>
-              Cancelar
-            </Button>
-            <Button disabled={payingBusy || !payAccountId || !payAmount} onClick={() => void registerExpense()}>
-              {payingBusy ? 'Registrando…' : 'Registrar gasto'}
-            </Button>
-          </div>
         </div>
-      </Sheet>
+      </Panel>
 
       <ConfirmDialog
         open={toDeleteItem !== null}
@@ -1030,8 +1049,43 @@ function FilaProducto({
   onEdit: () => void;
   onDelete: () => void;
 }) {
+  /**
+   * DESLIZAR LA FILA (en la tienda, con una mano)
+   * ---------------------------------------------
+   * Deslizar hacia la izquierda marca el producto como comprado; hacia la
+   * derecha lo desmarca. Es el gesto natural mientras se empuja el carrito y se
+   * lleva el teléfono en la otra mano.
+   *
+   * Sólo se actúa si el movimiento es claramente horizontal (70 px y menos de
+   * 50 px en vertical): así no se marca nada sin querer al desplazar la lista.
+   */
+  const inicio = useRef<{ x: number; y: number } | null>(null);
+
   return (
-    <div className="flex items-start gap-3 px-3 py-2.5 transition">
+    <div
+      className="flex items-start gap-3 px-3 py-2.5 transition"
+      onTouchStart={(event) => {
+        const punto = event.touches[0];
+        inicio.current = { x: punto.clientX, y: punto.clientY };
+      }}
+      onTouchEnd={(event) => {
+        const desde = inicio.current;
+        inicio.current = null;
+        if (!desde || registered) {
+          return;
+        }
+        const punto = event.changedTouches[0];
+        const dx = punto.clientX - desde.x;
+        const dy = punto.clientY - desde.y;
+        if (Math.abs(dx) < 70 || Math.abs(dy) > 50) {
+          return;
+        }
+        // Izquierda: marcar. Derecha: desmarcar.
+        if ((dx < 0 && !item.isPurchased) || (dx > 0 && item.isPurchased)) {
+          onToggle();
+        }
+      }}
+    >
       <button
         type="button"
         disabled={registered}

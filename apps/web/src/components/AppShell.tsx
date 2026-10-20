@@ -84,6 +84,36 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   // Instalar en el teléfono: el botón del menú sólo aparece si de verdad se
   // puede (Chrome con la instalación disponible, o iPhone con instrucciones).
   const instalacion = useInstalacionApp();
+
+  /**
+   * ABRIR EL MENÚ DESLIZANDO DESDE EL BORDE IZQUIERDO
+   * -------------------------------------------------
+   * El gesto que todo el mundo espera en un móvil. Se mide desde el borde
+   * (28 px) para no chocar con los deslizamientos horizontales de dentro de la
+   * aplicación, y se exige un recorrido claramente horizontal (más de 70 px y
+   * menos de 60 en vertical) para no abrirlo al desplazar una lista.
+   */
+  const gestoMenu = useRef<{ x: number; y: number } | null>(null);
+
+  const empezarGesto = (event: React.TouchEvent, desdeElBorde: boolean) => {
+    const punto = event.touches[0];
+    const libre = !drawerOpen && !quickOpen && !entitySheetOpen && !confirmLogout;
+    gestoMenu.current = libre && (!desdeElBorde || punto.clientX <= 28) ? { x: punto.clientX, y: punto.clientY } : null;
+  };
+
+  const terminarGesto = (event: React.TouchEvent) => {
+    const desde = gestoMenu.current;
+    gestoMenu.current = null;
+    if (!desde) {
+      return;
+    }
+    const punto = event.changedTouches[0];
+    const dx = punto.clientX - desde.x;
+    const dy = punto.clientY - desde.y;
+    if (dx > 70 && Math.abs(dy) < 60) {
+      setDrawerOpen(true);
+    }
+  };
   const menuButtonRef = useRef<HTMLButtonElement | null>(null);
 
   const selectedEntityId = new URLSearchParams(location.search).get('entityId') ?? '';
@@ -209,7 +239,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <div className="mx-auto flex h-[100dvh] w-full max-w-3xl flex-col overflow-hidden">
+    <div
+      className="mx-auto flex h-[100dvh] w-full max-w-3xl flex-col overflow-hidden"
+      onTouchStart={(event) => empezarGesto(event, true)}
+      onTouchEnd={terminarGesto}
+    >
       {/* CABECERA: baja, con lo que se usa a diario */}
       <header className="z-30 shrink-0 border-b border-border-soft bg-bg/95 backdrop-blur-md">
         <div className="flex items-center gap-1 px-2 pb-1.5 pt-[calc(var(--safe-top)+0.35rem)]">

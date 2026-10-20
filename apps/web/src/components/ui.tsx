@@ -906,6 +906,91 @@ export function SuccessMark({ label }: { label: string }) {
   );
 }
 
+/**
+ * PANEL DE COLUMNA COMPLETA
+ * -------------------------
+ * Igual que la hoja inferior, pero ocupando TODO el alto, como una columna que
+ * entra desde la derecha (en móvil, a pantalla completa).
+ *
+ * ¿Cuándo se usa uno u otro? La hoja inferior sirve para una decisión corta
+ * («¿borrar?», «elige una unidad»). El panel es para formularios con varias
+ * opciones —registrar un gasto, por ejemplo—: en una hoja, con el teclado
+ * abierto, la mitad de los campos se quedan tapados. Aquí todo cabe, la cabecera
+ * y las acciones quedan fijas y sólo se desplaza el contenido.
+ */
+export function Panel({
+  open,
+  onClose,
+  title,
+  children,
+  footer,
+}: {
+  open: boolean;
+  onClose: () => void;
+  title?: string;
+  children: ReactNode;
+  /** Acciones fijas abajo, siempre visibles. */
+  footer?: ReactNode;
+}) {
+  const titleId = useId();
+
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+    const handleKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleKey);
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      window.removeEventListener('keydown', handleKey);
+      document.body.style.overflow = previous;
+    };
+  }, [open, onClose]);
+
+  if (!open) {
+    return null;
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex justify-end"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby={title ? titleId : undefined}
+    >
+      <button
+        type="button"
+        aria-label="Cerrar el panel"
+        onClick={onClose}
+        className="absolute inset-0 bg-black/60 backdrop-blur-[2px]"
+      />
+
+      <div
+        className="relative flex h-full w-full max-w-lg animate-panel flex-col border-l border-border-soft bg-bg-elevated shadow-elevated"
+        style={{ paddingBottom: 'var(--safe-bottom)' }}
+      >
+        <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border-soft px-4 pb-2 pt-[calc(var(--safe-top)+0.6rem)]">
+          <p id={titleId} className="min-w-0 truncate text-base font-semibold text-ink">
+            {title}
+          </p>
+          <IconButton label="Cerrar" onClick={onClose}>
+            <IconClose size={20} />
+          </IconButton>
+        </div>
+
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-3">{children}</div>
+
+        {footer ? <div className="shrink-0 border-t border-border-soft px-4 py-3">{footer}</div> : null}
+      </div>
+    </div>
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Listas largas: barra fija arriba, sólo la lista hace scroll
 // ---------------------------------------------------------------------------

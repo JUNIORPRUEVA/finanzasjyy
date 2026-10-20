@@ -47,6 +47,9 @@ export function Drawer({ open, onClose, role, userName, entityName, onLogout, re
   const location = useLocation();
   const sections = visibleDrawerEntries(role);
 
+  /** Gesto para cerrar: deslizar el propio menú hacia la izquierda. */
+  const gestoCierre = useRef<{ x: number; y: number } | null>(null);
+
   // Estado del botón «Instalar» y de la comprobación de versión.
   const [pedirInstrucciones, setPedirInstrucciones] = useState(false);
   const [estadoVersion, setEstadoVersion] = useState<'inicial' | 'buscando' | 'aldia'>('inicial');
@@ -160,6 +163,24 @@ export function Drawer({ open, onClose, role, userName, entityName, onLogout, re
       <div
         ref={panelRef}
         tabIndex={-1}
+        onTouchStart={(event) => {
+          const punto = event.touches[0];
+          gestoCierre.current = { x: punto.clientX, y: punto.clientY };
+        }}
+        onTouchEnd={(event) => {
+          const desde = gestoCierre.current;
+          gestoCierre.current = null;
+          if (!desde) {
+            return;
+          }
+          const punto = event.changedTouches[0];
+          const dx = punto.clientX - desde.x;
+          const dy = punto.clientY - desde.y;
+          // Hacia la izquierda y claramente horizontal: se cierra.
+          if (dx < -60 && Math.abs(dy) < 60) {
+            onClose();
+          }
+        }}
         className="absolute inset-y-0 left-0 flex w-[86%] max-w-[20rem] animate-rise flex-col bg-bg-elevated shadow-elevated outline-none"
         style={{ paddingLeft: 'var(--safe-left)' }}
       >

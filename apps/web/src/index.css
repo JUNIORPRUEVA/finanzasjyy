@@ -107,6 +107,17 @@ html[data-theme='light'] {
   --animate-fade-in: fade-in 0.18s ease-out both;
   --animate-rise: rise 0.22s cubic-bezier(0.16, 1, 0.3, 1) both;
   --animate-pop: pop 0.16s ease-out both;
+  /* El panel de columna completa entra desde la derecha. */
+  --animate-panel: panel 0.24s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes panel {
+  from {
+    transform: translateX(100%);
+  }
+  to {
+    transform: translateX(0);
+  }
 }
 
 @keyframes fade-in {
