@@ -76,7 +76,9 @@ export function TransfersPage() {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<{ tone: 'positive' | 'warning' | 'negative'; text: string } | null>(null);
 
-  const accounts = accountsQuery.data?.data ?? [];
+  // `?? []` dentro de un useMemo: si se dejara en línea, cada render crearía un
+  // array nuevo y la lista agrupada de abajo se recalcularía sin motivo.
+  const accounts = useMemo(() => accountsQuery.data?.data ?? [], [accountsQuery.data]);
 
   // Las cuentas se agrupan por unidad financiera: al elegir origen y destino se
   // ve de inmediato si el traspaso cruza de un negocio a otro.
