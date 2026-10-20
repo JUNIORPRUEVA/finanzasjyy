@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, ApiError, OfflineError } from '../lib/api';
 import { getCachedAccounts, getCachedCategories } from '../lib/db';
 import { canOperateOffline, submitOrQueue } from '../lib/sync';
 import { useAuth } from '../store/auth';
 import { Button, Field, MoneyInput, Notice, Select } from './ui';
+import { BotonNuevaCategoria, NuevaCategoriaSheet } from './NuevaCategoriaSheet';
 import { IconChevronDown } from './icons';
 import { todayBusinessDate } from '../lib/format';
 
@@ -99,6 +101,10 @@ export function MovimientoForm({ kind, initialEntityId }: MovimientoFormProps) {
   const [ajusteMotivo, setAjusteMotivo] = useState('');
   const [masOpciones, setMasOpciones] = useState(false);
   const [message, setMessage] = useState<{ tone: 'positive' | 'warning' | 'negative'; text: string } | null>(null);
+
+  // Crear una categoría sin salir del formulario: lo que falta para poder
+  // apuntar el gasto es justo la categoría que no está en la lista.
+  const [crearCategoria, setCrearCategoria] = useState(false);
 
   const [cuentasLocales, setCuentasLocales] = useState<Account[]>([]);
   const [categoriasLocales, setCategoriasLocales] = useState<Category[]>([]);
@@ -221,7 +227,6 @@ export function MovimientoForm({ kind, initialEntityId }: MovimientoFormProps) {
     description.trim().length >= 2 &&
     (kind !== 'ADJUSTMENT' ||
       (ajusteCargo.length === 4 && ajusteAbono.length === 4 && ajusteMotivo.length >= 5));
-
   const resumenOpciones = [businessDate === todayBusinessDate(preferences?.timezone) ? 'Hoy' : businessDate, method]
     .join(' · ')
     .toLowerCase();
@@ -251,6 +256,14 @@ export function MovimientoForm({ kind, initialEntityId }: MovimientoFormProps) {
           value={entityId}
           onChange={setEntityId}
           options={entities.map((entity) => ({ value: entity.id, label: `${entity.name} (${entity.code})` }))}
+          action={
+            <Link
+              to="/unidades"
+              className="shrink-0 rounded-lg px-1 py-0.5 text-xs font-semibold text-brand transition hover:bg-brand-soft"
+            >
+              + Crear
+            </Link>
+          }
         />
       ) : null}
 
@@ -275,15 +288,14 @@ export function MovimientoForm({ kind, initialEntityId }: MovimientoFormProps) {
       />
 
       {kind === 'INCOME' || kind === 'EXPENSE' ? (
-        categories.length > 0 ? (
-          <Select
-            label="Categoría"
-            value={categoryId}
-            onChange={setCategoryId}
-            options={categories.map((category) => ({ value: category.id, label: category.name }))}
-            placeholder="Sin categoría"
-          />
-        ) : null
+        <Select
+          label="Categoría"
+          value={categoryId}
+          onChange={setCategoryId}
+          options={categories.map((category) => ({ value: category.id, label: category.name }))}
+          placeholder="Sin categoría"
+          action={<BotonNuevaCategoria onClick={() => setCrearCategoria(true)} />}
+        />
       ) : null}
 
       {kind === 'ADJUSTMENT' ? (
@@ -341,6 +353,18 @@ export function MovimientoForm({ kind, initialEntityId }: MovimientoFormProps) {
           {createMutation.isPending ? 'Registrando…' : 'Registrar movimiento'}
         </Button>
       </div>
+
+      {/* Crear la categoría que falta sin salir del formulario. */}
+      <NuevaCategoriaSheet
+        abierto={crearCategoria}
+        kind={kind === 'INCOME' ? 'INCOME' : 'EXPENSE'}
+        entityId={entityId}
+        onCerrar={() => setCrearCategoria(false)}
+        onCreada={(creada) => {
+          setCategoryId(creada.id);
+          setCrearCategoria(false);
+        }}
+      />
     </form>
   );
 }

@@ -22,6 +22,7 @@ import {
   Skeleton,
 } from '../components/ui';
 import { toast } from '../components/Toast';
+import { BotonNuevaCategoria, NuevaCategoriaSheet } from '../components/NuevaCategoriaSheet';
 import { IconArrowDown, IconCheck, IconChevronLeft, IconClose, IconFile, IconPlus, IconShare } from '../components/icons';
 import {
   flushShoppingQueue,
@@ -85,6 +86,7 @@ export function ShoppingDetailPage() {
   const [paying, setPaying] = useState(false);
   const [payAccountId, setPayAccountId] = useState('');
   const [payCategoryId, setPayCategoryId] = useState('');
+  const [nuevaCategoria, setNuevaCategoria] = useState(false);
   const [payAmount, setPayAmount] = useState('');
   const [payDate, setPayDate] = useState(todayBusinessDate(preferences?.timezone));
   const [payingBusy, setPayingBusy] = useState(false);
@@ -892,11 +894,24 @@ export function ShoppingDetailPage() {
             onChange={setPayCategoryId}
             options={(categoriesQuery.data ?? []).map((category) => ({ value: category.id, label: category.name }))}
             placeholder="Sin categoría"
+            action={<BotonNuevaCategoria onClick={() => setNuevaCategoria(true)} />}
           />
           <MoneyInput label="Importe pagado" value={payAmount} onChange={setPayAmount} />
           <Field label="Fecha del gasto" value={payDate} onChange={setPayDate} type="date" />
         </div>
       </Panel>
+
+      {/* La categoría que falta se crea aquí mismo y queda seleccionada. */}
+      <NuevaCategoriaSheet
+        abierto={nuevaCategoria}
+        kind="EXPENSE"
+        entityId={list.entityId}
+        onCerrar={() => setNuevaCategoria(false)}
+        onCreada={(creada) => {
+          setPayCategoryId(creada.id);
+          setNuevaCategoria(false);
+        }}
+      />
 
       <ConfirmDialog
         open={toDeleteItem !== null}

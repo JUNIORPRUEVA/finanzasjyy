@@ -190,6 +190,26 @@ test.describe('formularios y diálogos', () => {
     await expect(submit).toBeEnabled();
   });
 
+  test('la categoría que falta se puede crear sin salir del formulario y queda puesta', async ({ page }) => {
+    await ensureAuthenticated(page);
+    await page.goto('/registrar?kind=EXPENSE');
+
+    // Cada ejecución usa un nombre distinto: la lista es compartida con el resto
+    // de las pruebas y no se puede depender de que no exista ya.
+    const nombre = `Categoría E2E ${Date.now()}`;
+
+    await page.getByRole('button', { name: '+ Nueva' }).click();
+    const dialogo = page.getByRole('dialog', { name: 'Nueva categoría de gasto' });
+    await expect(dialogo).toBeVisible();
+
+    await dialogo.getByLabel('Nombre de la categoría').fill(nombre);
+    await dialogo.getByRole('button', { name: 'Crear y usar' }).click();
+
+    await expect(dialogo).toBeHidden({ timeout: 15_000 });
+    // Queda seleccionada en el mismo formulario: no hay que volver a buscarla.
+    await expect(page.getByLabel('Categoría').locator('option:checked')).toHaveText(nombre);
+  });
+
   test('los avisos emergentes se cierran con la tecla Escape', async ({ page }) => {
     await ensureAuthenticated(page);
     await navAddButton(page).click();

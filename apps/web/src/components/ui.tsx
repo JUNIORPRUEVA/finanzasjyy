@@ -545,6 +545,7 @@ export function Select({
   groups,
   placeholder,
   hint,
+  action,
 }: {
   label: string;
   value: string;
@@ -553,11 +554,24 @@ export function Select({
   groups?: Array<{ label: string; options: Array<{ value: string; label: string }> }>;
   placeholder?: string;
   hint?: string;
+  /**
+   * Acción junto al nombre del campo («＋ Nueva»). Va fuera del `<label>` a
+   * propósito: un botón dentro de una etiqueta abre además el desplegable.
+   */
+  action?: ReactNode;
 }) {
+  const id = useId();
+
   return (
-    <label className="block">
-      <span className="mb-1 block text-sm font-medium text-ink">{label}</span>
+    <div className="block">
+      <div className="mb-1 flex items-baseline justify-between gap-2">
+        <label htmlFor={id} className="block text-sm font-medium text-ink">
+          {label}
+        </label>
+        {action}
+      </div>
       <select
+        id={id}
         value={value}
         onChange={(event) => onChange(event.target.value)}
         className="w-full appearance-none rounded-xl border border-border-soft bg-surface-2 px-3 py-2.5 text-ink outline-none transition focus:border-brand"
@@ -580,7 +594,7 @@ export function Select({
             ))}
       </select>
       {hint ? <span className="mt-1 block text-xs text-faint">{hint}</span> : null}
-    </label>
+    </div>
   );
 }
 
