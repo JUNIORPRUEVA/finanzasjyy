@@ -155,6 +155,16 @@ export function buildPostingLines(context: PostingContext): PostingLine[] {
         'Las transferencias se contabilizan con TransferService (asiento doble según la unidad financiera), no con las reglas simples.',
       );
 
+    // Los movimientos de custodia tampoco caben en estas reglas simples: cada uno
+    // genera DOS asientos (empresa dueña y unidad que custodia) y los construye
+    // `CustodyService`, que conoce las dos unidades implicadas.
+    case 'CUSTODY_IN':
+    case 'CUSTODY_OUT':
+    case 'CUSTODY_SETTLEMENT':
+      throw new InvariantError(
+        'Los movimientos de custodia se contabilizan con CustodyService (dos asientos: empresa dueña y unidad que custodia).',
+      );
+
     default: {
       const exhaustive: never = context.kind;
       throw new InvariantError(`Tipo de movimiento no soportado: ${String(exhaustive)}`);
@@ -248,6 +258,9 @@ export const CASH_ONLY_KINDS: TxnKind[] = [
   'CREDIT_CARD_PAYMENT',
   'RECEIVABLE_SETTLEMENT',
   'PAYABLE_SETTLEMENT',
+  'CUSTODY_IN',
+  'CUSTODY_OUT',
+  'CUSTODY_SETTLEMENT',
 ];
 
 /**

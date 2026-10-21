@@ -13,6 +13,7 @@ import { BudgetsModule } from './budgets/budgets.module.js';
 import { CategoriesModule } from './categories/categories.module.js';
 import { ClosingsModule } from './closings/closings.module.js';
 import { CounterpartiesModule } from './counterparties/counterparties.module.js';
+import { CustodyModule } from './custody/custody.module.js';
 import { DailyControlModule } from './daily-control/daily-control.module.js';
 import { DashboardModule } from './dashboard/dashboard.module.js';
 import { EntitiesModule } from './entities/entities.module.js';
@@ -65,6 +66,7 @@ import { TransfersModule } from './transfers/transfers.module.js';
     AccountsModule,
     CategoriesModule,
     CounterpartiesModule,
+    CustodyModule,
     LedgerModule,
     TransactionsModule,
     TransfersModule,

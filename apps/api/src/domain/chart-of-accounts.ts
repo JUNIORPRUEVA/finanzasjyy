@@ -37,6 +37,14 @@ export const CHART_OF_ACCOUNTS: ChartAccountSeed[] = [
   { code: '1110', name: 'Billeteras digitales', type: 'ASSET', normalBalance: 'DEBIT' },
   { code: '1120', name: 'Procesador de pagos / adquirente', type: 'ASSET', normalBalance: 'DEBIT' },
   {
+    code: '1130',
+    name: 'Efectivo de la empresa en poder del propietario',
+    type: 'ASSET',
+    normalBalance: 'DEBIT',
+    description:
+      'Dinero de la empresa que está físicamente en una cuenta personal del propietario, pendiente de liquidar. Enfrente está la 2150 de la unidad que lo custodia.',
+  },
+  {
     code: '1150',
     name: 'Cuentas intercompañía (transferencias internas)',
     type: 'ASSET',
@@ -60,6 +68,22 @@ export const CHART_OF_ACCOUNTS: ChartAccountSeed[] = [
   { code: '2201', name: 'Préstamos bancarios por pagar', type: 'LIABILITY', normalBalance: 'CREDIT' },
   { code: '2202', name: 'Préstamos personales por pagar', type: 'LIABILITY', normalBalance: 'CREDIT' },
   { code: '2210', name: 'Tarjetas de crédito por pagar', type: 'LIABILITY', normalBalance: 'CREDIT' },
+  {
+    code: '2150',
+    name: 'Fondos de empresas bajo custodia (por liquidar)',
+    type: 'LIABILITY',
+    normalBalance: 'CREDIT',
+    description:
+      'En la unidad que CUSTODIA: dinero que está en su cuenta pero pertenece a otra empresa. Sube al recibir el cobro y baja al liquidarlo o al pagar un gasto de esa empresa.',
+  },
+  {
+    code: '2350',
+    name: 'Deuda con el propietario (reembolso por pagar)',
+    type: 'LIABILITY',
+    normalBalance: 'CREDIT',
+    description:
+      'Gastos de una empresa pagados con dinero propio del propietario. No son fondos en custodia: la empresa le debe el reembolso.',
+  },
   { code: '2300', name: 'Impuestos por pagar', type: 'LIABILITY', normalBalance: 'CREDIT' },
   { code: '2400', name: 'Obligaciones recurrentes por pagar', type: 'LIABILITY', normalBalance: 'CREDIT' },
   { code: '2500', name: 'Nómina por pagar', type: 'LIABILITY', normalBalance: 'CREDIT' },
@@ -130,6 +154,7 @@ export const LEDGER = {
   SAVINGS: '1102',
   DIGITAL_WALLET: '1110',
   MERCHANT: '1120',
+  COMPANY_CASH_WITH_OWNER: '1130',
   INTERCOMPANY: '1150',
   RECEIVABLE: '1210',
   LOAN_GIVEN: '1250',
@@ -139,6 +164,8 @@ export const LEDGER = {
   LOAN_PAYABLE_BANK: '2201',
   LOAN_PAYABLE_PERSONAL: '2202',
   CREDIT_CARD: '2210',
+  CUSTODY_FUNDS: '2150',
+  OWNER_REIMBURSEMENT: '2350',
   TAXES_PAYABLE: '2300',
   RECURRING_PAYABLE: '2400',
   OWNER_CONTRIBUTION: '3100',

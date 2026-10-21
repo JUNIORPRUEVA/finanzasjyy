@@ -106,6 +106,13 @@ enum TxnKind {
   RECEIVABLE_SETTLEMENT
   PAYABLE_SETTLEMENT
   ADJUSTMENT
+  /// Cobro de una empresa que entra físicamente en la cuenta de otra unidad
+  /// (dinero en custodia). En la unidad que custodia sube el pasivo 2150.
+  CUSTODY_IN
+  /// Salida de dinero de la cuenta que custodia (liquidación o gasto pagado).
+  CUSTODY_OUT
+  /// En la empresa dueña del dinero: entra a su banco/caja desde la custodia.
+  CUSTODY_SETTLEMENT
 }
 
 enum TxnStatus {
@@ -256,6 +263,8 @@ model User {
   syncOperations     SyncOperation[]
   attachments        Attachment[]
   shoppingLists      ShoppingList[] @relation("ShoppingListCreatedBy")
+  custodyFunds       CustodyFund[]       @relation("CustodyFundCreatedBy")
+  custodyMovements   CustodyMovement[]   @relation("CustodyMovementCreatedBy")
 
   @@index([isActive])
 }
@@ -384,6 +393,8 @@ model FinancialEntity {
   notifications    Notification[]
   attachments      Attachment[]
   shoppingLists    ShoppingList[]
+  custodyFunds     CustodyFund[]     @relation("CustodyFundEntity")
+  custodyMovements CustodyMovement[] @relation("CustodyMovementEntity")
 
   @@index([isActive])
   @@index([ownerUserId])
@@ -401,6 +412,120 @@ model EntityMember {
 
   @@unique([entityId, userId])
   @@index([userId])
+}
+
+// ============================================================================
+// FONDOS EMPRESARIALES EN CUENTAS PERSONALES (CUSTODIA)
+// ============================================================================
+//
+// El caso real: un cliente paga productos de FULLTECH y transfiere el dinero al
+// Banreservas PERSONAL del propietario. El dinero está en el banco personal
+// (saldo real) pero NO es del propietario: es de la empresa, en custodia.
+//
+// Contablemente hay dos asientos, uno en cada unidad:
+//   Empresa dueña : D 1130 (efectivo de la empresa en poder del propietario) / C ingreso
+//   Quien custodia: D banco / C 2150 (fondos de empresas bajo custodia)
+//
+// Así el banco suma lo que de verdad hay, la empresa registra su ingreso y el
+// propietario no aparece ganando un dinero que no es suyo. Al liquidar se
+// deshace la custodia SIN tocar ingresos ni gastos.
+
+/// Estado de un importe pendiente de liquidación.
+enum CustodyFundStatus {
+  OPEN
+  PARTIAL
+  SETTLED
+  VOIDED
+}
+
+/// Qué hace el movimiento de custodia.
+enum CustodyMovementType {
+  /// Traslado real del dinero a una cuenta/caja de la empresa dueña.
+  SETTLEMENT
+  /// Gasto de la empresa pagado con dinero que estaba en custodia.
+  EXPENSE
+}
+
+/// Cada cobro de una empresa que entra en una cuenta de OTRA unidad.
+model CustodyFund {
+  id                   String            @id @default(uuid())
+  /// Unidad dueña del dinero (FULLTECH, APPYRA...).
+  beneficiaryEntityId  String
+  /// Cuenta real donde está el dinero (personal del propietario).
+  holdingAccountId     String
+  /// Movimiento que originó la custodia (ingreso, cobro de factura...).
+  sourceTransactionId  String            @unique
+  originalAmount       Decimal           @db.Decimal(18, 2)
+  /// Lo ya liquidado o consumido con gastos. Nunca supera `originalAmount`.
+  appliedAmount        Decimal           @default(0) @db.Decimal(18, 2)
+  status               CustodyFundStatus @default(OPEN)
+  businessDate         DateTime          @db.Date
+  description          String
+  createdByUserId      String
+  createdAt            DateTime          @default(now())
+  updatedAt            DateTime          @updatedAt
+
+  beneficiaryEntity FinancialEntity      @relation("CustodyFundEntity", fields: [beneficiaryEntityId], references: [id], onDelete: Cascade)
+  holdingAccount    FinancialAccount     @relation("CustodyFundAccount", fields: [holdingAccountId], references: [id])
+  sourceTransaction FinancialTransaction @relation("CustodySourceTransaction", fields: [sourceTransactionId], references: [id])
+  createdBy         User                 @relation("CustodyFundCreatedBy", fields: [createdByUserId], references: [id])
+  allocations       CustodyAllocation[]
+
+  @@index([beneficiaryEntityId, holdingAccountId, status])
+  @@index([beneficiaryEntityId, businessDate])
+  @@index([holdingAccountId, status])
+}
+
+/// Liquidación (total, parcial o agrupada) o gasto pagado desde la custodia.
+model CustodyMovement {
+  id                   String             @id @default(uuid())
+  beneficiaryEntityId  String
+  holdingAccountId     String
+  /// Cuenta de la empresa dueña que recibe el dinero (banco o caja). Nulo si es un gasto.
+  targetAccountId      String?
+  /// Gasto registrado en la empresa dueña (sólo para `type = EXPENSE`).
+  expenseTransactionId String?            @unique
+  type                 CustodyMovementType
+  amount               Decimal            @db.Decimal(18, 2)
+  businessDate         DateTime           @db.Date
+  description          String
+  clientOperationId    String             @unique
+  status               TxnStatus          @default(POSTED)
+  voidedAt             DateTime?
+  voidReason           String?
+  /// Asientos creados: uno en la unidad que custodia y otro en la empresa dueña.
+  holdingEntryId       String?
+  beneficiaryEntryId   String?
+  createdByUserId      String
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
+
+  beneficiaryEntity  FinancialEntity       @relation("CustodyMovementEntity", fields: [beneficiaryEntityId], references: [id], onDelete: Cascade)
+  holdingAccount     FinancialAccount      @relation("CustodyMovementHoldingAccount", fields: [holdingAccountId], references: [id])
+  targetAccount      FinancialAccount?     @relation("CustodyMovementTargetAccount", fields: [targetAccountId], references: [id])
+  expenseTransaction FinancialTransaction? @relation("CustodyExpenseTransaction", fields: [expenseTransactionId], references: [id])
+  createdBy          User                  @relation("CustodyMovementCreatedBy", fields: [createdByUserId], references: [id])
+  allocations        CustodyAllocation[]
+
+  @@index([beneficiaryEntityId, businessDate])
+  @@index([holdingAccountId, businessDate])
+  @@index([status])
+}
+
+/// Qué cobros paga cada liquidación (permite liquidaciones agrupadas y conserva
+/// la trazabilidad de cada peso).
+model CustodyAllocation {
+  id         String   @id @default(uuid())
+  movementId String
+  fundId     String
+  amount     Decimal  @db.Decimal(18, 2)
+  createdAt  DateTime @default(now())
+
+  movement CustodyMovement @relation(fields: [movementId], references: [id], onDelete: Cascade)
+  fund     CustodyFund     @relation(fields: [fundId], references: [id], onDelete: Cascade)
+
+  @@unique([movementId, fundId])
+  @@index([fundId])
 }
 
 // ============================================================================
@@ -464,6 +589,9 @@ model FinancialAccount {
   loans           Loan[]
   loanPayments    LoanPayment[]
   reconciliations ClosingReconciliation[]
+  custodyFunds    CustodyFund[]     @relation("CustodyFundAccount")
+  custodyHeld     CustodyMovement[] @relation("CustodyMovementHoldingAccount")
+  custodyTargets  CustodyMovement[] @relation("CustodyMovementTargetAccount")
 
   @@unique([entityId, name])
   @@index([entityId, status])
@@ -661,6 +789,10 @@ model FinancialTransaction {
   /// Si este gasto se registró desde una lista de compras personales, aquí está
   /// el enlace. Es sólo informativo: el movimiento es un gasto normal.
   shoppingList ShoppingList?
+  /// Si este movimiento dejó dinero de su empresa en una cuenta de otra unidad.
+  custodySource CustodyFund?    @relation("CustodySourceTransaction")
+  /// Si este gasto se pagó con dinero que estaba en custodia.
+  custodyExpense CustodyMovement? @relation("CustodyExpenseTransaction")
 
   @@index([entityId, businessDate])
   @@index([accountId, businessDate])
