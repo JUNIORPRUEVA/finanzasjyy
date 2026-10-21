@@ -74,6 +74,9 @@ export class AuditService {
         orderBy: { createdAt: 'desc' },
         skip: params.skip,
         take: params.take,
+        // QUIÉN lo hizo: sin el nombre, el registro dice «alguien creó un gasto»,
+        // que no sirve para nada en una cuenta compartida.
+        include: { user: { select: { id: true, name: true, email: true } } },
       }),
       this.prisma.auditLog.count({ where }),
     ]);

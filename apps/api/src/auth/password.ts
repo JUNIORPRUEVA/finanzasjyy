@@ -30,10 +30,18 @@ export async function verifyPassword(passwordHash: string, plain: string): Promi
   }
 }
 
-/** Fuerza mínima exigida por FINANZA para una contraseña de acceso. */
+/**
+ * Fuerza mínima exigida por FINANZA para una contraseña de acceso.
+ *
+ * Ocho caracteres con al menos una letra y un número. Se bajó de 10 a 8 para que
+ * una contraseña familiar fácil de recordar sea posible (una regla que impide
+ * entrar acaba en «contraseña apuntada en un papel»). La protección real contra
+ * prueba y error son argon2id, el límite de 5 intentos por minuto y el bloqueo
+ * temporal de la cuenta; aun así, se recomienda una contraseña más larga.
+ */
 export function isPasswordStrongEnough(plain: string): { ok: boolean; reason?: string } {
-  if (plain.length < 10) {
-    return { ok: false, reason: 'La contraseña debe tener al menos 10 caracteres' };
+  if (plain.length < 8) {
+    return { ok: false, reason: 'La contraseña debe tener al menos 8 caracteres' };
   }
   if (!/[A-Za-z]/.test(plain)) {
     return { ok: false, reason: 'La contraseña debe incluir al menos una letra' };

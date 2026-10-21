@@ -2,18 +2,27 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { createHash } from 'node:crypto';
-import { ConflictError, ForbiddenError, NotFoundError, UnauthorizedError } from '../common/errors.js';
+import {
+  ConflictError,
+  ForbiddenError,
+  NotFoundError,
+  UnauthorizedError,
+  ValidationError,
+} from '../common/errors.js';
 import type { AuthenticatedUser } from '../common/http.decorators.js';
 import type { RequestMetaInfo } from '../common/request-meta.js';
 import { AuditService } from '../audit/audit.service.js';
+import type { UserRole } from '../generated/prisma/enums.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import {
   ChangePasswordDto,
   LoginDto,
   RefreshTokenDto,
   RegisterUserDto,
+  SetUserPasswordDto,
   UpdatePreferencesDto,
   UpdateProfileDto,
+  UpdateUserDto,
 } from './auth.dto.js';
 import { hashPassword, isPasswordStrongEnough, verifyPassword } from './password.js';
 import { generateRefreshToken, hashToken, type AccessTokenPayload } from './tokens.js';
@@ -219,7 +228,7 @@ export class AuthService {
     dto: RegisterUserDto,
     actor: AuthenticatedUser,
     meta: RequestMetaInfo,
-  ): Promise<{ id: string; email: string; name: string; role: string }> {
+  ): Promise<{ id: string; email: string; name: string; role: string; entityCount: number }> {
     const strength = isPasswordStrongEnough(dto.password);
     if (!strength.ok) {
       throw new UnauthorizedError(strength.reason ?? 'Contraseña demasiado débil');
@@ -242,24 +251,176 @@ export class AuthService {
     });
 
     await this.ensurePreferences(user.id);
+    // SIN RESTRICCIONES PARA LA FAMILIA: la persona nueva entra con acceso a
+    // todas las unidades que administra quien la crea. Si no se hiciera esto,
+    // entraría y vería la aplicación vacía («no tiene acceso a esta unidad»),
+    // que es peor que no poder entrar.
+    const entityCount = await this.grantAccessToAllEntities(actor.userId, user.id);
     await this.audit.record({
       userId: actor.userId,
       action: 'auth.user.created',
       entityType: 'User',
       entityId: user.id,
-      after: { email: user.email, role: user.role, via: 'ADMIN' },
+      after: { email: user.email, role: user.role, via: 'ADMIN', entities: entityCount },
       ip: meta.ip,
       userAgent: meta.userAgent,
     });
 
-    return { id: user.id, email: user.email, name: user.name, role: user.role };
+    return { id: user.id, email: user.email, name: user.name, role: user.role, entityCount };
   }
 
-  async listUsers(): Promise<Array<{ id: string; email: string; name: string; role: string; isActive: boolean; lastLoginAt: Date | null }>> {
-    return this.prisma.user.findMany({
-      select: { id: true, email: true, name: true, role: true, isActive: true, lastLoginAt: true },
-      orderBy: { createdAt: 'asc' },
+  /**
+   * Da acceso a la persona nueva a TODAS las unidades del que la crea.
+   * Devuelve cuántas unidades ha quedado viendo.
+   */
+  private async grantAccessToAllEntities(actorUserId: string, userId: string): Promise<number> {
+    const [owned, administered] = await Promise.all([
+      this.prisma.financialEntity.findMany({
+        where: { ownerUserId: actorUserId, isActive: true },
+        select: { id: true },
+      }),
+      this.prisma.entityMember.findMany({
+        where: { userId: actorUserId, role: 'ADMIN' },
+        select: { entityId: true },
+      }),
+    ]);
+
+    const entityIds = [...new Set([...owned.map((row) => row.id), ...administered.map((row) => row.entityId)])];
+    if (entityIds.length === 0) {
+      return 0;
+    }
+    await this.prisma.entityMember.createMany({
+      data: entityIds.map((entityId) => ({ entityId, userId, role: 'ADMIN' as const })),
+      skipDuplicates: true,
     });
+    return entityIds.length;
+  }
+
+  /** Edita nombre, correo, rol o el permiso de entrar de otra persona. */
+  async updateUser(
+    userId: string,
+    dto: UpdateUserDto,
+    actor: AuthenticatedUser,
+    meta: RequestMetaInfo,
+  ): Promise<{ id: string; email: string; name: string; role: string; isActive: boolean }> {
+    const before = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!before) {
+      throw new NotFoundError('Usuario', userId);
+    }
+
+    // Un usuario no puede dejar la aplicación sin nadie que la administre:
+    // desactivarse o quitarse el rol a sí mismo dejaría la puerta cerrada.
+    if (userId === actor.userId && dto.isActive === false) {
+      throw new ValidationError('No puede desactivar su propio acceso');
+    }
+    if (userId === actor.userId && dto.role && dto.role !== before.role) {
+      throw new ValidationError('No puede cambiar su propio rol');
+    }
+
+    const data: { name?: string; email?: string; role?: UserRole; isActive?: boolean } = {};
+    if (dto.name !== undefined) {
+      data.name = dto.name.trim();
+    }
+    if (dto.email !== undefined) {
+      const email = dto.email.trim().toLowerCase();
+      if (email !== before.email) {
+        const existing = await this.prisma.user.findUnique({ where: { email } });
+        if (existing) {
+          throw new ConflictError('Ya existe un usuario con ese correo electrónico');
+        }
+      }
+      data.email = email;
+    }
+    if (dto.role !== undefined) {
+      data.role = dto.role;
+    }
+    if (dto.isActive !== undefined) {
+      data.isActive = dto.isActive;
+    }
+
+    const user = await this.prisma.user.update({ where: { id: userId }, data });
+
+    // Al volver a activar a alguien, se le devuelve el acceso a las unidades.
+    if (dto.isActive === true) {
+      await this.grantAccessToAllEntities(actor.userId, userId);
+    }
+    // Si se le retira el acceso, sus sesiones se cierran en el acto.
+    if (dto.isActive === false) {
+      await this.prisma.session.updateMany({
+        where: { userId, revokedAt: null },
+        data: { revokedAt: new Date(), revokedReason: 'USER_DEACTIVATED' },
+      });
+    }
+
+    await this.audit.record({
+      userId: actor.userId,
+      action: 'auth.user.updated',
+      entityType: 'User',
+      entityId: userId,
+      before: { name: before.name, email: before.email, role: before.role, isActive: before.isActive },
+      after: { name: user.name, email: user.email, role: user.role, isActive: user.isActive },
+      ip: meta.ip,
+      userAgent: meta.userAgent,
+    });
+
+    return { id: user.id, email: user.email, name: user.name, role: user.role, isActive: user.isActive };
+  }
+
+  /** Pone una contraseña nueva a otra persona (por si la olvida). */
+  async setUserPassword(
+    userId: string,
+    password: string,
+    actor: AuthenticatedUser,
+    meta: RequestMetaInfo,
+  ): Promise<{ ok: true }> {
+    const user = await this.prisma.user.findUnique({ where: { id: userId }, select: { id: true, email: true } });
+    if (!user) {
+      throw new NotFoundError('Usuario', userId);
+    }
+    const strength = isPasswordStrongEnough(password);
+    if (!strength.ok) {
+      throw new ValidationError(strength.reason ?? 'Contraseña demasiado débil');
+    }
+
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: {
+        passwordHash: await hashPassword(password),
+        failedLoginCount: 0,
+        lockedUntil: null,
+      },
+    });
+
+    await this.audit.record({
+      userId: actor.userId,
+      action: 'auth.user.password_reset',
+      entityType: 'User',
+      entityId: userId,
+      after: { email: user.email },
+      ip: meta.ip,
+      userAgent: meta.userAgent,
+    });
+
+    return { ok: true };
+  }
+
+  async listUsers(actorUserId: string): Promise<
+    Array<{
+      id: string;
+      email: string;
+      name: string;
+      role: string;
+      isActive: boolean;
+      lastLoginAt: Date | null;
+      createdAt: Date;
+      isSelf: boolean;
+    }>
+  > {
+    const rows = await this.prisma.user.findMany({
+      select: { id: true, email: true, name: true, role: true, isActive: true, lastLoginAt: true, createdAt: true },
+      orderBy: [{ isActive: 'desc' }, { createdAt: 'asc' }],
+    });
+    return rows.map((row) => ({ ...row, isSelf: row.id === actorUserId }));
   }
 
   /** Rota el refresh token en cada uso (rotación de credenciales). */

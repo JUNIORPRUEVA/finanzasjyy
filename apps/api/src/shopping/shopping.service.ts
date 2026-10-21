@@ -161,6 +161,7 @@ export class ShoppingService {
       sortOrder: number;
     }>,
     entity?: { code: string; name: string } | null,
+    createdByName?: string | null,
   ) {
     const presented = items.map((item) => this.presentItem(item));
     const estimatedTotal = this.num(presented.reduce((acc, item) => acc + Number(item.estimatedTotal), 0));
@@ -185,6 +186,7 @@ export class ShoppingService {
       completedAt: list.completedAt ? list.completedAt.toISOString() : null,
       deviceListId: list.deviceListId,
       createdByUserId: list.createdByUserId,
+      createdByName: createdByName ?? null,
       createdAt: list.createdAt.toISOString(),
       updatedAt: list.updatedAt.toISOString(),
       totals: {
@@ -240,7 +242,12 @@ export class ShoppingService {
     const [rows, total] = await Promise.all([
       this.prisma.shoppingList.findMany({
         where,
-        include: { items: { orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }] }, entity: { select: { code: true, name: true } } },
+        include: {
+          items: { orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }] },
+          entity: { select: { code: true, name: true } },
+          // La firma de la lista: quién la abrió.
+          createdBy: { select: { name: true } },
+        },
         orderBy: [{ status: 'asc' }, { updatedAt: 'desc' }],
         skip,
         take,
@@ -249,8 +256,8 @@ export class ShoppingService {
     ]);
 
     const data = rows.map((row) => {
-      const { items, entity, ...list } = row;
-      return this.presentList(list, items, entity);
+      const { items, entity, createdBy, ...list } = row;
+      return this.presentList(list, items, entity, createdBy?.name ?? null);
     });
 
     return paginate(data, total, page, limit);
@@ -259,14 +266,18 @@ export class ShoppingService {
   async get(user: AuthenticatedUser, id: string) {
     const list = await this.prisma.shoppingList.findUnique({
       where: { id },
-      include: { items: { orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }] }, entity: { select: { code: true, name: true } } },
+      include: {
+        items: { orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }] },
+        entity: { select: { code: true, name: true } },
+        createdBy: { select: { name: true } },
+      },
     });
     if (!list) {
       throw new NotFoundError('Lista de compras', id);
     }
     await this.access.assertCanRead(user.userId, list.entityId);
-    const { items, entity, ...rest } = list;
-    return this.presentList(rest, items, entity);
+    const { items, entity, createdBy, ...rest } = list;
+    return this.presentList(rest, items, entity, createdBy?.name ?? null);
   }
 
   /** Carga la lista comprobando permiso de ESCRITURA (para cambios). */

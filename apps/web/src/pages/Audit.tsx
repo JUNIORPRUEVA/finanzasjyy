@@ -19,6 +19,8 @@ import { formatDateTime, todayBusinessDate } from '../lib/format';
 interface AuditRow {
   id: string;
   userId: string | null;
+  /** Quién lo hizo (el servidor manda ya el nombre resuelto). */
+  user?: { id: string; name: string; email: string } | null;
   actorType: string;
   action: string;
   entityType: string;
@@ -194,9 +196,20 @@ export function AuditPage() {
                 <p className="min-w-0 flex-1 text-sm font-medium text-ink">{humanAction(row.action)}</p>
                 <span className="shrink-0 text-[0.68rem] text-faint">{formatDateTime(row.createdAt)}</span>
               </div>
-              <p className="mt-0.5 text-xs text-muted">
+              {/* LA FIRMA, en primer plano: quién lo hizo. */}
+              <p className="mt-0.5 text-xs text-ink">
+                {row.user?.name ? (
+                  <>
+                    <strong className="font-semibold">{row.user.name}</strong>
+                    {row.user.email ? <span className="text-faint"> · {row.user.email}</span> : null}
+                  </>
+                ) : (
+                  'El sistema'
+                )}
+              </p>
+              <p className="mt-0.5 text-[0.7rem] text-muted">
                 {row.entityType}
-                {row.actorType === 'SYSTEM' ? ' · por el sistema' : ''}
+                {row.actorType === 'SYSTEM' ? ' · automático' : ''}
                 {row.ip ? ` · desde ${row.ip}` : ''}
               </p>
               {detailOf(row) ? <p className="mt-1 break-words text-[0.7rem] text-faint">{detailOf(row)}</p> : null}

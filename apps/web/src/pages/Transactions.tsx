@@ -18,6 +18,8 @@ interface TransactionRow {
   account: { id: string; name: string; type: string } | null;
   category: { id: string; name: string; kind: string } | null;
   entity: { id: string; code: string; name: string } | null;
+  /** La firma: quién registró el movimiento. */
+  createdBy?: { id: string; name: string; email: string } | null;
   recordedOffline: boolean;
   syncStatus: string;
   affectsProfitAndLoss: boolean;
@@ -206,6 +208,10 @@ export function TransactionsPage() {
                       {row.category ? ` · ${row.category.name}` : ''}
                       {row.account ? ` · ${row.account.name}` : ''}
                     </p>
+                    {/* QUIÉN: en una cuenta familiar, el nombre es parte del dato. */}
+                    {row.createdBy?.name ? (
+                      <p className="mt-0.5 truncate text-[0.7rem] text-muted">por {row.createdBy.name}</p>
+                    ) : null}
                     <div className="mt-1 flex flex-wrap gap-1">
                       {row.entity ? <Badge tone="neutral">{row.entity.name}</Badge> : null}
                       {row.status === 'VOIDED' ? <Badge tone="critical">anulado</Badge> : null}
@@ -220,6 +226,10 @@ export function TransactionsPage() {
                 {expanded === row.id ? (
                   <div className="mt-3 space-y-3 rounded-lg border border-border-soft bg-surface-2 p-3">
                     <dl className="grid grid-cols-2 gap-2 text-xs text-muted">
+                      <div>
+                        <dt>Registrado por</dt>
+                        <dd className="text-ink">{row.createdBy?.name ?? '—'}</dd>
+                      </div>
                       <div>
                         <dt>Método</dt>
                         <dd className="text-ink">{row.method ?? '—'}</dd>

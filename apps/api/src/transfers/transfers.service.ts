@@ -282,6 +282,8 @@ export class TransfersService {
           fromAccount: { select: { id: true, name: true, entityId: true } },
           toAccount: { select: { id: true, name: true, entityId: true } },
           entity: { select: { id: true, code: true, name: true } },
+          // Quién hizo el traspaso: también lleva firma.
+          createdBy: { select: { id: true, name: true } },
         },
       }),
       this.prisma.transfer.count({ where }),

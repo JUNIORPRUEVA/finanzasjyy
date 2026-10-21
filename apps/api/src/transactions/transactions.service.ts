@@ -289,6 +289,9 @@ export class TransactionsService {
           entity: { select: { id: true, code: true, name: true } },
           transfer: { select: { id: true, fromAccountId: true, toAccountId: true } },
           loan: { select: { id: true, name: true, direction: true } },
+          // LA FIRMA: quién registró el movimiento. Es lo que permite saber, en
+          // una cuenta compartida, de quién fue cada gasto.
+          createdBy: { select: { id: true, name: true, email: true } },
         },
       }),
       this.prisma.financialTransaction.count({ where }),
@@ -308,6 +311,7 @@ export class TransactionsService {
         category: { select: { id: true, name: true, kind: true } },
         counterparty: { select: { id: true, name: true } },
         entity: { select: { id: true, code: true, name: true } },
+        createdBy: { select: { id: true, name: true, email: true } },
         journalEntry: {
           include: {
             lines: {

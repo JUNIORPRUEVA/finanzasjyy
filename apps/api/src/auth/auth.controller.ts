@@ -9,8 +9,10 @@ import {
   LoginDto,
   RefreshTokenDto,
   RegisterUserDto,
+  SetUserPasswordDto,
   UpdatePreferencesDto,
   UpdateProfileDto,
+  UpdateUserDto,
 } from './auth.dto.js';
 import { AuthService, type AuthResponse } from './auth.service.js';
 import {
@@ -259,8 +261,8 @@ export class AuthController {
 
   @Roles('OWNER', 'ADMIN')
   @Get('users')
-  users() {
-    return this.auth.listUsers();
+  users(@CurrentUser() user: AuthenticatedUser) {
+    return this.auth.listUsers(user.userId);
   }
 
   @Roles('OWNER', 'ADMIN')
@@ -271,5 +273,29 @@ export class AuthController {
     @RequestMeta() meta: RequestMetaInfo,
   ) {
     return this.auth.createUser(dto, user, meta);
+  }
+
+  /** Edita nombre, correo, rol o el permiso de entrar de otra persona. */
+  @Roles('OWNER', 'ADMIN')
+  @Patch('users/:id')
+  updateUser(
+    @Param('id') id: string,
+    @Body() dto: UpdateUserDto,
+    @CurrentUser() user: AuthenticatedUser,
+    @RequestMeta() meta: RequestMetaInfo,
+  ) {
+    return this.auth.updateUser(id, dto, user, meta);
+  }
+
+  /** Pone una contraseña nueva a otra persona (por si la olvida). */
+  @Roles('OWNER', 'ADMIN')
+  @Post('users/:id/password')
+  setUserPassword(
+    @Param('id') id: string,
+    @Body() dto: SetUserPasswordDto,
+    @CurrentUser() user: AuthenticatedUser,
+    @RequestMeta() meta: RequestMetaInfo,
+  ) {
+    return this.auth.setUserPassword(id, dto.password, user, meta);
   }
 }

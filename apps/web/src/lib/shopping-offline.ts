@@ -50,6 +50,8 @@ export interface RemoteShoppingList {
   entityId: string;
   entityCode: string | null;
   entityName: string | null;
+  /** Quién abrió la lista (firma). Puede faltar en listas antiguas. */
+  createdByName?: string | null;
   name: string;
   status: ShoppingListSnapshot['status'];
   currency: string;
@@ -103,6 +105,7 @@ export function toSnapshot(list: RemoteShoppingList): ShoppingListSnapshot {
     expenseRegistered: list.expense.registered,
     serverId: list.id,
     updatedAt: list.updatedAt,
+    createdByName: list.createdByName ?? null,
     cachedAt: new Date().toISOString(),
   };
 }

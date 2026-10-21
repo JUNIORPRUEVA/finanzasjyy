@@ -651,6 +651,7 @@ export function ShoppingDetailPage() {
                   <h1 className="truncate text-base font-semibold leading-tight tracking-tight text-ink">{list.name}</h1>
                   <p className="truncate text-[0.68rem] leading-snug text-muted">
                     {list.entityName ?? entity?.name ?? 'Unidad financiera'}
+                    {list.createdByName ? ` · la abrió ${list.createdByName}` : ''}
                     {list.plannedDate ? ` · ${list.plannedDate}` : ''}
                     {registered ? ' · gasto registrado' : ''}
                     {fromCache ? ' · sin conexión' : ''}

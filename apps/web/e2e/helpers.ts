@@ -250,5 +250,6 @@ export const APP_ROUTES: Array<{ path: string; name: string }> = [
   { path: '/informes', name: 'Informes' },
   { path: '/organizar', name: 'Organizar mi dinero' },
   { path: '/ajustes', name: 'Ajustes' },
+  { path: '/personas', name: 'Personas con acceso' },
   { path: '/mas', name: 'Más' },
 ];

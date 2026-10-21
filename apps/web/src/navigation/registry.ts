@@ -13,6 +13,7 @@ import {
   IconSettings,
   IconTarget,
   IconTransfer,
+  IconUsers,
   IconWallet,
 } from '../components/icons';
 
@@ -266,6 +267,21 @@ export const DRAWER_ENTRIES: NavEntry[] = [
     group: 'config',
     availability: 'ready',
     order: 35,
+  },
+  {
+    // Quién puede entrar y de quién es cada acción. Va en Configuración porque se
+    // toca una vez; el resultado (la firma) se ve en Movimientos y Auditoría.
+    id: 'personas',
+    label: 'Personas con acceso',
+    hint: 'Quién entra y de quién es cada acción',
+    icon: IconUsers,
+    to: '/personas',
+    group: 'config',
+    // Sólo propietario y administradores: el servidor lo exige igualmente, y no
+    // tiene sentido enseñar una puerta que se va a cerrar.
+    roles: ['OWNER', 'ADMIN'],
+    availability: 'ready',
+    order: 33,
   },
 
   // --- Sesión ---------------------------------------------------------------

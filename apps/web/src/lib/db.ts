@@ -168,6 +168,8 @@ export interface ShoppingListSnapshot {
   /** El gasto ya está registrado: a partir de aquí no se edita sin conexión. */
   expenseRegistered: boolean;
   serverId: string | null;
+  /** Quién abrió la lista (la firma se conserva también sin conexión). */
+  createdByName?: string | null;
   updatedAt: string;
   cachedAt: string;
 }

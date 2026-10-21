@@ -135,6 +135,16 @@ export const IconLock = (props: IconProps) => (
   </Icon>
 );
 
+/** Dos personas: «quién entra en la app». */
+export const IconUsers = (props: IconProps) => (
+  <Icon {...props}>
+    <circle cx="9" cy="8" r="3.2" />
+    <path d="M3 19.5c0-3 2.7-5 6-5s6 2 6 5" />
+    <path d="M16 5.2a3.2 3.2 0 0 1 0 6.1" />
+    <path d="M18 14.9c2 .7 3 2.3 3 4.6" />
+  </Icon>
+);
+
 export const IconEye = (props: IconProps) => (
   <Icon {...props}>
     <path d="M2.5 12S6 6.5 12 6.5 21.5 12 21.5 12 18 17.5 12 17.5 2.5 12 2.5 12" />

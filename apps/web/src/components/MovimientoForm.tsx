@@ -108,7 +108,7 @@ export interface MovimientoFormProps {
 }
 
 export function MovimientoForm({ kind, initialEntityId }: MovimientoFormProps) {
-  const { entities, preferences } = useAuth();
+  const { entities, preferences, user } = useAuth();
   const queryClient = useQueryClient();
 
   const [entityId, setEntityId] = useState(initialEntityId || entities[0]?.id || '');
@@ -387,6 +387,13 @@ export function MovimientoForm({ kind, initialEntityId }: MovimientoFormProps) {
           degradado (en vez de una línea) hace que no parezca un corte cuando el
           formulario es corto. */}
       <div className="sticky bottom-0 -mx-4 -mb-3 bg-gradient-to-t from-bg-elevated via-bg-elevated/95 to-transparent px-4 pb-3 pt-4">
+        {/* LA FIRMA, antes de guardar: quien registra sabe que su nombre queda en
+            el movimiento (y quien revisa después también lo vera). */}
+        {user?.name ? (
+          <p className="mb-2 text-center text-[0.7rem] leading-snug text-faint">
+            Se guardará como <strong className="text-muted">{user.name}</strong>
+          </p>
+        ) : null}
         <Button type="submit" className="w-full" size="lg" disabled={!listo || createMutation.isPending}>
           {createMutation.isPending ? 'Registrando…' : 'Registrar movimiento'}
         </Button>

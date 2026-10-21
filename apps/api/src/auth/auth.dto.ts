@@ -51,7 +51,7 @@ export class RegisterUserDto extends DeviceInfoDto {
   email!: string;
 
   @IsString()
-  @Length(10, 200, { message: 'La contraseña debe tener al menos 10 caracteres' })
+  @Length(8, 200, { message: 'La contraseña debe tener al menos 8 caracteres' })
   password!: string;
 
   @IsString()
@@ -61,6 +61,36 @@ export class RegisterUserDto extends DeviceInfoDto {
   @IsOptional()
   @IsIn(['OWNER', 'ADMIN', 'MEMBER', 'VIEWER'])
   role?: 'OWNER' | 'ADMIN' | 'MEMBER' | 'VIEWER';
+}
+
+/**
+ * Edición de una persona con acceso (nombre, correo, rol y si puede entrar).
+ * Todo es opcional: se manda sólo lo que cambia.
+ */
+export class UpdateUserDto {
+  @IsOptional()
+  @IsString()
+  @Length(2, 120)
+  name?: string;
+
+  @IsOptional()
+  @IsEmail({}, { message: 'El correo electrónico no es válido' })
+  email?: string;
+
+  @IsOptional()
+  @IsIn(['OWNER', 'ADMIN', 'MEMBER', 'VIEWER'])
+  role?: 'OWNER' | 'ADMIN' | 'MEMBER' | 'VIEWER';
+
+  @IsOptional()
+  @IsBoolean()
+  isActive?: boolean;
+}
+
+/** Contraseña nueva para otra persona (por si la olvida). */
+export class SetUserPasswordDto {
+  @IsString()
+  @Length(8, 200, { message: 'La contraseña debe tener al menos 8 caracteres' })
+  password!: string;
 }
 
 export class RefreshTokenDto extends DeviceInfoDto {

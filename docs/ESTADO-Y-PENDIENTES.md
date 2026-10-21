@@ -42,6 +42,7 @@ Las claves **no** están en este repositorio ni en este documento. En el servido
 | Impresión | Hoja de compra limpia (se oculta toda la app al imprimir) |
 | Plantillas de compra | 5 plantillas; aplicar dos veces no duplica (17 productos, 6 pasillos) |
 | Trabajo sin internet | Recorrido real con el service worker activo y el navegador en modo sin conexión: panel, movimientos, control, cuentas, deudas, presupuestos, obligaciones, traspasos, unidades y ajustes muestran las **cifras guardadas** (con su hora) en lugar de ceros o de una pantalla vacía. Un gasto registrado sin conexión quedó «SIN CONFIRMAR» y se envió solo al volver la red |
+| Varias personas | Se crea una persona desde «Personas con acceso» y aparece en la lista; se rechaza un correo repetido con un mensaje claro; el historial muestra «por Nombre» en cada movimiento |
 
 ---
 
@@ -64,6 +65,36 @@ Limitaciones conocidas y aceptadas: el cierre del día y la auditoría necesitan
 servidor); la sincronía en vivo entre dos teléfonos sin red sigue pendiente (ver más abajo); si el sistema
 operativo borra el almacenamiento del navegador, se pierde la copia (por eso la app pide almacenamiento
 persistente al entrar y ofrece exportar los pendientes).
+
+---
+
+## 2.2 Varias personas y la firma de cada acción
+
+La cuenta es de la familia, no de una sola persona.
+
+| Qué | Cómo funciona |
+| --- | --- |
+| Crear accesos | Menú → **Personas con acceso** → «Añadir persona»: nombre, correo y contraseña. Sin configurar permisos. |
+| Sin restricciones | La persona nueva entra como administradora y **con acceso a todas las unidades financieras** del que la crea (si no, entraría y vería la app vacía). |
+| La firma | Cada movimiento, traspaso, lista de compras, cierre y registro de auditoría guarda **quién** lo hizo. Se ve en el historial («por Nombre»), al abrir el detalle («Registrado por»), en Compras («la abrió …») y en **Auditoría**, que lista persona, correo, hora y dispositivo. |
+| Antes de guardar | El formulario de registro avisa: «Se guardará como …». Nadie apunta nada a nombre de otro sin saberlo. |
+| Quitar acceso | «Quitar acceso» desactiva a la persona y cierra sus sesiones en el acto. **No borra nada**: lo que registró sigue en el libro mayor con su nombre. |
+| Contraseña olvidada | Desde «Personas con acceso» se le pone una nueva (no se puede ver la anterior). |
+| Roles | Propietario (todo, incluida la auditoría), Administrador (todo, también crear personas), Miembro (registra, no crea personas) y Sólo lectura. |
+
+Sin conexión esta pantalla no funciona (los accesos viven en el servidor y lo dice claro); lo ya registrado se
+sigue viendo con la firma de cada persona.
+
+Para cambiar el correo o la contraseña del **propietario** desde el servidor (sin endpoints de red):
+
+```sh
+# dentro del contenedor de la API; la contraseña va por la entrada estándar, no en la línea de órdenes
+printf '%s' 'la-clave-nueva' | node dist/scripts/set-credentials.js --owner --email=nuevo@correo.com
+```
+
+Mínimo de contraseña: **8 caracteres con al menos una letra y un número** (se bajó de 10 para que una clave
+familiar fácil de recordar sea posible; la protección real es argon2id + 5 intentos por minuto + bloqueo
+temporal).
 
 
 ---
@@ -122,8 +153,7 @@ No se hará, y queda escrito para que nadie lo reabra por iniciativa propia:
   falta el módulo; si le basta con «lo que compré este mes es costo», lo actual es correcto.
 - **¿IA conectada a un proveedor?** El asistente de compras es local (sin enviar datos fuera). Conectar
   un modelo real exige una clave de API y aceptar que los nombres de productos salgan del dispositivo.
-- **¿Usuarios adicionales?** El sistema soporta roles (administrador, operador, solo lectura) por unidad;
-  falta decidir quién entra y con qué permiso.
+- **¿Usuarios adicionales?** Resuelto: se crean desde «Personas con acceso», con su propio correo y su nombre en cada acción. Solo queda decidir quién entra y con qué rol (Propietario, Administrador, Miembro o Sólo lectura).
 
 ---
 

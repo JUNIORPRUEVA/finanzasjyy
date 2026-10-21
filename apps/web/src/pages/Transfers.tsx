@@ -58,6 +58,8 @@ interface TransferRow {
   description: string;
   fromAccount?: { id: string; name: string; entityId: string } | null;
   toAccount?: { id: string; name: string; entityId: string } | null;
+  /** Quién hizo el traspaso. */
+  createdBy?: { id: string; name: string } | null;
   isIntercompany?: boolean;
   reference?: string | null;
 }
@@ -302,6 +304,9 @@ export function TransfersPage() {
                     </p>
                     <div className="mt-2 flex flex-wrap items-center gap-2">
                       <span className="text-xs text-faint">{formatBusinessDate(transfer.businessDate)}</span>
+                      {transfer.createdBy?.name ? (
+                        <span className="text-xs text-muted">por {transfer.createdBy.name}</span>
+                      ) : null}
                       {crossesEntities ? <Badge tone="neutral">entre negocios</Badge> : null}
                     </div>
                   </div>
