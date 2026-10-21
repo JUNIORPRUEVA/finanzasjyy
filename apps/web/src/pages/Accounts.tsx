@@ -71,7 +71,10 @@ export function AccountsPage() {
         name: name.trim(),
         type,
         openingBalance: openingBalance || '0',
-        openingDate,
+        // Si el campo de fecha se quedó vacío (pasa en algunos teclados de
+        // Android), se manda la fecha de hoy en lugar de una cadena vacía: el
+        // servidor la rechazaba y el alta fallaba sin explicación.
+        openingDate: openingDate || todayBusinessDate(preferences?.timezone),
         isCreditCard: type === 'CREDIT_CARD',
         creditLimit: type === 'CREDIT_CARD' && creditLimit ? creditLimit : undefined,
       }),

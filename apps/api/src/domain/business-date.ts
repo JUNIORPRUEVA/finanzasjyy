@@ -1,4 +1,5 @@
 import { DateTime } from 'luxon';
+import { ValidationError } from '../common/errors.js';
 
 /**
  * FECHAS DE NEGOCIO (ver docs/INVARIANTES-FINANCIEROS.md)
@@ -38,6 +39,10 @@ export function toBusinessDate(input?: Date | string | DateTime, context?: Busin
   let dt: DateTime;
   if (input === undefined || input === null) {
     dt = DateTime.now().setZone(zone);
+  } else if (typeof input === 'string' && input.trim() === '') {
+    // Una fecha vacía significa «la de hoy», no un error del servidor. Antes
+    // llegaba como cadena vacía desde un formulario y reventaba con un 500.
+    dt = DateTime.now().setZone(zone);
   } else if (DateTime.isDateTime(input)) {
     dt = input.setZone(zone);
   } else if (input instanceof Date) {
@@ -46,13 +51,16 @@ export function toBusinessDate(input?: Date | string | DateTime, context?: Busin
     // 'YYYY-MM-DD' se interpreta directamente en la zona de negocio.
     const parsed = DateTime.fromISO(input, { zone });
     if (!parsed.isValid) {
-      throw new Error(`Fecha inválida: "${input}" (${parsed.invalidReason ?? 'formato'})`);
+      // Es un dato que el usuario puede corregir: 400 y mensaje claro.
+      throw new ValidationError(
+        `La fecha "${input}" no es válida. Use el formato año-mes-día (por ejemplo 2026-10-21).`,
+      );
     }
     dt = parsed;
   }
 
   if (!dt.isValid) {
-    throw new Error(`No se pudo interpretar la fecha: ${dt.invalidReason ?? 'desconocido'}`);
+    throw new ValidationError(`No se pudo interpretar la fecha: ${dt.invalidReason ?? 'desconocido'}`);
   }
 
   return new Date(Date.UTC(dt.year, dt.month - 1, dt.day));

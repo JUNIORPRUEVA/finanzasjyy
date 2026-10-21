@@ -38,14 +38,20 @@ export interface StructuralSeedResult {
  *
  * Es idempotente: puede ejecutarse tantas veces como se quiera.
  */
-export async function runStructuralSeed(
-  prisma: PrismaClient,
-  options: StructuralSeedOptions = {},
-): Promise<StructuralSeedResult> {
-  const adminEmail = (options.adminEmail ?? process.env.ADMIN_EMAIL ?? 'admin@finanza.local').toLowerCase();
-  const adminName = options.adminName ?? process.env.ADMIN_NAME ?? 'Propietario';
-
-  // ------------------------- 1. Catálogo contable -------------------------
+/**
+ * LÍNEA BASE CONTABLE (sin usuarios, sin unidades, sin datos)
+ * ----------------------------------------------------------
+ * Crea lo que NO puede faltar para que se pueda mover dinero:
+ * el catálogo contable y las categorías por defecto.
+ *
+ * Por qué existe aparte: en producción se aplicaron las migraciones pero nunca
+ * se ejecutó la semilla, así que el catálogo quedó VACÍO (0 cuentas contables) y
+ * cualquier intento de crear una cuenta de banco fallaba con «cuenta contable no
+ * encontrada». Este bloque se ejecuta en cada arranque de la API (es idempotente
+ * y son ~90 upserts), de modo que un despliegue o una restauración nunca pueda
+ * dejar la contabilidad sin estructura.
+ */
+export async function runLedgerBaseline(prisma: PrismaClient): Promise<{ ledgerAccounts: number; categories: number }> {
   for (const account of CHART_OF_ACCOUNTS) {
     await prisma.ledgerAccount.upsert({
       where: { code: account.code },
@@ -68,7 +74,6 @@ export async function runStructuralSeed(
     });
   }
 
-  // --------------------------- 2. Categorías ----------------------------
   // Nota: `@@unique([entityId, name, kind])` no sirve para las categorías
   // globales porque en PostgreSQL los NULL no colisionan en un índice único.
   // Por eso se busca y se crea explícitamente.
@@ -94,6 +99,19 @@ export async function runStructuralSeed(
       });
     }
   }
+
+  return { ledgerAccounts: CHART_OF_ACCOUNTS.length, categories: DEFAULT_CATEGORIES.length };
+}
+
+export async function runStructuralSeed(
+  prisma: PrismaClient,
+  options: StructuralSeedOptions = {},
+): Promise<StructuralSeedResult> {
+  const adminEmail = (options.adminEmail ?? process.env.ADMIN_EMAIL ?? 'admin@finanza.local').toLowerCase();
+  const adminName = options.adminName ?? process.env.ADMIN_NAME ?? 'Propietario';
+
+  // ---------------- 1 y 2. Catálogo contable y categorías -----------------
+  await runLedgerBaseline(prisma);
 
   // ---------------------- 3. Usuario propietario ------------------------
   let admin = await prisma.user.findUnique({ where: { email: adminEmail } });

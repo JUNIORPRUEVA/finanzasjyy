@@ -49,4 +49,4 @@ EXPOSE 3010
 HEALTHCHECK --interval=15s --timeout=5s --start-period=20s --retries=5 \
   CMD curl -fsS http://127.0.0.1:3010/api/v1/health || exit 1
 
-CMD ["sh", "-c", "npx prisma migrate deploy && node dist/main.js"]
+CMD ["sh", "-c", "npx prisma migrate deploy && node dist/scripts/seed-structure.js && node dist/main.js"]
