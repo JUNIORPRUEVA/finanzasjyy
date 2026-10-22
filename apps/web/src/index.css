@@ -181,6 +181,8 @@ body,
 html {
   /* Evita el ajuste automático de tamaño de texto en iPhone. */
   -webkit-text-size-adjust: 100%;
+  /* Las áreas seguras del teléfono y el gesto inferior usan el azul de FINANZA. */
+  background-color: #0B2748;
 }
 
 body {
