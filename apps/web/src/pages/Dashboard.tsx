@@ -81,13 +81,6 @@ interface ShoppingSummary {
   note: string;
 }
 
-/** Estado del asistente «Organizar mi dinero» (por unidad o en conjunto). */
-interface SetupStatus {
-  needsSetup: boolean;
-  pending: string[];
-  entities: Array<{ id: string; code: string; name: string; openingBalancePosted: boolean }>;
-}
-
 interface PendingTasks {
   tasks: Array<{
     id: string;
@@ -130,16 +123,6 @@ export function DashboardPage() {
     queryKey: ['dashboard-charts', entityId],
     queryFn: () => api.get<Charts>(`/dashboard/charts?${entityId ? `entityId=${entityId}&` : ''}days=30`),
   });
-
-  const setupQuery = useQuery<SetupStatus>({
-    queryKey: ['setup-status', entityId],
-    queryFn: () => api.get<SetupStatus>(`/setup/status${entityId ? `?entityId=${entityId}` : ''}`),
-  });
-
-  // Unidades que todavía no han declarado cuánto dinero tienen. Cuando se mira
-  // una sola, la lista tiene un elemento; con «todas las unidades», las que falten.
-  const unidadesSinSaldos = setupQuery.data?.entities.filter((entity) => !entity.openingBalancePosted) ?? [];
-  const nombresSinSaldos = unidadesSinSaldos.map((entity) => `«${entity.code}»`).join(', ');
 
   const tasksQuery = useQuery<PendingTasks>({
     queryKey: ['pending-tasks'],
@@ -191,7 +174,6 @@ export function DashboardPage() {
   const noMovementsInPeriod = summary
     ? Number(summary.period.income) === 0 && Number(summary.period.expense) === 0
     : false;
-  const noMovementsToday = summary ? summary.today.movementCount === 0 : true;
 
   const heroTone = useMemo(() => {
     if (!summary) {
@@ -304,36 +286,6 @@ export function DashboardPage() {
         </div>
       </Card>
 
-      {/* Primer uso: lo más importante es declarar cuánto hay y de quién es.
-          El aviso es POR UNIDAD. Antes se medía en conjunto, así que una sola
-          unidad con saldos declarados lo apagaba para todas: con una unidad de
-          prueba configurada, el aviso desaparecía aunque las demás estuvieran
-          vacías. Si se miran «todas las unidades», se nombran las que faltan. */}
-      {!setupQuery.data ? null : setupQuery.data.needsSetup ? (
-        <Card className="border-warning/40 bg-warning/10">
-          <SectionTitle title="Falta lo más importante: ¿cuánto dinero hay y de quién es?" />
-          <p className="text-sm leading-snug text-ink">
-            Sin esta información, FINANZA no puede decirle dónde está su dinero ni si los saldos cuadran. Es un
-            asistente de cinco pasos y no hay ningún importe precargado: todas las cifras las escribe usted.
-          </p>
-          <Link to="/organizar" className="mt-3 block">
-            <Button fullWidth>Organizar mi dinero</Button>
-          </Link>
-        </Card>
-      ) : unidadesSinSaldos.length > 0 ? (
-        <Card className="border-warning/40 bg-warning/10">
-          <SectionTitle title="Hay unidades sin saldos declarados" />
-          <p className="text-sm leading-snug text-ink">
-            Todavía no ha dicho cuánto dinero hay en {nombresSinSaldos}. Mientras no lo declare,{' '}
-            {unidadesSinSaldos.length === 1 ? 'esa unidad cuenta' : 'esas unidades cuentan'} como cero en el total que
-            ve arriba.
-          </p>
-          <Link to="/organizar" className="mt-3 block">
-            <Button fullWidth>Organizar mi dinero</Button>
-          </Link>
-        </Card>
-      ) : null}
-
       {/* Cómo va hoy */}
       <div className="grid grid-cols-2 gap-3">
         <Kpi label="Ingresos de hoy" value={summary.today.income} tone="positive" currency={currency} />
@@ -374,15 +326,9 @@ export function DashboardPage() {
         <Link to="/compras" className="text-brand">
           Compras
         </Link>
-        {noMovementsToday ? (
-          <Link to="/organizar" className="text-brand">
-            Organizar mi dinero
-          </Link>
-        ) : (
-          <Link to="/cierres" className="text-brand">
-            Cerrar el día
-          </Link>
-        )}
+        <Link to="/cierres" className="text-brand">
+          Cerrar el día
+        </Link>
       </div>
 
       {/* Control diario */}

@@ -255,7 +255,7 @@ export function DebtsPage() {
         {loans.length === 0 && !loansQuery.isLoading && !loansQuery.isError ? (
           <EmptyState
             title="No hay deudas registradas"
-            hint="Registre abajo un préstamo o una tarjeta, o use el asistente «Organizar mi dinero»."
+            hint="Registre abajo un préstamo o una tarjeta."
           />
         ) : null}
 
@@ -405,9 +405,9 @@ export function DebtsPage() {
           placeholder="— No, el dinero ya está contado en el saldo —"
         />
         <Notice tone="neutral" title="Para no contar el dinero dos veces">
-          Si el dinero recibido <strong>ya está incluido</strong> en el saldo de una cuenta (por ejemplo, lo declaró en
-          «Organizar mi dinero»), deje la última casilla vacía: así sólo se registra la deuda. Si el préstamo acaba de
-          entrar y el saldo de la cuenta todavía no lo incluye, elija la cuenta y el sistema lo ingresará.
+          Si el dinero recibido <strong>ya está incluido</strong> en el saldo de una cuenta (porque esa cuenta ya tenía
+          ese saldo), deje la última casilla vacía: así sólo se registra la deuda. Si el préstamo acaba de entrar y el
+          saldo de la cuenta todavía no lo incluye, elija la cuenta y el sistema lo ingresará.
         </Notice>
         <Button disabled={!canCreate || busy} onClick={() => void createLoan()}>
           {busy ? 'Registrando…' : 'Registrar deuda'}

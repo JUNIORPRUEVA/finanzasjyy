@@ -188,8 +188,7 @@ personal. El banco tiene ese dinero de verdad, pero no es suyo.
 
 | Función | Estado | Detalle |
 | --- | --- | --- |
-| Asistente **«Organizar mi dinero»** | ✅ | `/organizar`: 5 pasos (dinero, deudas, por cobrar/pagar, compromisos, confirmar), guarda el progreso en el dispositivo, avisa de lo que falta y registra el asiento de apertura |
-| Los saldos iniciales no inflan los ingresos | ✅ | Se contabilizan contra el patrimonio (3400): comprobado en la prueba R9 |
+| Carga de cuentas y saldos iniciales | ✅ | Se hace desde «Cuentas y bancos» al crear cada cuenta; los saldos iniciales se contabilizan contra el patrimonio (3400), no como ingresos (prueba R9) |
 | **«Mi control diario»** | ✅ | `/control`: semáforo con motivo, tareas reales con enlace a su pantalla, constancia (días seguidos, cumplimiento semanal y mensual) |
 | Tareas derivadas de datos reales | ✅ | Cierres pendientes y atrasados, deudas y cobros que vencen, gastos sin categoría, diferencias de caja, operaciones sin confirmar y presupuestos excedidos |
 | El control diario NO bloquea nada | ✅ | Informa y ordena; nunca impide registrar dinero |

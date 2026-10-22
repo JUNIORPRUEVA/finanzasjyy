@@ -23,20 +23,6 @@ interface EntityRow {
   members?: Array<{ id: string; role: string; user?: { id: string; name: string; email: string } | null }>;
 }
 
-interface SetupStatus {
-  entities: Array<{
-    id: string;
-    name: string;
-    accounts: number;
-    openingBalancePosted: boolean;
-    loans: number;
-    receivables: number;
-    payables: number;
-    recurrings: number;
-    closings: number;
-  }>;
-}
-
 const TYPES = [
   { value: 'BUSINESS', label: 'Negocio' },
   { value: 'PERSONAL', label: 'Finanzas personales' },
@@ -61,7 +47,6 @@ export function EntitiesPage() {
   const queryClient = useQueryClient();
 
   const entitiesQuery = useQuery<unknown>({ queryKey: ['entities'], queryFn: () => api.get('/entities') });
-  const statusQuery = useQuery<SetupStatus>({ queryKey: ['setup-status'], queryFn: () => api.get<SetupStatus>('/setup/status') });
 
   const entities = useMemo(() => asArray<EntityRow>(entitiesQuery.data), [entitiesQuery.data]);
 
@@ -111,8 +96,6 @@ export function EntitiesPage() {
     }
   };
 
-  const statusById = new Map((statusQuery.data?.entities ?? []).map((row) => [row.id, row]));
-
   return (
     <div className="space-y-4">
       {message ? <Notice tone={message.tone}>{message.text}</Notice> : null}
@@ -140,7 +123,6 @@ export function EntitiesPage() {
 
         <div className="space-y-2">
           {entities.map((entity) => {
-            const status = statusById.get(entity.id);
             return (
               <div key={entity.id} className="rounded-lg border border-border-soft p-3">
                 <div className="flex items-start justify-between gap-2">
@@ -155,22 +137,6 @@ export function EntitiesPage() {
                     <Badge tone={entity.isActive ? 'positive' : 'neutral'}>{entity.isActive ? 'Activa' : 'Inactiva'}</Badge>
                   </div>
                 </div>
-
-                {status ? (
-                  <div className="mt-2 flex flex-wrap gap-2 text-xs">
-                    <Badge tone={status.accounts > 0 ? 'neutral' : 'warning'}>{status.accounts} cuenta(s)</Badge>
-                    <Badge tone={status.openingBalancePosted ? 'positive' : 'warning'}>
-                      {status.openingBalancePosted ? 'Con saldos iniciales' : 'Sin saldos iniciales'}
-                    </Badge>
-                    <Badge tone="neutral">{status.loans} deuda(s)</Badge>
-                    <Badge tone="neutral">{status.closings} cierre(s)</Badge>
-                    {status.accounts === 0 ? (
-                      <a href={`/organizar`} className="text-warning underline">
-                        Registrar su dinero
-                      </a>
-                    ) : null}
-                  </div>
-                ) : null}
 
                 <div className="mt-2 flex flex-wrap gap-2">
                   <a
@@ -213,7 +179,7 @@ export function EntitiesPage() {
       </Card>
 
       <p className="pb-4 text-center text-xs text-faint">
-        Después de crearla, registre su dinero en «Organizar mi dinero» para que la unidad deje de estar a ciegas.
+        Después de crearla, dé de alta sus cuentas en «Cuentas y bancos» con el dinero que tenga hoy.
       </p>
     </div>
   );

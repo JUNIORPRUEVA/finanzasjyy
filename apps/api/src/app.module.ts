@@ -25,7 +25,6 @@ import { ObligationsModule } from './obligations/obligations.module.js';
 import { PrismaModule } from './prisma/prisma.module.js';
 import { ReportsModule } from './reports/reports.module.js';
 import { SecurityModule } from './security/security.module.js';
-import { SetupModule } from './setup/setup.module.js';
 import { ShoppingModule } from './shopping/shopping.module.js';
 import { SyncModule } from './sync/sync.module.js';
 import { TransactionsModule } from './transactions/transactions.module.js';
@@ -80,8 +79,7 @@ import { TransfersModule } from './transfers/transfers.module.js';
     NotificationsModule,
     AttachmentsModule,
 
-    // Puesta en marcha y disciplina diaria.
-    SetupModule,
+    // Disciplina diaria.
     DailyControlModule,
     // Compras personales: listas de la compra (no mueven dinero por sí solas).
     ShoppingModule,

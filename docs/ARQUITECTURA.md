@@ -159,7 +159,6 @@ src/
 ├── common/          errores, filtro de excepciones, interceptor, validadores, CSV
 ├── prisma/          servicio Prisma con transacciones y reintentos
 ├── security/        control de acceso por unidad
-├── setup/           «Organizar mi dinero»: conciliación inicial atómica
 ├── daily-control/   «Mi control diario»: tareas, semáforo y constancia
 └── <18 módulos>     auth, entities, accounts, categories, counterparties, ledger,
                      transactions, transfers, loans, obligations, budgets, closings,

@@ -81,8 +81,8 @@ Y el de una unidad financiera, sumando los saldos de sus cuentas.
 
 - una cuenta creada a mano documenta su saldo inicial en la columna (`openingBalance`), y ese dinero
   **no** genera asiento;
-- la conciliación inicial («Organizar mi dinero») registra **un asiento de apertura** contra el
-  patrimonio (3400) y deja la columna en cero.
+- cualquier saldo declarado en la apertura se registra contra el patrimonio (3400) y deja la columna
+  en cero cuando se usa el asiento de apertura.
 
 En los dos casos el saldo mostrado es el correcto y sólo hay una fuente de verdad para cada cifra.
 

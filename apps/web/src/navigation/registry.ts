@@ -247,16 +247,6 @@ export const DRAWER_ENTRIES: NavEntry[] = [
     availability: 'ready',
     order: 23,
   },
-  {
-    id: 'organizar',
-    label: 'Organizar mi dinero',
-    hint: 'Asistente: cuánto hay y de quién es',
-    icon: IconTarget,
-    to: '/organizar',
-    group: 'analisis',
-    availability: 'ready',
-    order: 24,
-  },
 
   // --- Configuración --------------------------------------------------------
   // Un solo acceso: perfil, apariencia, moneda, avisos y seguridad son pestañas

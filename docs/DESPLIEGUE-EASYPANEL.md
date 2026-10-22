@@ -184,8 +184,8 @@ es crear la estructura contable y su usuario.
 1. Abra `https://SU-DOMINIO/`.
 2. Como la base está vacía, la pantalla mostrará **«Primer uso»**: escriba su nombre, correo y
    contraseña, y pulse **Crear usuario propietario**.
-3. Entre. La app le pedirá **«Organizar mi dinero»**: es el asistente para decir cuánto dinero hay y de
-   quién es. Sin eso no puede calcular nada (y no lo inventa).
+3. Entre y abra **Cuentas y bancos** para crear las cuentas de cada unidad financiera e indicar el saldo
+   inicial documentado que figura hoy en el banco o en la caja. La aplicación no precarga importes.
 
 > Si prefiere crearlo desde la terminal del panel (servicio `api` → **Console**):
 > ```sh

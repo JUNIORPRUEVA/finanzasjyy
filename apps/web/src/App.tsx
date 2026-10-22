@@ -26,7 +26,6 @@ const ClosingPage = lazy(() => import('./pages/Closing').then((module) => ({ def
 const MorePage = lazy(() => import('./pages/More').then((module) => ({ default: module.MorePage })));
 const ReportsPage = lazy(() => import('./pages/Reports').then((module) => ({ default: module.ReportsPage })));
 const SettingsPage = lazy(() => import('./pages/Settings').then((module) => ({ default: module.SettingsPage })));
-const SetupPage = lazy(() => import('./pages/Setup').then((module) => ({ default: module.SetupPage })));
 const DailyControlPage = lazy(() =>
   import('./pages/DailyControl').then((module) => ({ default: module.DailyControlPage })),
 );
@@ -102,7 +101,6 @@ export default function App() {
           <Route path="/mas" element={<MorePage />} />
           <Route path="/informes" element={<ReportsPage />} />
           <Route path="/ajustes" element={<SettingsPage />} />
-          <Route path="/organizar" element={<SetupPage />} />
           <Route path="/control" element={<DailyControlPage />} />
           <Route path="/traspasos" element={<TransfersPage />} />
           <Route path="/deudas" element={<DebtsPage />} />

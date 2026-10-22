@@ -34,7 +34,6 @@ const ESPERA_MINIMA_MS = 10 * 60_000;
 export const RUTAS_ESENCIALES: readonly string[] = [
   '/auth/preferences',
   '/entities',
-  '/setup/status',
   '/accounts',
   '/accounts?includeClosed=true',
   '/categories',

@@ -206,7 +206,7 @@ export function TransfersPage() {
         {accounts.length === 0 && !accountsQuery.isLoading && !accountsQuery.isError ? (
           <EmptyState
             title="Todavía no hay cuentas"
-            hint="Cree sus cuentas en la pantalla de Cuentas (o con el asistente «Organizar mi dinero») antes de traspasar."
+            hint="Cree sus cuentas en la pantalla de Cuentas antes de traspasar."
           />
         ) : null}
 

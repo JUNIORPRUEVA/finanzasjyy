@@ -337,7 +337,6 @@ export function MorePage() {
             <SectionTitle title="Poner orden" hint="Lo que hace que las cuentas cuadren" />
             <div className="grid grid-cols-2 gap-2">
               {[
-                { to: '/organizar', label: 'Organizar mi dinero', hint: 'Cuánto hay y de quién es' },
                 { to: '/control', label: 'Mi control diario', hint: 'Tareas, semáforo y constancia' },
                 { to: '/traspasos', label: 'Traspasos', hint: 'Mover dinero entre cuentas y negocios' },
                 { to: '/cierres', label: 'Cierre del día', hint: 'Asistente guiado' },

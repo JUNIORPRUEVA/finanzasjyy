@@ -15,6 +15,10 @@ Ya están esperándote las cuatro unidades financieras:
 
 **No hay ningún importe cargado.** Si vieras cifras que no has escrito tú, algo va mal: dímelo.
 
+Para empezar a registrar tu situación, abre **Cuentas y bancos**, pulsa **Nueva cuenta** y elige la
+unidad financiera. Escribe el nombre de la cuenta y el saldo inicial que aparece hoy en el banco o en
+la caja. Repite el proceso para cada cuenta; no se cargan importes automáticamente.
+
 La pantalla está pensada para el móvil. Se puede instalar:
 
 - **Android/Chrome:** menú → «Instalar aplicación».

@@ -58,7 +58,7 @@ No hay una «base de datos local» paralela con la que haya que conciliar nada: 
 | Copia preparada | Con conexión, la app descarga en segundo plano las consultas de las pantallas principales (panel, cuentas, deudas, presupuestos, obligaciones, control, historial, traspasos). Así no hay huecos aunque nunca se haya abierto esa pantalla. Como mucho una vez cada 10 minutos. | `lib/prewarm.ts` |
 | Escrituras | Gastos, ingresos, retiros y traspasos se guardan en el dispositivo con un identificador único (idempotencia) y se envían solos al recuperar la conexión. Nada se marca como enviado hasta que el servidor lo confirma. | `lib/sync.ts` + `lib/db.ts` |
 | Nunca de la caché | Escrituras (POST/PATCH/DELETE), preparación de cierres (se calcula con saldos del momento), sincronización y listas de compras (tienen su propia copia). **Un error de datos (400) tampoco se tapa con la caché.** | `rutaCacheable()` en `lib/api.ts` |
-| Sin copia guardada | No se inventa un cero: la pantalla dice que hace falta una primera conexión. | Panel, Cuentas, Movimientos, Deudas, Presupuestos, Unidades, Traspasos, Ajustes, Organizar |
+| Sin copia guardada | No se inventa un cero: la pantalla dice que hace falta una primera conexión. | Panel, Cuentas, Movimientos, Deudas, Presupuestos, Unidades, Traspasos, Ajustes |
 | Caducidad | Una respuesta guardada deja de usarse a los 7 días, y hay un tope de 400 respuestas guardadas. Al cerrar sesión se borran. | `CADUCIDAD_CACHE_MS`, `MAX_RESPUESTAS` |
 
 Limitaciones conocidas y aceptadas: el cierre del día y la auditoría necesitan conexión (se calculan en el
@@ -104,8 +104,8 @@ temporal).
 ### A. Suya, hoy (5 minutos)
 
 1. **Cambiar la contraseña** de producción (Ajustes → Seguridad) y borrar `/root/finanza-acceso.txt`.
-2. **Ejecutar «Organizar mi dinero»** en producción: hasta que declare cuánto hay y de quién es, la app
-   muestra todo a cero (no inventa cifras).
+2. **Registrar las cuentas y sus saldos iniciales** en producción desde «Cuentas y bancos»; la app no
+   precarga cifras.
 3. **Instalar la app** en el teléfono desde el menú (así las actualizaciones se aplican solas).
 
 ### B. Pendientes técnicos, por valor
