@@ -46,6 +46,7 @@ const ShoppingDetailPage = lazy(() =>
 );
 const AuditPage = lazy(() => import('./pages/Audit').then((module) => ({ default: module.AuditPage })));
 const PeoplePage = lazy(() => import('./pages/People').then((module) => ({ default: module.PeoplePage })));
+const CustodyPage = lazy(() => import('./pages/Custody').then((module) => ({ default: module.CustodyPage })));
 
 /** Esqueleto de pantalla: misma silueta que las pantallas reales. */
 function PageSkeleton() {
@@ -62,13 +63,11 @@ function PageSkeleton() {
 /** Pantalla de arranque: se muestra mientras se comprueba si la sesión sigue viva. */
 function Splash({ message }: { message: string }) {
   return (
-    <div className="flex min-h-dvh flex-col items-center justify-center gap-4 px-6">
-      <div className="flex h-16 w-16 animate-pop items-center justify-center rounded-2xl bg-brand text-2xl font-bold text-white shadow-elevated">
-        F
-      </div>
+    <div className="flex min-h-dvh flex-col items-center justify-center gap-4 bg-[#0B2748] px-6 text-white" style={{ paddingTop: 'var(--safe-top)', paddingBottom: 'var(--safe-bottom)' }}>
+      <img src="/logo.png" alt="" className="h-24 w-24 animate-pop rounded-2xl object-cover shadow-elevated" />
       <div className="text-center">
-        <p className="text-lg font-semibold text-ink">FINANZA</p>
-        <p className="mt-1 text-sm text-muted">{message}</p>
+        <p className="text-lg font-semibold">FINANZA</p>
+        <p className="mt-1 text-sm text-white/75">{message}</p>
       </div>
     </div>
   );
@@ -115,6 +114,7 @@ export default function App() {
           <Route path="/compras/:id" element={<ShoppingDetailPage />} />
           <Route path="/auditoria" element={<AuditPage />} />
           <Route path="/personas" element={<PeoplePage />} />
+          <Route path="/custodia" element={<CustodyPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </Suspense>

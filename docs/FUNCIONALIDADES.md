@@ -60,6 +60,24 @@ Leyenda: ✅ hecho y probado · 🟡 hecho en el servidor, sin interfaz todavía
 | Informe de comprobación intercompany | ✅ | `/transfers/intercompany-check`: el saldo de 1150 debe ser 0 |
 | Pantalla para hacer traspasos | ✅ | `/traspasos`: cuentas agrupadas por unidad, aviso de traspaso entre negocios y aviso si el importe supera el saldo |
 
+## 4 bis. Fondos en custodia: dinero de una empresa en una cuenta personal
+
+Caso real: el propietario cobra para FULLTECH o APPYRA y ese dinero cae en su BHD o Banreservas
+personal. El banco tiene ese dinero de verdad, pero no es suyo.
+
+| Función | Estado | Detalle |
+| --- | --- | --- |
+| Panel con las tres cifras separadas | ✅ | `/custodia`: saldo real (extracto), fondos de empresas y disponible personal neto, por cuenta y en total |
+| Identificar en cada banco cuánto es de cada empresa | ✅ | «Cuentas y bancos» muestra, bajo cada cuenta, «Es de FULLTECH… Es de APPYRA… Suyo de verdad…» |
+| Dinero que YA estaba depositado antes de FINANZA | ✅ | Apertura: `D 1130 / C 3400` en la empresa y `D 3400 / C 2150` en la personal. No crea ingresos, no recobra facturas y no mueve el saldo del banco |
+| Cobro nuevo de una empresa en la cuenta personal | ✅ | Empresa: `D 1130 / C ingreso`; personal: `D banco / C 2150`. El ingreso se reconoce UNA vez |
+| Cobro de una factura ya emitida | ✅ | Baja la cuenta por cobrar (1210): no se reconoce un ingreso nuevo |
+| Gasto de la empresa pagado con ese dinero | ✅ | Baja el gasto de la empresa y la custodia; nunca es gasto del propietario |
+| Liquidación total, parcial o agrupada | ✅ | FIFO por fecha; cubre varios cobros en una operación; nunca deja pendiente negativo |
+| Anulación con motivo | ✅ | Reversa los dos asientos y devuelve el pendiente; el histórico se conserva |
+| No declarar más custodia que dinero libre hay en la cuenta | ✅ | Rechazado con el saldo disponible en el mensaje |
+| Integrado con permisos, auditoría e integridad | ✅ | Exige escritura en las dos unidades; auditoría `custody.*`; `/ledger/integrity` limpio en las tres unidades |
+
 ## 5. Deudas y préstamos
 
 | Función | Estado | Detalle |

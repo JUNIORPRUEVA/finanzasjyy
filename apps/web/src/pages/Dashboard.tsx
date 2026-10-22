@@ -32,7 +32,7 @@ interface Summary {
   range: { from: string; to: string; preset: string };
   today: { income: string; expense: string; result: string; movementCount: number };
   period: { income: string; expense: string; result: string; margin: string };
-  money: { availableCash: string; inCash: string; inBanks: string; note: string };
+  money: { availableCash: string; inCash: string; inBanks: string; inCustody?: string; personalNet?: string; note: string };
   obligations: {
     totalDebt: string;
     loanDebt: string;
@@ -270,6 +270,25 @@ export function DashboardPage() {
             </p>
           </div>
         </div>
+
+        {/* Dinero que está en el banco pero es de una empresa. Sin este aviso, el
+            «disponible» del panel parecería todo suyo. */}
+        {Number(summary.money.inCustody ?? 0) > 0 ? (
+          <div className="mt-3 rounded-xl bg-warning/10 p-3">
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-xs text-muted">De ese dinero, es de una empresa</p>
+              <Money value={summary.money.inCustody} currency={currency} tone="warning" className="font-semibold" />
+            </div>
+            <div className="mt-1 flex items-center justify-between gap-2 text-xs">
+              <Link to="/custodia" className="font-semibold text-brand">
+                Fondos en custodia →
+              </Link>
+              <span className="text-muted">
+                Suyo de verdad: <Money value={summary.money.personalNet} currency={currency} />
+              </span>
+            </div>
+          </div>
+        ) : null}
 
         <div className="mt-3">
           {summary.dataQuality.isProvisional ? (

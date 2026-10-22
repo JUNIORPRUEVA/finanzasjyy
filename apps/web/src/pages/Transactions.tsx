@@ -1,8 +1,9 @@
 import { useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, ApiError } from '../lib/api';
 import { Badge, Button, Card, DateRangeFilter, EmptyState, Field, ListScreen, Money, Notice, SearchBox, SectionTitle, Spinner } from '../components/ui';
+import { IconWallet } from '../components/icons';
 import { formatBusinessDate, txnKindLabel, txnKindTone, todayBusinessDate } from '../lib/format';
 
 interface TransactionRow {
@@ -125,6 +126,7 @@ export function TransactionsPage() {
               { value: 'OWNER_WITHDRAWAL', label: 'Retiros' },
               { value: 'TRANSFER_IN,TRANSFER_OUT', label: 'Transferencias' },
               { value: 'LOAN_DISBURSEMENT,LOAN_PAYMENT', label: 'Préstamos' },
+              { value: 'CUSTODY_IN,CUSTODY_OUT', label: 'Custodia' },
             ].map((option) => (
               <button
                 key={option.value}
@@ -144,6 +146,17 @@ export function TransactionsPage() {
               </button>
             ))}
           </div>
+
+          {/* Puerta de entrada a la custodia: el dinero de una empresa que está en
+              una cuenta personal no se aclara registrando un ingreso (eso lo
+              contaría dos veces), así que se avisa y se lleva a su pantalla. */}
+          <Link
+            to="/custodia"
+            className="inline-flex touch-target items-center gap-2 rounded-xl border border-brand/40 bg-brand/10 px-3 py-2 text-xs font-semibold text-brand transition hover:bg-brand/20"
+          >
+            <IconWallet size={16} />
+            <span>¿Dinero de una empresa en su cuenta personal? Abrir «Fondos en custodia»</span>
+          </Link>
         </>
       }
       footer={

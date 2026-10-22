@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useMemo, useState } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, ApiError } from '../lib/api';
 import { useAuth } from '../store/auth';
@@ -35,6 +35,14 @@ const ACCOUNT_TYPES = [
   { value: 'OTHER', label: 'Otro' },
 ];
 
+/** Lo que el panel de custodia dice de cada cuenta real. */
+interface CustodiaDeCuenta {
+  realBalance: string;
+  custody: string;
+  personalNet: string;
+  custodyByBeneficiary: Array<{ entityId: string; entityName: string; pending: string }>;
+}
+
 /**
  * CUENTAS: DÓNDE ESTÁ REALMENTE EL DINERO
  * ---------------------------------------
@@ -63,6 +71,22 @@ export function AccountsPage() {
     queryFn: () =>
       api.get<Account[]>(`/accounts?${params.get('entityId') ? `entityId=${params.get('entityId')}&` : ''}includeClosed=true`),
   });
+
+  // Cuánto de cada cuenta pertenece a una empresa. Es informativo: si el panel no
+  // responde, la pantalla de Cuentas sigue funcionando con sus saldos.
+  const custodiaQuery = useQuery<{ accounts: Array<CustodiaDeCuenta & { accountId: string }> }>({
+    queryKey: ['custodia-resumen', ''],
+    queryFn: () => api.get<{ accounts: Array<CustodiaDeCuenta & { accountId: string }> }>('/custody/summary'),
+    retry: false,
+  });
+
+  const custodiaPorCuenta = useMemo(() => {
+    const mapa = new Map<string, CustodiaDeCuenta>();
+    for (const fila of custodiaQuery.data?.accounts ?? []) {
+      mapa.set(fila.accountId, fila);
+    }
+    return mapa;
+  }, [custodiaQuery.data]);
 
   const createMutation = useMutation({
     mutationFn: () =>
@@ -189,26 +213,59 @@ export function AccountsPage() {
         ) : null}
 
         <div className="space-y-3">
-          {accounts.map((account) => (
-            <div key={account.id} className="rounded-lg border border-border-soft p-3">
-              <div className="flex items-start justify-between gap-2">
-                <div className="min-w-0">
-                  <p className="flex items-center gap-2 truncate text-sm font-medium text-ink">
-                    {account.name}
-                    {account.isLiability ? <Badge tone="warning">pasivo</Badge> : <Badge tone="positive">activo</Badge>}
-                    {account.status !== 'ACTIVE' ? <Badge tone="neutral">{account.status}</Badge> : null}
-                  </p>
-                  <p className="truncate text-xs text-faint">
-                    {account.entity?.name} · {account.type} · {account.movementCount} movimiento(s)
-                  </p>
+          {accounts.map((account) => {
+            const custodia = custodiaPorCuenta.get(account.id);
+            const tieneCustodia = custodia ? Number(custodia.custody) > 0 : false;
+            return (
+              <div key={account.id} className="rounded-lg border border-border-soft p-3">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="flex items-center gap-2 truncate text-sm font-medium text-ink">
+                      {account.name}
+                      {account.isLiability ? <Badge tone="warning">pasivo</Badge> : <Badge tone="positive">activo</Badge>}
+                      {account.status !== 'ACTIVE' ? <Badge tone="neutral">{account.status}</Badge> : null}
+                    </p>
+                    <p className="truncate text-xs text-faint">
+                      {account.entity?.name} · {account.type} · {account.movementCount} movimiento(s)
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <Money value={account.balance} currency={account.currency} tone={account.isLiability ? 'negative' : 'positive'} />
+                    <p className="text-xs text-faint">inicial {account.openingBalance}</p>
+                  </div>
                 </div>
-                <div className="text-right">
-                  <Money value={account.balance} currency={account.currency} tone={account.isLiability ? 'negative' : 'positive'} />
-                  <p className="text-xs text-faint">inicial {account.openingBalance}</p>
-                </div>
+
+                {/* De quién es el dinero: si hay fondos de una empresa depositados
+                    en esta cuenta, se dice aquí mismo para que nadie confunda el
+                    saldo del banco con dinero propio. */}
+                {tieneCustodia && custodia ? (
+                  <div className="mt-2 space-y-1 rounded-lg bg-warning/10 p-2">
+                    {custodia.custodyByBeneficiary.map((fila) => (
+                      <div key={fila.entityId} className="flex items-center justify-between gap-2 text-xs">
+                        <span className="truncate text-muted">
+                          Es de <strong className="text-ink">{fila.entityName}</strong>
+                        </span>
+                        <Money value={fila.pending} currency={account.currency} tone="warning" />
+                      </div>
+                    ))}
+                    <div className="flex items-center justify-between gap-2 border-t border-warning/30 pt-1 text-xs font-semibold">
+                      <span className="text-ink">Suyo de verdad</span>
+                      <Money value={custodia.personalNet} currency={account.currency} />
+                    </div>
+                  </div>
+                ) : null}
+
+                {!account.isLiability ? (
+                  <Link
+                    to={`/custodia?cuenta=${account.id}`}
+                    className="mt-2 inline-flex text-xs font-semibold text-brand underline-offset-2 hover:underline"
+                  >
+                    {tieneCustodia ? 'Ver o liquidar estos fondos' : 'Registrar dinero de una empresa aquí'}
+                  </Link>
+                ) : null}
               </div>
-            </div>
-          ))}
+            );
+          })}
           {accounts.length === 0 ? (
             <p className="text-sm text-faint">
               Todavía no hay cuentas. Cree la primera con el dinero que tiene hoy disponible.

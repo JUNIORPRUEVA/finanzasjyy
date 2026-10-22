@@ -84,6 +84,45 @@ export function collectionPostings(input: {
 }
 
 /**
+ * APERTURA: dinero de la empresa que YA estaba en la cuenta del propietario
+ * antes de empezar a usar FINANZA.
+ *
+ *   Empresa dueña : D 1130 (efectivo de la empresa en poder del propietario) / C 3400 (saldo de apertura)
+ *   Quien custodia: D 3400 (su patrimonio ya no incluye ese dinero)         / C 2150 (debe ese dinero)
+ *
+ * Dos decisiones que conviene entender antes de tocar esto:
+ *
+ *  1. NO se toca el banco. Ese dinero ya estaba en la cuenta y la conciliación
+ *     inicial del propietario ya lo contó al declarar el saldo real. Volver a
+ *     debitarlo contaría el mismo dinero dos veces y el saldo del banco dejaría
+ *     de coincidir con el extracto.
+ *  2. NO hay ingreso ni cuenta por cobrar. Esas ventas o cobros ocurrieron ANTES
+ *     de FINANZA: reconocerlos ahora inflaría el resultado del mes y volvería a
+ *     cobrar facturas que ya estaban pagadas. Por eso la contrapartida es el
+ *     patrimonio de apertura (3400) en las dos unidades.
+ *
+ * El resultado neto es exactamente el buscado: el banco sigue igual, la empresa
+ * figura con un activo suyo (1130) y el propietario con una deuda (2150).
+ */
+export function openingCustodyPostings(input: { amount: DecimalInput; memo?: string }): CustodyPostings {
+  const amount = round2(input.amount);
+  if (amount.lte(0)) {
+    throw new ValidationError('El importe de los fondos que ya estaban depositados debe ser mayor que cero');
+  }
+
+  return {
+    beneficiary: [
+      line(LEDGER.COMPANY_CASH_WITH_OWNER, 'debit', amount, input.memo),
+      line(LEDGER.OPENING_BALANCE, 'credit', amount, input.memo),
+    ],
+    holding: [
+      line(LEDGER.OPENING_BALANCE, 'debit', amount, input.memo),
+      line(LEDGER.CUSTODY_FUNDS, 'credit', amount, input.memo),
+    ],
+  };
+}
+
+/**
  * LIQUIDACIÓN: la empresa dueña recibe el dinero en su banco o caja.
  *
  *   Quien custodia: D 2150 (deja de deber) / C banco (sale el dinero de verdad)

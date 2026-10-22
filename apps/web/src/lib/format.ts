@@ -153,6 +153,12 @@ export const TXN_KIND_LABELS: Record<string, string> = {
   RECEIVABLE_SETTLEMENT: 'Cobro de cuenta por cobrar',
   PAYABLE_SETTLEMENT: 'Pago de cuenta por pagar',
   ADJUSTMENT: 'Ajuste',
+  // Custodia: dinero de una empresa en una cuenta personal. Nunca es ingreso ni
+  // gasto de quien tiene el dinero, por eso se etiqueta con su propio nombre.
+  CUSTODY_IN: 'Entrada en custodia',
+  CUSTODY_OUT: 'Salida de custodia',
+  CUSTODY_SETTLEMENT: 'Liquidación de custodia',
+  CUSTODY_OPENING: 'Fondos ya depositados',
 };
 
 export function txnKindLabel(kind: string): string {

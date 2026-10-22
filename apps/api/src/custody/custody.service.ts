@@ -8,12 +8,13 @@ import {
   allocateToFunds,
   collectionPostings,
   expenseFromCustodyPostings,
+  openingCustodyPostings,
   settlementPostings,
   fundStatus,
 } from '../domain/custody-rules.js';
 import { toBusinessDate } from '../domain/business-date.js';
 import { dec, round2, validateMoney } from '../domain/money.js';
-import { postEntry, reverseEntry } from '../ledger/ledger-core.js';
+import { accountBalance, balancesForAccounts, postEntry, reverseEntry } from '../ledger/ledger-core.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { AccessService } from '../security/access.service.js';
 
@@ -61,6 +62,32 @@ export interface SettleCustodyInput {
   businessDate?: string;
   description?: string;
   clientOperationId?: string;
+}
+
+export interface OpenCustodyInput {
+  beneficiaryEntityId: string;
+  holdingAccountId: string;
+  amount: string;
+  businessDate?: string;
+  description: string;
+  clientOperationId?: string;
+}
+
+/** Fila del panel: una cuenta real con su dinero real y de quién es. */
+export interface CustodySummaryAccount {
+  accountId: string;
+  accountName: string;
+  entityId: string;
+  entityName: string;
+  ledgerCode: string;
+  currency: string;
+  /** Saldo que dice el banco (calculado del libro, incluye el saldo inicial). */
+  realBalance: string;
+  /** Parte de ese saldo que pertenece a empresas y sigue bajo custodia. */
+  custody: string;
+  /** Lo que de verdad es del propietario: real − custodia. */
+  personalNet: string;
+  custodyByBeneficiary: Array<{ entityId: string; entityName: string; pending: string; funds: number }>;
 }
 
 export interface PayExpenseFromCustodyInput {
@@ -121,6 +148,9 @@ export class CustodyService {
         transactionId: yaExiste.id,
         custodyFundId: yaExiste.custodySource?.id ?? null,
         duplicate: true,
+        pending: yaExiste.custodySource
+          ? await this.pendingFor(yaExiste.custodySource.beneficiaryEntityId, yaExiste.custodySource.holdingAccountId)
+          : null,
       };
     }
 
@@ -275,7 +305,168 @@ export class CustodyService {
   }
 
   // -------------------------------------------------------------------------
-  // 2. Liquidación (total, parcial o agrupada) a una cuenta de la empresa
+  // 2. Apertura: dinero de la empresa que YA estaba depositado antes de FINANZA
+  // -------------------------------------------------------------------------
+  /**
+   * Registra como custodia un dinero que ya estaba en la cuenta personal: no es
+   * una venta nueva ni un cobro nuevo, así que NO crea ingresos ni recobra
+   * facturas. Sólo reasigna la propiedad del dinero que ya está en el banco:
+   *
+   *   · el banco no se mueve (su saldo sigue coincidiendo con el extracto),
+   *   · la empresa reconoce su activo (1130) contra patrimonio de apertura (3400),
+   *   · el propietario deja de deberlo a sí mismo y se lo debe a la empresa (2150).
+   *
+   * Se niega a declarar más custodia que dinero hay realmente libre en la cuenta:
+   * si el banco tiene 10.000 y ya hay 8.000 declarados, sólo se pueden declarar
+   * 2.000 más. Así el neto personal nunca sale de la nada.
+   */
+  async openExistingFunds(user: AuthenticatedUser, input: OpenCustodyInput, meta: RequestMetaInfo) {
+    const amount = validateMoney(input.amount, { field: 'importe de los fondos ya depositados' });
+    const businessDate = toBusinessDate(input.businessDate);
+    const clientOperationId =
+      input.clientOperationId ?? `cusap_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
+
+    const yaExiste = await this.prisma.financialTransaction.findUnique({
+      where: { clientOperationId },
+      include: { custodySource: true },
+    });
+    if (yaExiste) {
+      return {
+        transactionId: yaExiste.id,
+        custodyFundId: yaExiste.custodySource?.id ?? null,
+        duplicate: true,
+        pending: yaExiste.custodySource
+          ? await this.pendingFor(yaExiste.custodySource.beneficiaryEntityId, yaExiste.custodySource.holdingAccountId)
+          : null,
+      };
+    }
+
+    await this.access.assertCanWrite(user.userId, input.beneficiaryEntityId);
+
+    const beneficiary = await this.prisma.financialEntity.findUnique({
+      where: { id: input.beneficiaryEntityId },
+      select: { id: true, name: true, currency: true },
+    });
+    if (!beneficiary) {
+      throw new NotFoundError('Unidad financiera', input.beneficiaryEntityId);
+    }
+
+    const holding = await this.loadHoldingAccount(
+      user,
+      input.holdingAccountId,
+      input.beneficiaryEntityId,
+      beneficiary.currency,
+    );
+
+    // ¿Cuánto dinero hay de verdad en la cuenta y cuánto ya está asignado?
+    const balance = await accountBalance(this.prisma, { financialAccountId: holding.id });
+    const yaAsignado = await this.totalPendingInAccount(holding.id);
+    const libre = round2(balance.balance).minus(yaAsignado);
+    if (amount.gt(libre)) {
+      throw new ValidationError(
+        `En "${holding.name}" sólo quedan ${libre.gt(0) ? libre.toFixed(2) : '0.00'} sin asignar de un saldo de ` +
+          `${round2(balance.balance).toFixed(2)} y se intentaron declarar ${amount.toFixed(2)}. ` +
+          'Registre primero el saldo real de la cuenta (Cuentas → saldo inicial) o indique una cantidad menor.',
+      );
+    }
+
+    const postings = openingCustodyPostings({ amount, memo: input.description });
+
+    const created = await this.prisma.inMoneyTransaction(async (tx) => {
+      const beneficiaryEntry = await postEntry(tx, {
+        entityId: input.beneficiaryEntityId,
+        businessDate,
+        description: `Fondos ya depositados: ${input.description}`,
+        sourceType: 'CUSTODY',
+        lines: postings.beneficiary,
+        createdByUserId: user.userId,
+      });
+      const holdingEntry = await postEntry(tx, {
+        entityId: holding.entityId,
+        businessDate,
+        description: `Fondos de ${beneficiary.name} que ya estaban en ${holding.name}: ${input.description}`,
+        sourceType: 'CUSTODY',
+        lines: postings.holding,
+        createdByUserId: user.userId,
+      });
+
+      // Movimiento de la empresa: es dinero suyo desde antes (no un ingreso).
+      const transaction = await tx.financialTransaction.create({
+        data: {
+          entityId: input.beneficiaryEntityId,
+          kind: 'CUSTODY_OPENING',
+          status: 'POSTED',
+          accountId: holding.id,
+          journalEntryId: beneficiaryEntry.id,
+          amount,
+          currency: holding.currency,
+          businessDate,
+          description: input.description,
+          clientOperationId,
+          syncStatus: 'CONFIRMED',
+          syncedAt: new Date(),
+          createdByUserId: user.userId,
+        },
+      });
+
+      await tx.financialTransaction.create({
+        data: {
+          entityId: holding.entityId,
+          kind: 'CUSTODY_IN',
+          status: 'POSTED',
+          accountId: holding.id,
+          journalEntryId: holdingEntry.id,
+          amount,
+          currency: holding.currency,
+          businessDate,
+          description: `Fondos de ${beneficiary.name} ya depositados (apertura): ${input.description}`,
+          clientOperationId: `${clientOperationId}:hold`,
+          syncStatus: 'CONFIRMED',
+          syncedAt: new Date(),
+          createdByUserId: user.userId,
+        },
+      });
+
+      const fund = await tx.custodyFund.create({
+        data: {
+          beneficiaryEntityId: input.beneficiaryEntityId,
+          holdingAccountId: holding.id,
+          sourceTransactionId: transaction.id,
+          originalAmount: amount,
+          appliedAmount: dec(0),
+          status: 'OPEN',
+          businessDate,
+          description: input.description,
+          createdByUserId: user.userId,
+        },
+      });
+
+      await this.audit.record(
+        {
+          userId: user.userId,
+          action: 'custody.opening_recorded',
+          entityType: 'CustodyFund',
+          entityId: fund.id,
+          after: {
+            beneficiary: beneficiary.name,
+            holdingAccount: holding.name,
+            amount: amount.toFixed(2),
+            realBalance: round2(balance.balance).toFixed(2),
+          },
+          ip: meta.ip,
+          userAgent: meta.userAgent,
+        },
+        tx,
+      );
+
+      return { transactionId: transaction.id, custodyFundId: fund.id };
+    });
+
+    return { ...created, duplicate: false, pending: await this.pendingFor(input.beneficiaryEntityId, holding.id) };
+  }
+
+  // -------------------------------------------------------------------------
+  // 3. Liquidación (total, parcial o agrupada) a una cuenta de la empresa
   // -------------------------------------------------------------------------
   async settle(user: AuthenticatedUser, input: SettleCustodyInput, meta: RequestMetaInfo) {
     const amount = validateMoney(input.amount, { field: 'importe de la liquidación' });
@@ -438,7 +629,7 @@ export class CustodyService {
   }
 
   // -------------------------------------------------------------------------
-  // 3. Gasto de la empresa pagado con dinero que estaba en custodia
+  // 4. Gasto de la empresa pagado con dinero que estaba en custodia
   // -------------------------------------------------------------------------
   async payExpenseFromCustody(user: AuthenticatedUser, input: PayExpenseFromCustodyInput, meta: RequestMetaInfo) {
     const amount = validateMoney(input.amount, { field: 'importe del gasto' });
@@ -583,7 +774,7 @@ export class CustodyService {
   }
 
   // -------------------------------------------------------------------------
-  // 4. Consulta de lo que hay pendiente de liquidar
+  // 5. Consulta de lo que hay pendiente de liquidar
   // -------------------------------------------------------------------------
   async pending(user: AuthenticatedUser, query: { beneficiaryEntityId?: string; holdingAccountId?: string }) {
     const scopeIds = query.beneficiaryEntityId
@@ -647,7 +838,232 @@ export class CustodyService {
   }
 
   // -------------------------------------------------------------------------
-  // 5. Anulación de una liquidación o de un gasto pagado con custodia
+  // 6. Panel: saldo real, fondos de empresas y neto personal de cada cuenta
+  // -------------------------------------------------------------------------
+  /**
+   * Responde a la pregunta que el propietario hace de verdad: «en mi BHD y mi
+   * Banreservas, ¿cuánto es mío y cuánto es de Fulltech o de APPYRA?».
+   *
+   *   saldo real    = lo que dice el banco (libro mayor, incluye saldo inicial)
+   *   en custodia   = lo que sigue pendiente de liquidar de empresas
+   *   neto personal = saldo real − en custodia
+   *
+   * Las tarjetas y las cuentas cerradas no entran: una tarjeta no custodia dinero.
+   */
+  async summary(user: AuthenticatedUser, query: { holdingAccountId?: string }) {
+    const entityIds = await this.access.listAccessibleEntityIds(user.userId);
+    if (entityIds.length === 0) {
+      return {
+        generatedAt: new Date().toISOString(),
+        totals: { realBalance: '0.00', custody: '0.00', personalNet: '0.00' },
+        byBeneficiary: [] as Array<{ entityId: string; entityName: string; pending: string }>,
+        accounts: [] as CustodySummaryAccount[],
+      };
+    }
+
+    const accounts = await this.prisma.financialAccount.findMany({
+      where: {
+        entityId: { in: entityIds },
+        status: { not: 'CLOSED' },
+        isCreditCard: false,
+        type: { not: 'CREDIT_CARD' },
+        ...(query.holdingAccountId ? { id: query.holdingAccountId } : {}),
+      },
+      select: {
+        id: true,
+        name: true,
+        currency: true,
+        entityId: true,
+        entity: { select: { name: true } },
+        ledgerAccount: { select: { code: true } },
+      },
+      orderBy: [{ entityId: 'asc' }, { name: 'asc' }],
+    });
+
+    if (accounts.length === 0) {
+      return {
+        generatedAt: new Date().toISOString(),
+        totals: { realBalance: '0.00', custody: '0.00', personalNet: '0.00' },
+        byBeneficiary: [] as Array<{ entityId: string; entityName: string; pending: string }>,
+        accounts: [] as CustodySummaryAccount[],
+      };
+    }
+
+    const accountIds = accounts.map((account) => account.id);
+    const [balances, funds] = await Promise.all([
+      balancesForAccounts(this.prisma, { financialAccountIds: accountIds }),
+      this.prisma.custodyFund.findMany({
+        where: { holdingAccountId: { in: accountIds }, status: { in: ['OPEN', 'PARTIAL'] } },
+        select: {
+          holdingAccountId: true,
+          beneficiaryEntityId: true,
+          originalAmount: true,
+          appliedAmount: true,
+          beneficiaryEntity: { select: { name: true } },
+        },
+      }),
+    ]);
+
+    // Custodia pendiente por (cuenta, empresa).
+    const custody = new Map<string, Map<string, { name: string; pending: ReturnType<typeof dec>; funds: number }>>();
+    const porEmpresa = new Map<string, { entityName: string; pending: ReturnType<typeof dec> }>();
+    for (const fund of funds) {
+      const remaining = round2(fund.originalAmount).minus(round2(fund.appliedAmount));
+      if (remaining.lte(0)) {
+        continue;
+      }
+      const porCuenta = custody.get(fund.holdingAccountId) ?? new Map();
+      const actual = porCuenta.get(fund.beneficiaryEntityId) ?? {
+        name: fund.beneficiaryEntity.name,
+        pending: dec(0),
+        funds: 0,
+      };
+      actual.pending = actual.pending.plus(remaining);
+      actual.funds += 1;
+      porCuenta.set(fund.beneficiaryEntityId, actual);
+      custody.set(fund.holdingAccountId, porCuenta);
+
+      const global = porEmpresa.get(fund.beneficiaryEntityId) ?? {
+        entityName: fund.beneficiaryEntity.name,
+        pending: dec(0),
+      };
+      global.pending = global.pending.plus(remaining);
+      porEmpresa.set(fund.beneficiaryEntityId, global);
+    }
+
+    let totalReal = dec(0);
+    let totalCustody = dec(0);
+    const rows: CustodySummaryAccount[] = accounts.map((account) => {
+      const realBalance = round2(balances.get(account.id)?.balance ?? 0);
+      const porCuenta = custody.get(account.id) ?? new Map();
+      const custodyByBeneficiary = [...porCuenta.entries()]
+        .map(([entityId, value]) => ({
+          entityId,
+          entityName: value.name,
+          pending: round2(value.pending).toFixed(2),
+          funds: value.funds,
+        }))
+        .sort((a, b) => Number(b.pending) - Number(a.pending));
+      const enCustodia = [...porCuenta.values()].reduce((acc, value) => acc.plus(round2(value.pending)), dec(0));
+
+      totalReal = totalReal.plus(realBalance);
+      totalCustody = totalCustody.plus(enCustodia);
+
+      return {
+        accountId: account.id,
+        accountName: account.name,
+        entityId: account.entityId,
+        entityName: account.entity.name,
+        ledgerCode: account.ledgerAccount.code,
+        currency: account.currency,
+        realBalance: realBalance.toFixed(2),
+        custody: round2(enCustodia).toFixed(2),
+        personalNet: round2(realBalance).minus(round2(enCustodia)).toFixed(2),
+        custodyByBeneficiary,
+      };
+    });
+
+    return {
+      generatedAt: new Date().toISOString(),
+      totals: {
+        realBalance: round2(totalReal).toFixed(2),
+        custody: round2(totalCustody).toFixed(2),
+        personalNet: round2(totalReal).minus(round2(totalCustody)).toFixed(2),
+      },
+      byBeneficiary: [...porEmpresa.entries()]
+        .map(([entityId, value]) => ({
+          entityId,
+          entityName: value.entityName,
+          pending: round2(value.pending).toFixed(2),
+        }))
+        .sort((a, b) => Number(b.pending) - Number(a.pending)),
+      accounts: rows,
+    };
+  }
+
+  // -------------------------------------------------------------------------
+  // 6b. Historial: cobros, aperturas, liquidaciones y gastos
+  // -------------------------------------------------------------------------
+  async movements(user: AuthenticatedUser, query: { beneficiaryEntityId?: string; holdingAccountId?: string; limit?: string }) {
+    const scopeIds = query.beneficiaryEntityId
+      ? [query.beneficiaryEntityId]
+      : await this.access.listAccessibleEntityIds(user.userId);
+    if (query.beneficiaryEntityId) {
+      await this.access.assertCanRead(user.userId, query.beneficiaryEntityId);
+    }
+    const limite = Math.min(Math.max(Number(query.limit ?? 50) || 50, 1), 200);
+    if (scopeIds.length === 0) {
+      return { funds: [], movements: [] };
+    }
+
+    const filtroCuenta = query.holdingAccountId ? { holdingAccountId: query.holdingAccountId } : {};
+
+    const [funds, movements] = await Promise.all([
+      this.prisma.custodyFund.findMany({
+        where: { beneficiaryEntityId: { in: scopeIds }, ...filtroCuenta },
+        include: {
+          beneficiaryEntity: { select: { name: true } },
+          holdingAccount: { select: { name: true, entity: { select: { name: true } } } },
+          sourceTransaction: { select: { kind: true } },
+        },
+        orderBy: [{ businessDate: 'desc' }, { createdAt: 'desc' }],
+        take: limite,
+      }),
+      this.prisma.custodyMovement.findMany({
+        where: { beneficiaryEntityId: { in: scopeIds }, ...filtroCuenta },
+        include: {
+          beneficiaryEntity: { select: { name: true } },
+          holdingAccount: { select: { name: true, entity: { select: { name: true } } } },
+          targetAccount: { select: { name: true } },
+          _count: { select: { allocations: true } },
+        },
+        orderBy: [{ businessDate: 'desc' }, { createdAt: 'desc' }],
+        take: limite,
+      }),
+    ]);
+
+    return {
+      funds: funds.map((fund) => {
+        const original = round2(fund.originalAmount);
+        const applied = round2(fund.appliedAmount);
+        return {
+          id: fund.id,
+          kind: fund.sourceTransaction.kind,
+          beneficiaryEntityId: fund.beneficiaryEntityId,
+          beneficiaryEntityName: fund.beneficiaryEntity.name,
+          holdingAccountId: fund.holdingAccountId,
+          holdingAccountName: fund.holdingAccount.name,
+          holdingEntityName: fund.holdingAccount.entity.name,
+          businessDate: fund.businessDate.toISOString().slice(0, 10),
+          description: fund.description,
+          originalAmount: original.toFixed(2),
+          appliedAmount: applied.toFixed(2),
+          remaining: original.minus(applied).toFixed(2),
+          status: fund.status,
+        };
+      }),
+      movements: movements.map((movement) => ({
+        id: movement.id,
+        type: movement.type,
+        status: movement.status,
+        beneficiaryEntityId: movement.beneficiaryEntityId,
+        beneficiaryEntityName: movement.beneficiaryEntity.name,
+        holdingAccountId: movement.holdingAccountId,
+        holdingAccountName: movement.holdingAccount.name,
+        holdingEntityName: movement.holdingAccount.entity.name,
+        targetAccountName: movement.targetAccount?.name ?? null,
+        amount: round2(movement.amount).toFixed(2),
+        businessDate: movement.businessDate.toISOString().slice(0, 10),
+        description: movement.description,
+        fundsCovered: movement._count.allocations,
+        voidedAt: movement.voidedAt ? movement.voidedAt.toISOString() : null,
+        voidReason: movement.voidReason,
+      })),
+    };
+  }
+
+  // -------------------------------------------------------------------------
+  // 7. Anulación de una liquidación o de un gasto pagado con custodia
   // -------------------------------------------------------------------------
   async voidMovement(user: AuthenticatedUser, movementId: string, reason: string, meta: RequestMetaInfo) {
     if (!reason || reason.trim().length < 5) {
@@ -818,6 +1234,18 @@ export class CustodyService {
     return funds
       .reduce((acc, fund) => acc.plus(round2(fund.originalAmount).minus(round2(fund.appliedAmount))), round2(0))
       .toFixed(2);
+  }
+
+  /** Custodia pendiente de TODAS las empresas en una cuenta (para la guarda de apertura). */
+  private async totalPendingInAccount(holdingAccountId: string) {
+    const funds = await this.prisma.custodyFund.findMany({
+      where: { holdingAccountId, status: { in: ['OPEN', 'PARTIAL'] } },
+      select: { originalAmount: true, appliedAmount: true },
+    });
+    return funds.reduce(
+      (acc, fund) => acc.plus(round2(fund.originalAmount).minus(round2(fund.appliedAmount))),
+      round2(0),
+    );
   }
 
   /** Recalcula lo cobrado de una factura (mismo criterio que TransactionsService). */

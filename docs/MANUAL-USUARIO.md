@@ -165,6 +165,52 @@ Doce informes, con su período y sus totales, con descarga en CSV que se abre bi
 
 ---
 
+## 3 bis. «Fondos en custodia»: dinero de una empresa en tu cuenta personal
+
+Se abre de tres maneras, todas a la misma pantalla:
+
+- Menú lateral → **Fondos en custodia** (junto a «Traspasos»).
+- **Movimientos** → el enlace azul «¿Dinero de una empresa en su cuenta personal?».
+- **Cuentas y bancos** → el enlace de cada cuenta («Registrar dinero de una empresa aquí» o
+  «Ver o liquidar estos fondos»).
+
+La pantalla contesta tres preguntas y nunca las mezcla:
+
+| Cifra | Qué significa |
+| ----- | ------------- |
+| **Saldo real** | Lo que dice el extracto del banco |
+| **De empresas** | La parte de ese saldo que pertenece a Fulltech, Appyra… |
+| **Suyo de verdad** | Saldo real − dinero de empresas |
+
+### Si el dinero de Fulltech/YA estaba en el banco antes de usar FINANZA
+
+1. Primero, en **Cuentas y bancos**, comprueba que la cuenta (BHD, Banreservas…) tiene el saldo que
+   figura hoy en el banco. Si no lo tiene, corrígelo antes: es la base de todo.
+2. Abre **Fondos en custodia** → pestaña **Registrar** → opción **«Ya estaba ahí»**.
+3. Elige la empresa dueña del dinero, la cuenta donde está y el importe.
+4. Escribe un concepto («Cobros de Fulltech ya depositados») y guarda.
+
+Eso **no** crea una venta ni vuelve a cobrar facturas ya pagadas: sólo aclara de quién es el dinero
+que ya estaba en el banco. El saldo del banco no cambia.
+
+### Si es un cobro nuevo
+
+Pestaña **Registrar** → **«Cobro nuevo»** (o **«Cobro de factura»** si la factura ya estaba
+registrada). El banco personal sube el importe real y la empresa reconoce su ingreso **una sola vez**.
+
+### Cuando le pasas el dinero a la empresa
+
+Pestaña **Liquidar** → elige la empresa y la cuenta → cuenta destino (el banco de la empresa) →
+importe. Puedes liquidar todo o una parte; si hay varios cobros, se pagan del más antiguo al más
+nuevo en una sola liquidación.
+
+Si te equivocas, pestaña **Historial** → **Anular** (con motivo). Se hace la reversa y nada se borra.
+
+> **Ojo:** esto no es un «procesador de pagos». Aquí el dinero ya está en tu banco; lo que se aclara
+> es de quién es.
+
+---
+
 ## 4. Trabajar sin conexión
 
 Puedes registrar ingresos y gastos sin cobertura. Se guardan en el dispositivo y se envían solos

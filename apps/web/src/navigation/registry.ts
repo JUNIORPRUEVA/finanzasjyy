@@ -150,6 +150,19 @@ export const DRAWER_ENTRIES: NavEntry[] = [
     order: 12,
   },
   {
+    // Dinero de una empresa que está en una cuenta personal. Va aquí, junto a
+    // Traspasos, porque en la práctica es un traslado: primero se aclara de quién
+    // es el dinero y después se liquida hacia la cuenta de la empresa.
+    id: 'custodia',
+    label: 'Fondos en custodia',
+    hint: 'Dinero de una empresa en sus cuentas personales',
+    icon: IconWallet,
+    to: '/custodia',
+    group: 'gestion',
+    availability: 'ready',
+    order: 11,
+  },
+  {
     id: 'deudas',
     label: 'Deudas y préstamos',
     hint: 'Cuotas, tarjetas e intereses',

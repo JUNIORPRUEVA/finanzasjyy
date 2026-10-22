@@ -182,6 +182,40 @@ El panel, además, avisa cuando el libro incluye partidas que no son movimientos
 
 ---
 
+## D13 — El dinero de una empresa en una cuenta personal no es del propietario
+
+Cuando un cobro de FULLTECH o APPYRA cae en el BHD o el Banreservas **personal**, el banco tiene ese
+dinero de verdad, pero no es del propietario. El sistema lo dice con tres cifras que nunca se mezclan:
+
+| Cifra | Qué es | De dónde sale |
+| ----- | ------ | ------------- |
+| **Saldo real** | Lo que dice el extracto del banco | Libro mayor de la cuenta (incluye el saldo inicial) |
+| **Fondos de empresas** | Lo que sigue pendiente de liquidar | Suma de los cobros abiertos o parciales |
+| **Disponible personal neto** | Lo que es suyo de verdad | Saldo real − fondos de empresas |
+
+Reglas que se aplican siempre:
+
+- **Dos asientos por operación, uno por unidad.** Empresa: `D 1130 / C ingreso` (o `C 1210` si la
+  factura ya estaba emitida). Quien custodia: `D banco / C 2150`. El banco sube y la deuda con la
+  empresa sube lo mismo: el propietario **no** gana nada.
+- **Liquidar no es vender.** `D 2150 / C banco` en la unidad que custodia y `D banco / C 1130` en la
+  empresa. Cero ingresos y cero gastos nuevos.
+- **El dinero que YA estaba depositado antes de FINANZA se registra como apertura, no como venta.**
+  Empresa `D 1130 / C 3400`; propietario `D 3400 / C 2150`. **No se debita el banco** (el saldo inicial
+  ya lo contó) y **no se reconoce ningún ingreso** (esa venta ocurrió antes y volver a reconocerla
+  inflaría el mes y recobraría facturas ya pagadas).
+- **Nunca se declara más custodia que dinero libre hay en la cuenta.** Si el banco tiene 10 000 y ya
+  hay 8 000 declarados, sólo se pueden declarar 2 000 más. Así el neto personal no sale de la nada.
+- **Nunca se liquida más de lo pendiente.** El reparto es FIFO por fecha y una liquidación puede
+  cubrir varios cobros (agrupada) sin dejar nunca un pendiente negativo.
+- **Nada se borra.** Anular una liquidación reversa los dos asientos y devuelve el pendiente; el
+  movimiento queda en el histórico con su motivo.
+
+*Dónde:* `src/domain/custody-rules.ts` (reglas puras), `src/custody/custody.service.ts`,
+`GET /api/v1/custody/summary`, pantalla `/custodia` y `apps/api/test/custodia.e2e-spec.ts`.
+
+---
+
 ## Cómo se comprueba todo esto
 
 ```powershell

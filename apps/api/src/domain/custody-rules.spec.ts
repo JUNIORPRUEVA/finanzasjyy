@@ -5,6 +5,7 @@ import {
   expenseFromCustodyPostings,
   expensePaidByOwnerPostings,
   fundStatus,
+  openingCustodyPostings,
   settlementPostings,
 } from './custody-rules.js';
 
@@ -29,6 +30,53 @@ const assertCuadra = (lines: Array<{ debit?: unknown; credit?: unknown }>, nombr
 };
 
 const cuenta = <T extends { ledgerCode: string }>(lines: T[], code: string): T[] => lines.filter((l) => l.ledgerCode === code);
+
+describe('apertura de fondos que YA estaban depositados antes de FINANZA', () => {
+  it('reconoce el activo de la empresa contra patrimonio y la deuda del propietario, SIN tocar el banco y SIN ingreso', () => {
+    const { beneficiary, holding } = openingCustodyPostings({
+      amount: '20000.00',
+      memo: 'Fondos de Fulltech ya depositados en BHD',
+    });
+
+    // Empresa: el dinero es suyo (1130) y viene del patrimonio de apertura.
+    expect(beneficiary).toHaveLength(2);
+    expect(cuenta(beneficiary, '1130')[0].debit!.toFixed(2)).toBe('20000.00');
+    expect(cuenta(beneficiary, '3400')[0].credit!.toFixed(2)).toBe('20000.00');
+    assertCuadra(beneficiary, 'empresa dueña');
+
+    // Propietario: su patrimonio deja de incluir ese dinero y pasa a deberlo.
+    expect(holding).toHaveLength(2);
+    expect(cuenta(holding, '3400')[0].debit!.toFixed(2)).toBe('20000.00');
+    expect(cuenta(holding, '2150')[0].credit!.toFixed(2)).toBe('20000.00');
+    assertCuadra(holding, 'unidad que custodia');
+  });
+
+  it('no crea ninguna línea de ingreso, gasto ni cuenta por cobrar', () => {
+    const { beneficiary, holding } = openingCustodyPostings({ amount: '1500.55' });
+    const codes = [...beneficiary, ...holding].map((l) => l.ledgerCode);
+
+    // 4xxx = ingresos, 5xxx/6xxx = gastos, 1210 = cuentas por cobrar.
+    expect(codes.filter((code) => code.startsWith('4'))).toHaveLength(0);
+    expect(codes.filter((code) => code.startsWith('5') || code.startsWith('6'))).toHaveLength(0);
+    expect(codes).not.toContain('1210');
+  });
+
+  it('NO debita ni acredita ninguna cuenta bancaria: el saldo del banco no se mueve', () => {
+    const { beneficiary, holding } = openingCustodyPostings({ amount: '8000.00' });
+
+    // Nada con cuenta financiera asociada ⇒ el saldo de la cuenta no cambia.
+    expect(beneficiary.every((l) => !l.financialAccountId)).toBe(true);
+    expect(holding.every((l) => !l.financialAccountId)).toBe(true);
+  });
+
+  it('redondea a 2 decimales y rechaza importes no positivos', () => {
+    const { beneficiary } = openingCustodyPostings({ amount: '1999.999' });
+    expect(cuenta(beneficiary, '1130')[0].debit!.toFixed(2)).toBe('2000.00');
+
+    expect(() => openingCustodyPostings({ amount: '0' })).toThrow(/mayor que cero/);
+    expect(() => openingCustodyPostings({ amount: '-500' })).toThrow(/mayor que cero/);
+  });
+});
 
 describe('cobro de una empresa en una cuenta personal', () => {
   it('reconoce el ingreso en la empresa y el banco real en la unidad que custodia (caso Fulltech → Banreservas)', () => {

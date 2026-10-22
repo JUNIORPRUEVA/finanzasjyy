@@ -113,6 +113,10 @@ enum TxnKind {
   CUSTODY_OUT
   /// En la empresa dueña del dinero: entra a su banco/caja desde la custodia.
   CUSTODY_SETTLEMENT
+  /// Dinero de la empresa que YA estaba en la cuenta del propietario antes de
+  /// empezar a usar FINANZA. No es un ingreso ni un cobro: se reconoce contra el
+  /// patrimonio de apertura (3400) para no inventar ventas ni recobrar facturas.
+  CUSTODY_OPENING
 }
 
 enum TxnStatus {

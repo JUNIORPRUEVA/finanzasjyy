@@ -117,6 +117,36 @@ export class VoidCustodyMovementDto {
   reason!: string;
 }
 
+/**
+ * Dinero de la empresa que YA estaba en la cuenta personal antes de empezar a
+ * usar FINANZA. No es un cobro nuevo: no reconoce ingresos ni cobra facturas.
+ */
+export class OpenCustodyFundsDto {
+  /** Unidad dueña del dinero (FULLTECH, APPYRA…). */
+  @IsString()
+  beneficiaryEntityId!: string;
+
+  /** Cuenta personal donde YA está el dinero (BHD, Banreservas…). */
+  @IsString()
+  holdingAccountId!: string;
+
+  @IsString()
+  amount!: string;
+
+  @IsOptional()
+  @IsString()
+  businessDate?: string;
+
+  @IsString()
+  @Length(3, 200, { message: 'Escriba un concepto de al menos 3 caracteres' })
+  description!: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(80)
+  clientOperationId?: string;
+}
+
 export class ListPendingCustodyQuery {
   @IsOptional()
   @IsString()
@@ -125,4 +155,20 @@ export class ListPendingCustodyQuery {
   @IsOptional()
   @IsString()
   holdingAccountId?: string;
+}
+
+/** Filtros del panel y del historial de custodia. */
+export class CustodyQuery {
+  @IsOptional()
+  @IsString()
+  beneficiaryEntityId?: string;
+
+  @IsOptional()
+  @IsString()
+  holdingAccountId?: string;
+
+  /** Cuántas operaciones devolver en el historial (por defecto 50). */
+  @IsOptional()
+  @IsString()
+  limit?: string;
 }

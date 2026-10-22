@@ -221,6 +221,18 @@ export class DashboardService {
     const pendingClosingsCount = pendingClosings;
     const closingsToday = todayClosing.filter((closing) => closing.closedAt !== null).length;
 
+    // Dinero de empresas que está en cuentas personales. Se resta del
+    // disponible para que el propietario no confunda lo que hay en el banco con
+    // lo que es suyo: ese dinero está ahí, pero no le pertenece.
+    const custodyFunds = await this.prisma.custodyFund.findMany({
+      where: { beneficiaryEntityId: { in: entityIds }, status: { in: ['OPEN', 'PARTIAL'] } },
+      select: { originalAmount: true, appliedAmount: true },
+    });
+    const inCustody = custodyFunds.reduce(
+      (acc, fund) => acc.plus(round2(fund.originalAmount).minus(round2(fund.appliedAmount))),
+      dec(0),
+    );
+
     // Calidad del dato: lo provisional JAMÁS se presenta como conciliado.
     const dataQuality = {
       isProvisional: unsynced > 0,
@@ -254,6 +266,9 @@ export class DashboardService {
         availableCash: availableCash.toFixed(2),
         inCash: cashTotal.toFixed(2),
         inBanks: bankTotal.toFixed(2),
+        // Parte del disponible que pertenece a una empresa (custodia).
+        inCustody: round2(inCustody).toFixed(2),
+        personalNet: round2(availableCash).minus(round2(inCustody)).toFixed(2),
         note: 'El dinero disponible NO incluye tarjetas de crédito ni cuentas por cobrar.',
       },
       obligations: {

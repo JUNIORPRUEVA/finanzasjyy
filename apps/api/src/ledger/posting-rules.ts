@@ -161,6 +161,7 @@ export function buildPostingLines(context: PostingContext): PostingLine[] {
     case 'CUSTODY_IN':
     case 'CUSTODY_OUT':
     case 'CUSTODY_SETTLEMENT':
+    case 'CUSTODY_OPENING':
       throw new InvariantError(
         'Los movimientos de custodia se contabilizan con CustodyService (dos asientos: empresa dueña y unidad que custodia).',
       );
