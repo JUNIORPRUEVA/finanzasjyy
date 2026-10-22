@@ -19,10 +19,21 @@ export type ResolvedTheme = 'light' | 'dark';
 
 const STORAGE_KEY = 'finanza.theme';
 
-/** Color de la barra del navegador y del sistema en cada tema. */
+/**
+ * Color de la barra del navegador y del sistema (la barra de estado arriba y la
+ * de navegación abajo en Android) y de la pantalla de arranque.
+ *
+ * Es el MISMO azul de la identidad en los dos temas, a propósito: antes cambiaba
+ * a blanco en el tema claro y a casi negro en el oscuro, y el resultado era una
+ * barra del dispositivo que no parecía de FINANZA. Este valor debe coincidir con
+ * `theme_color` y `background_color` del manifiesto (vite.config.ts) y con el
+ * `<meta name="theme-color">` de index.html.
+ */
+const COLOR_BARRA_SISTEMA = '#0B2748';
+
 const THEME_COLORS: Record<ResolvedTheme, string> = {
-  dark: '#0a0f1c',
-  light: '#f4f6fb',
+  dark: COLOR_BARRA_SISTEMA,
+  light: COLOR_BARRA_SISTEMA,
 };
 
 export function readStoredTheme(): ThemePreference | null {

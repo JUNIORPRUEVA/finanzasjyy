@@ -19,8 +19,12 @@
 
     Además:
       · Recorta automáticamente el margen blanco que suele traer el logotipo.
-      · Calcula el color verde dominante y lo muestra, para poder ajustar el color
-        del tema (la pantalla de arranque y la barra del navegador).
+      · Convierte el VERDE del logotipo en el AZUL de la identidad de FINANZA
+        (dejando intactos el dorado del símbolo y los grises). Así el icono del
+        teléfono, la pantalla de arranque y la barra del sistema quedan azules,
+        como el resto de la aplicación.
+      · Calcula el color dominante y lo muestra, para poder ajustar el color del
+        tema (la pantalla de arranque y la barra del navegador).
 
 .USAGE
     1. Guarde el logotipo como PNG (o JPG) en:  apps/web/public/logo-finanza.png
@@ -42,6 +46,85 @@ param(
 
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName System.Drawing
+
+# Convierte los tonos verdes en el azul de la identidad conservando el brillo y el
+# sombreado del logotipo. Se hace en C# porque son cientos de miles de píxeles y
+# en PowerShell puro tardaría minutos.
+if (-not ('IdentidadAzul' -as [type])) {
+    # En PowerShell 7 System.Drawing es un ensamblado aparte y hay que citarlo;
+    # en Windows PowerShell 5.1 ya viene dentro de System.Drawing.
+    $referencias = @()
+    if ($PSVersionTable.PSVersion.Major -ge 6) {
+        $referencias = @('System.Drawing.Common', 'System.Drawing.Primitives')
+    }
+    Add-Type -TypeDefinition @'
+using System;
+using System.Drawing;
+using System.Drawing.Imaging;
+using System.Runtime.InteropServices;
+
+public static class IdentidadAzul
+{
+    public static int Aplicar(Bitmap bmp, double tonoAzul)
+    {
+        Rectangle area = new Rectangle(0, 0, bmp.Width, bmp.Height);
+        BitmapData datos = bmp.LockBits(area, ImageLockMode.ReadWrite, PixelFormat.Format32bppArgb);
+        int bytes = Math.Abs(datos.Stride) * bmp.Height;
+        byte[] buffer = new byte[bytes];
+        Marshal.Copy(datos.Scan0, buffer, 0, bytes);
+        int cambiados = 0;
+        for (int i = 0; i + 3 < bytes; i += 4)
+        {
+            byte b = buffer[i], g = buffer[i + 1], r = buffer[i + 2], a = buffer[i + 3];
+            if (a < 16) continue;
+            double h, s, v;
+            ARgbAHsv(r, g, b, out h, out s, out v);
+            if (s < 0.10) continue;          // grises y blancos: se quedan igual
+            if (h < 70 || h > 175) continue; // no es un tono verde (el dorado queda fuera)
+            byte nr, ng, nb;
+            HsvARgb(tonoAzul, Math.Min(1.0, s * 1.08), v, out nr, out ng, out nb);
+            buffer[i] = nb; buffer[i + 1] = ng; buffer[i + 2] = nr;
+            cambiados++;
+        }
+        Marshal.Copy(buffer, 0, datos.Scan0, bytes);
+        bmp.UnlockBits(datos);
+        return cambiados;
+    }
+
+    static void ARgbAHsv(byte r, byte g, byte b, out double h, out double s, out double v)
+    {
+        double rd = r / 255.0, gd = g / 255.0, bd = b / 255.0;
+        double max = Math.Max(rd, Math.Max(gd, bd));
+        double min = Math.Min(rd, Math.Min(gd, bd));
+        double delta = max - min;
+        v = max;
+        s = max <= 0 ? 0 : delta / max;
+        if (delta <= 0) { h = 0; return; }
+        if (max == rd) h = 60 * (((gd - bd) / delta) % 6);
+        else if (max == gd) h = 60 * (((bd - rd) / delta) + 2);
+        else h = 60 * (((rd - gd) / delta) + 4);
+        if (h < 0) h += 360;
+    }
+
+    static void HsvARgb(double h, double s, double v, out byte r, out byte g, out byte b)
+    {
+        double c = v * s;
+        double x = c * (1 - Math.Abs(((h / 60.0) % 2) - 1));
+        double m = v - c;
+        double rd = 0, gd = 0, bd = 0;
+        if (h < 60) { rd = c; gd = x; }
+        else if (h < 120) { rd = x; gd = c; }
+        else if (h < 180) { gd = c; bd = x; }
+        else if (h < 240) { gd = x; bd = c; }
+        else if (h < 300) { rd = x; bd = c; }
+        else { rd = c; bd = x; }
+        r = (byte)Math.Round((rd + m) * 255);
+        g = (byte)Math.Round((gd + m) * 255);
+        b = (byte)Math.Round((bd + m) * 255);
+    }
+}
+'@ -ReferencedAssemblies $referencias
+}
 
 function Write-Step($message) { Write-Host "`n==> $message" -ForegroundColor Cyan }
 function Write-Ok($message) { Write-Host "    $message" -ForegroundColor Green }
@@ -135,6 +218,24 @@ $lienzo.Dispose()
 $imagen.Dispose()
 
 # ---------------------------------------------------------------------------
+# 1 bis. El verde del logotipo pasa al azul de la identidad
+# ---------------------------------------------------------------------------
+# El icono del teléfono, la pantalla de arranque y la barra del sistema salen de
+# aquí: si el logotipo es verde, el dispositivo muestra verde aunque la
+# aplicación sea azul. Se gira SÓLO el tono verde (el dorado del símbolo y los
+# grises se quedan como están) para que el resultado siga pareciendo el logotipo.
+Write-Step 'Pasando el verde del logotipo al azul de FINANZA'
+$arte32 = New-Object System.Drawing.Bitmap($arte.Width, $arte.Height, [System.Drawing.Imaging.PixelFormat]::Format32bppArgb)
+$g32 = [System.Drawing.Graphics]::FromImage($arte32)
+$g32.DrawImage($arte, 0, 0, $arte.Width, $arte.Height)
+$g32.Dispose()
+$arte.Dispose()
+$arte = $arte32
+
+$pixelesAzules = [IdentidadAzul]::Aplicar($arte, 216.0)
+Write-Ok "$pixelesAzules píxeles verdes convertidos a azul"
+
+# ---------------------------------------------------------------------------
 # 2. Color dominante (para el tema de la app y la pantalla de arranque)
 # ---------------------------------------------------------------------------
 $sumaR = 0; $sumaG = 0; $sumaB = 0; $cuenta = 0
@@ -148,9 +249,13 @@ for ($y = 0; $y -lt $franja; $y += 2) {
 if ($cuenta -gt 0) {
     $colorDominante = "#{0:X2}{1:X2}{2:X2}" -f [int]($sumaR / $cuenta), [int]($sumaG / $cuenta), [int]($sumaB / $cuenta)
 } else {
-    $colorDominante = '#0B3B2A'
+    $colorDominante = '#0B2748'
 }
-$colorFondo = [System.Drawing.ColorTranslator]::FromHtml($colorDominante)
+# El fondo de los iconos recortables es SIEMPRE el azul de la identidad (el mismo
+# del manifiesto y de la barra del sistema), no un promedio del logotipo: así el
+# recorte de Android y el icono de iPhone quedan del mismo azul que la app.
+$COLOR_IDENTIDAD = '#0B2748'
+$colorFondo = [System.Drawing.ColorTranslator]::FromHtml($COLOR_IDENTIDAD)
 
 # ---------------------------------------------------------------------------
 # 3. Generar los iconos
@@ -224,11 +329,14 @@ Write-Ok 'favicon.svg'
 $arte.Dispose()
 
 Write-Step 'Resultado'
-Write-Host "    Color dominante del logotipo: $colorDominante" -ForegroundColor Yellow
+Write-Host "    Color medio del logotipo ya en azul: $colorDominante (sólo informativo)" -ForegroundColor Yellow
+Write-Host "    Fondo de los iconos recortables       : $COLOR_IDENTIDAD (azul de la identidad)" -ForegroundColor Yellow
 Write-Host ''
-Write-Host '    Para que la pantalla de arranque y la barra del navegador usen ese color,'
-Write-Host "    póngalo en estos dos sitios: `"theme_color`" y `"background_color`" del manifiesto"
-Write-Host '    (apps/web/vite.config.ts) y el <meta name="theme-color"> de apps/web/index.html.'
+Write-Host '    El color de la barra del sistema y de la pantalla de arranque es el'
+Write-Host '    AZUL de la identidad (#0B2748) y se fija en tres sitios, que deben'
+Write-Host '    coincidir: `"theme_color`" y `"background_color`" del manifiesto'
+Write-Host '    (apps/web/vite.config.ts), el <meta name="theme-color"> de index.html'
+Write-Host '    y THEME_COLORS de src/lib/theme.ts.'
 Write-Host ''
 Get-ChildItem $Salida -File | Where-Object { $_.Name -match '^(pwa|apple|favicon|logo)' } |
     Sort-Object Name |

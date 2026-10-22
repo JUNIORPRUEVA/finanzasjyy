@@ -41,6 +41,26 @@ describe('tema y apariencia', () => {
     expect(document.documentElement.style.colorScheme).toBe('light');
   });
 
+  /**
+   * La barra del dispositivo (estado arriba y navegación abajo) se pinta con el
+   * `theme-color`. Tiene que ser el azul de la identidad SIEMPRE: si cambia con
+   * el tema, el móvil enseña una barra blanca o casi negra que no es de FINANZA.
+   */
+  it('pinta la barra del dispositivo con el azul de la identidad en los dos temas', () => {
+    const meta = document.createElement('meta');
+    meta.setAttribute('name', 'theme-color');
+    meta.setAttribute('content', '#000000');
+    document.head.appendChild(meta);
+
+    applyTheme('dark');
+    expect(meta.getAttribute('content')).toBe('#0B2748');
+
+    applyTheme('light');
+    expect(meta.getAttribute('content')).toBe('#0B2748');
+
+    meta.remove();
+  });
+
   it('distingue «nunca elegí» de «elegí seguir al sistema»', () => {
     expect(readStoredTheme()).toBeNull();
 
