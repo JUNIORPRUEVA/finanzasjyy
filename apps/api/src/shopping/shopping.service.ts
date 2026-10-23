@@ -698,7 +698,9 @@ export class ShoppingService {
         amount: dec(amount).toFixed(2),
         businessDate,
         description,
-        method: dto.method ?? 'EFECTIVO',
+        // Sin método explícito, la API lo deduce del tipo de cuenta (banco →
+        // transferencia, caja → efectivo). Nunca se inventa «EFECTIVO».
+        method: dto.method,
         clientOperationId: dto.clientOperationId ?? `shop_${list.id}`,
       },
       meta,

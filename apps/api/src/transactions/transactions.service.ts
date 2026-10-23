@@ -14,6 +14,7 @@ import { PrismaService } from '../prisma/prisma.service.js';
 import { AccessService } from '../security/access.service.js';
 import { toBusinessDate } from '../domain/business-date.js';
 import { dec, eq, min, round2, sum, validateMoney, type DecimalInput } from '../domain/money.js';
+import { defaultPaymentMethod } from '../domain/payment-method.js';
 import { postEntry, reverseEntry, type JournalLineInput, type Tx } from '../ledger/ledger-core.js';
 import { buildPostingLines } from '../ledger/posting-rules.js';
 import { hashToken, stableStringify } from '../auth/tokens.js';
@@ -157,6 +158,13 @@ export class TransactionsService {
     const clientOperationId =
       input.clientOperationId ?? `srv_${hashToken(stableStringify({ t: Date.now(), r: Math.random() })).slice(0, 40)}`;
 
+    // Sin forma de pago explícita se deduce de la cuenta: un gasto pagado desde
+    // el banco es una transferencia, no efectivo. Antes quedaba «EFECTIVO» por
+    // defecto y el cierre del día no cuadraba con el banco.
+    const method =
+      input.method ??
+      (input.kind === 'INCOME' || input.kind === 'EXPENSE' ? defaultPaymentMethod(account.type) : null);
+
     const created = await this.prisma.inMoneyTransaction(async (tx) => {
       const entry = await postEntry(tx, {
         entityId: input.entityId,
@@ -186,7 +194,7 @@ export class TransactionsService {
           occurredAt: new Date(),
           description: input.description.trim(),
           reference: input.reference ?? null,
-          method: input.method ?? null,
+          method,
           clientOperationId,
           deviceId: input.deviceId ?? meta.deviceId ?? null,
           recordedOffline: input.recordedOffline ?? false,

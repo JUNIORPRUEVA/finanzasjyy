@@ -48,6 +48,29 @@ export const KINDS: EntryKind[] = ['INCOME', 'EXPENSE', 'OWNER_WITHDRAWAL', 'OWN
 const METHOD_OPTIONS = ['EFECTIVO', 'TRANSFERENCIA', 'TARJETA', 'BIZUM', 'CHEQUE', 'DEPOSITO', 'CREDITO', 'OTRO'];
 
 /**
+ * La forma de pago razonable para cada tipo de cuenta. Antes el formulario
+ * empezaba siempre en «efectivo», así que un gasto pagado desde una cuenta de
+ * banco quedaba como efectivo sin que nadie lo cambiara.
+ */
+const METODO_POR_TIPO_CUENTA: Record<string, string> = {
+  CASH: 'EFECTIVO',
+  BUSINESS_CASH: 'EFECTIVO',
+  BANK: 'TRANSFERENCIA',
+  CHECKING: 'TRANSFERENCIA',
+  SAVINGS: 'TRANSFERENCIA',
+  DIGITAL_WALLET: 'TRANSFERENCIA',
+  MERCHANT: 'TRANSFERENCIA',
+  CREDIT_CARD: 'TARJETA',
+};
+
+function metodoSegunCuenta(tipo: string | undefined): string | null {
+  if (!tipo) {
+    return null;
+  }
+  return METODO_POR_TIPO_CUENTA[tipo] ?? null;
+}
+
+/**
  * «¿Esto es de la casa o del negocio?» se responde eligiendo la unidad
  * financiera, y el tipo es lo único que lo dice. Sin esto, «FINANZAS PERSONALES»
  * y «FULLPOS CLOUD» se veían igual en la lista.
@@ -174,6 +197,17 @@ export function MovimientoForm({ kind, initialEntityId }: MovimientoFormProps) {
       setAccountId(accounts[0].id);
     }
   }, [accounts, accountId]);
+
+  // La forma de pago sigue a la cuenta elegida: si el dinero sale del banco es
+  // una transferencia; si sale de la caja, efectivo. Si la persona la cambia a
+  // mano, su elección se respeta hasta que cambie de cuenta.
+  const tipoCuentaSeleccionada = accounts.find((account) => account.id === accountId)?.type;
+  useEffect(() => {
+    const sugerido = metodoSegunCuenta(tipoCuentaSeleccionada);
+    if (sugerido) {
+      setMethod(sugerido);
+    }
+  }, [tipoCuentaSeleccionada]);
 
   const createMutation = useMutation({
     mutationFn: async () => {
