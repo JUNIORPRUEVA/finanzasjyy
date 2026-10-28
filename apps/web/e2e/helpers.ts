@@ -248,6 +248,7 @@ export const APP_ROUTES: Array<{ path: string; name: string }> = [
   { path: '/presupuestos', name: 'Presupuestos' },
   { path: '/adjuntos', name: 'Documentos' },
   { path: '/unidades', name: 'Unidades financieras' },
+  { path: '/recordatorios', name: 'Recordatorios' },
   { path: '/informes', name: 'Informes' },
   { path: '/ajustes', name: 'Ajustes' },
   { path: '/personas', name: 'Personas con acceso' },

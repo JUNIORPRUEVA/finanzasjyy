@@ -54,6 +54,7 @@ describe('FINANZA — rutas que ofrece la interfaz (e2e)', () => {
     '/api/v1/notifications/push/status',
     '/api/v1/accounts',
     '/api/v1/categories',
+    '/api/v1/reminders',
     '/api/v1/ledger/integrity',
     '/api/v1/audit?page=1&limit=40',
   ];

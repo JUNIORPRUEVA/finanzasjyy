@@ -200,6 +200,17 @@ personal. El banco tiene ese dinero de verdad, pero no es suyo.
 | Apariencia (claro / oscuro / como el sistema) | ✅ | Ajustes → *Apariencia*; se aplica al instante, se recuerda y abre sin destellos |
 | Auditoría consultable desde la interfaz | ✅ | Menú lateral → *Auditoría* (sólo propietarios y administradores), con paginado y acciones en español |
 
+## 11 ter. Recordatorios y notas (nuevo)
+
+| Función | Estado | Detalle |
+| --- | --- | --- |
+| **Recordatorios y notas** | ✅ | `/recordatorios` desde el menú lateral: nota suelta o lista de puntos numerados, con edición |
+| Avisos: una vez, todos los días o cada mes | ✅ | Hora en la zona del usuario; si el mes es corto, el aviso cae el último día (nunca se salta) |
+| Aviso push al llegar la hora | ✅ | El planificador (cada 5 min) crea la notificación con clave de deduplicación: una por día, sin spam |
+| Borrar exige la contraseña de quien lo creó | ✅ | Sin ella responde 403, no borra nada y deja rastro en Auditoría |
+| **Calendario para Google Calendar** | ✅ | Enlace secreto `/api/v1/calendar/feed/<token>` en formato ICS: recordatorios con su repetición + compromisos mensuales + cuotas de préstamos + cuentas por pagar. Se puede cambiar el enlace (el anterior deja de funcionar) |
+| Añadir un recordatorio a Google Calendar con un toque | ✅ | Enlace `action=TEMPLATE` con la repetición (`RRULE`) ya puesta |
+
 ## 12. Seguridad y control
 
 | Función | Estado | Detalle |

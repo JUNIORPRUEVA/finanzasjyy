@@ -6,6 +6,7 @@ import { NotificationsService } from './notifications.service.js';
 import { PushService } from './push.service.js';
 import { businessDateToIso, businessToday, addBusinessDays } from '../domain/business-date.js';
 import { dec } from '../domain/money.js';
+import { dueOccurrenceKey, type ReminderSchedule } from '../reminders/reminder-recurrence.js';
 
 interface ReminderOffsets {
   offsets: number[];
@@ -124,6 +125,50 @@ export class NotificationsScheduler {
 
       const today = businessToday();
       const todayIso = businessDateToIso(today);
+
+      // --- Recordatorios y notas del usuario ------------------------
+      // No dependen de ninguna unidad financiera: son del usuario. Se avisa a
+      // la hora indicada y, si se repite, una sola vez al día (deduplicación).
+      const reminders = await this.prisma.reminder.findMany({
+        where: { userId: user.id, isActive: true, alertEnabled: true, alertAt: { not: null } },
+        select: {
+          id: true,
+          title: true,
+          notes: true,
+          itemsJson: true,
+          alertAt: true,
+          repeat: true,
+          timezone: true,
+          entityId: true,
+        },
+      });
+
+      for (const reminder of reminders) {
+        const schedule: ReminderSchedule = {
+          alertAt: reminder.alertAt,
+          repeat: reminder.repeat,
+          timezone: reminder.timezone || timezone,
+        };
+        const occurrence = dueOccurrenceKey(schedule, now);
+        if (!occurrence) {
+          continue;
+        }
+        const result = await this.notifications.create({
+          userId: user.id,
+          entityId: reminder.entityId,
+          type: 'REMINDER_DUE',
+          title: `Recordatorio: ${reminder.title}`,
+          body: this.reminderBody(reminder.notes, reminder.itemsJson),
+          severity: 'INFO',
+          dedupeKey: `reminder:${reminder.id}:${occurrence}`,
+          relatedType: 'Reminder',
+          relatedId: reminder.id,
+          actionUrl: '/recordatorios',
+        });
+        if (result.created && !result.deduplicated) {
+          created += 1;
+        }
+      }
 
       for (const entity of entities) {
         // --- ¿Hay movimientos hoy? ------------------------------------
@@ -358,5 +403,28 @@ export class NotificationsScheduler {
       return value.filter((item): item is number => typeof item === 'number' && item >= 0).sort((a, b) => a - b);
     }
     return [0, 60, 180];
+  }
+
+  /** Texto del aviso: lo que hay que recordar, sin tener que abrir la app. */
+  private reminderBody(notes: string | null, itemsJson: unknown): string {
+    const items = Array.isArray(itemsJson)
+      ? itemsJson
+          .map((item) =>
+            typeof item === 'string'
+              ? item
+              : item && typeof item === 'object' && typeof (item as { text?: unknown }).text === 'string'
+                ? ((item as { text: string }).text)
+                : '',
+          )
+          .filter((text) => text.trim().length > 0)
+      : [];
+
+    if (items.length > 0) {
+      const first = items.slice(0, 3).map((text, index) => `${index + 1}. ${text}`);
+      const rest = items.length - first.length;
+      return rest > 0 ? `${first.join(' · ')} · y ${rest} más` : first.join(' · ');
+    }
+    const cleanNotes = notes?.trim();
+    return cleanNotes && cleanNotes.length > 0 ? cleanNotes.slice(0, 180) : 'Tiene un recordatorio pendiente.';
   }
 }

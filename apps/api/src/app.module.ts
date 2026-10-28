@@ -23,6 +23,7 @@ import { LoansModule } from './loans/loans.module.js';
 import { NotificationsModule } from './notifications/notifications.module.js';
 import { ObligationsModule } from './obligations/obligations.module.js';
 import { PrismaModule } from './prisma/prisma.module.js';
+import { RemindersModule } from './reminders/reminders.module.js';
 import { ReportsModule } from './reports/reports.module.js';
 import { SecurityModule } from './security/security.module.js';
 import { ShoppingModule } from './shopping/shopping.module.js';
@@ -78,6 +79,9 @@ import { TransfersModule } from './transfers/transfers.module.js';
     SyncModule,
     NotificationsModule,
     AttachmentsModule,
+
+    // Recordatorios y notas (con calendario de suscripción).
+    RemindersModule,
 
     // Disciplina diaria.
     DailyControlModule,

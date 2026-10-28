@@ -238,58 +238,61 @@ enum SyncOperationStatus {
 // ============================================================================
 
 model User {
-  id                 String   @id @default(uuid())
-  email              String   @unique
-  passwordHash       String
-  name               String
-  role               UserRole @default(OWNER)
-  isActive           Boolean  @default(true)
-  failedLoginCount   Int      @default(0)
-  lockedUntil        DateTime?
-  lastLoginAt        DateTime?
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
+  id               String    @id @default(uuid())
+  email            String    @unique
+  passwordHash     String
+  name             String
+  role             UserRole  @default(OWNER)
+  isActive         Boolean   @default(true)
+  failedLoginCount Int       @default(0)
+  lockedUntil      DateTime?
+  lastLoginAt      DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
 
-  ownedEntities      FinancialEntity[]   @relation("EntityOwner")
-  memberships        EntityMember[]
-  sessions           Session[]
-  devices            Device[]
-  preference         UserPreference?
-  notifications      Notification[]
-  pushSubscriptions  PushSubscription[]
-  auditLogs          AuditLog[]
-  createdEntries     JournalEntry[]      @relation("EntryCreatedBy")
-  createdTxns        FinancialTransaction[] @relation("TxnCreatedBy")
-  createdTransfers   Transfer[]          @relation("TransferCreatedBy")
-  createdLoanPayments LoanPayment[]      @relation("LoanPaymentCreatedBy")
-  closedClosings     DailyClosing[]      @relation("ClosingClosedBy")
-  resolvedRecons     ClosingReconciliation[] @relation("ReconResolvedBy")
-  syncOperations     SyncOperation[]
-  attachments        Attachment[]
-  shoppingLists      ShoppingList[] @relation("ShoppingListCreatedBy")
-  custodyFunds       CustodyFund[]       @relation("CustodyFundCreatedBy")
-  custodyMovements   CustodyMovement[]   @relation("CustodyMovementCreatedBy")
+  ownedEntities       FinancialEntity[]       @relation("EntityOwner")
+  memberships         EntityMember[]
+  sessions            Session[]
+  devices             Device[]
+  preference          UserPreference?
+  notifications       Notification[]
+  pushSubscriptions   PushSubscription[]
+  auditLogs           AuditLog[]
+  createdEntries      JournalEntry[]          @relation("EntryCreatedBy")
+  createdTxns         FinancialTransaction[]  @relation("TxnCreatedBy")
+  createdTransfers    Transfer[]              @relation("TransferCreatedBy")
+  createdLoanPayments LoanPayment[]           @relation("LoanPaymentCreatedBy")
+  closedClosings      DailyClosing[]          @relation("ClosingClosedBy")
+  resolvedRecons      ClosingReconciliation[] @relation("ReconResolvedBy")
+  syncOperations      SyncOperation[]
+  attachments         Attachment[]
+  shoppingLists       ShoppingList[]          @relation("ShoppingListCreatedBy")
+  custodyFunds        CustodyFund[]           @relation("CustodyFundCreatedBy")
+  custodyMovements    CustodyMovement[]       @relation("CustodyMovementCreatedBy")
+  reminders           Reminder[]              @relation("ReminderOwner")
+  createdReminders    Reminder[]              @relation("ReminderCreatedBy")
+  calendarFeed        CalendarFeed?
 
   @@index([isActive])
 }
 
 /// Sesión de acceso. El refresh token se guarda hasheado, nunca en claro.
 model Session {
-  id               String    @id @default(uuid())
-  userId           String
-  refreshTokenHash String    @unique
-  deviceId         String?
+  id                  String    @id @default(uuid())
+  userId              String
+  refreshTokenHash    String    @unique
+  deviceId            String?
   // Momento hasta el que la app puede operar offline con esta sesión.
   offlineAllowedUntil DateTime?
-  expiresAt        DateTime
-  revokedAt        DateTime?
-  revokedReason    String?
-  ip               String?
-  userAgent        String?
-  createdAt        DateTime  @default(now())
-  lastUsedAt       DateTime?
+  expiresAt           DateTime
+  revokedAt           DateTime?
+  revokedReason       String?
+  ip                  String?
+  userAgent           String?
+  createdAt           DateTime  @default(now())
+  lastUsedAt          DateTime?
 
-  user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, revokedAt])
   @@index([expiresAt])
@@ -297,63 +300,63 @@ model Session {
 
 /// Dispositivo autorizado del usuario (control de sesiones y sync).
 model Device {
-  id          String   @id @default(uuid())
-  userId      String
-  deviceId    String
-  name        String
-  platform    String
-  appVersion  String?
-  isActive    Boolean  @default(true)
-  lastSeenAt  DateTime?
-  createdAt   DateTime @default(now())
+  id         String    @id @default(uuid())
+  userId     String
+  deviceId   String
+  name       String
+  platform   String
+  appVersion String?
+  isActive   Boolean   @default(true)
+  lastSeenAt DateTime?
+  createdAt  DateTime  @default(now())
 
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, deviceId])
   @@index([userId, isActive])
 }
 
 model UserPreference {
-  id                  String   @id @default(uuid())
-  userId              String   @unique
-  timezone            String   @default("America/Santo_Domingo")
-  currency            String   @default("DOP")
-  locale              String   @default("es-DO")
-  theme               String   @default("system")
+  id                    String   @id @default(uuid())
+  userId                String   @unique
+  timezone              String   @default("America/Santo_Domingo")
+  currency              String   @default("DOP")
+  locale                String   @default("es-DO")
+  theme                 String   @default("system")
   // Hora local (0-23) a la que se recuerda el cierre diario.
-  closingReminderHour Int      @default(21)
-  closingReminderMinute Int    @default(0)
+  closingReminderHour   Int      @default(21)
+  closingReminderMinute Int      @default(0)
   // Avisos escalonados en minutos después del recordatorio principal (evita spam).
-  reminderOffsetsJson Json     @default("[0, 60, 180]")
-  offlineWindowHours  Int      @default(24)
-  budgetWarnPct       Int      @default(80)
-  budgetAlertPct      Int      @default(100)
+  reminderOffsetsJson   Json     @default("[0, 60, 180]")
+  offlineWindowHours    Int      @default(24)
+  budgetWarnPct         Int      @default(80)
+  budgetAlertPct        Int      @default(100)
   // Diferencia de caja (absoluta) a partir de la cual se considera crítica.
-  cashDifferenceAlert Decimal  @default(500) @db.Decimal(18, 2)
-  pushEnabled         Boolean  @default(false)
-  dailyBriefEnabled   Boolean  @default(true)
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
+  cashDifferenceAlert   Decimal  @default(500) @db.Decimal(18, 2)
+  pushEnabled           Boolean  @default(false)
+  dailyBriefEnabled     Boolean  @default(true)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
 
-  user                User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model PushSubscription {
-  id         String   @id @default(uuid())
+  id         String    @id @default(uuid())
   userId     String
-  endpoint   String   @unique
+  endpoint   String    @unique
   p256dh     String
   auth       String
   deviceId   String?
   platform   String?
-  isActive   Boolean  @default(true)
-  failCount  Int      @default(0)
+  isActive   Boolean   @default(true)
+  failCount  Int       @default(0)
   lastError  String?
   lastSentAt DateTime?
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
 
-  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, isActive])
 }
@@ -378,7 +381,7 @@ model FinancialEntity {
   createdAt   DateTime   @default(now())
   updatedAt   DateTime   @updatedAt
 
-  owner       User       @relation("EntityOwner", fields: [ownerUserId], references: [id])
+  owner User @relation("EntityOwner", fields: [ownerUserId], references: [id])
 
   members          EntityMember[]
   accounts         FinancialAccount[]
@@ -397,22 +400,23 @@ model FinancialEntity {
   notifications    Notification[]
   attachments      Attachment[]
   shoppingLists    ShoppingList[]
-  custodyFunds     CustodyFund[]     @relation("CustodyFundEntity")
-  custodyMovements CustodyMovement[] @relation("CustodyMovementEntity")
+  custodyFunds     CustodyFund[]          @relation("CustodyFundEntity")
+  custodyMovements CustodyMovement[]      @relation("CustodyMovementEntity")
+  reminders        Reminder[]
 
   @@index([isActive])
   @@index([ownerUserId])
 }
 
 model EntityMember {
-  id        String            @id @default(uuid())
+  id        String           @id @default(uuid())
   entityId  String
   userId    String
-  role      EntityMemberRole  @default(OPERATOR)
-  createdAt DateTime          @default(now())
+  role      EntityMemberRole @default(OPERATOR)
+  createdAt DateTime         @default(now())
 
-  entity    FinancialEntity   @relation(fields: [entityId], references: [id], onDelete: Cascade)
-  user      User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  entity FinancialEntity @relation(fields: [entityId], references: [id], onDelete: Cascade)
+  user   User            @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([entityId, userId])
   @@index([userId])
@@ -452,22 +456,22 @@ enum CustodyMovementType {
 
 /// Cada cobro de una empresa que entra en una cuenta de OTRA unidad.
 model CustodyFund {
-  id                   String            @id @default(uuid())
+  id                  String            @id @default(uuid())
   /// Unidad dueña del dinero (FULLTECH, APPYRA...).
-  beneficiaryEntityId  String
+  beneficiaryEntityId String
   /// Cuenta real donde está el dinero (personal del propietario).
-  holdingAccountId     String
+  holdingAccountId    String
   /// Movimiento que originó la custodia (ingreso, cobro de factura...).
-  sourceTransactionId  String            @unique
-  originalAmount       Decimal           @db.Decimal(18, 2)
+  sourceTransactionId String            @unique
+  originalAmount      Decimal           @db.Decimal(18, 2)
   /// Lo ya liquidado o consumido con gastos. Nunca supera `originalAmount`.
-  appliedAmount        Decimal           @default(0) @db.Decimal(18, 2)
-  status               CustodyFundStatus @default(OPEN)
-  businessDate         DateTime          @db.Date
-  description          String
-  createdByUserId      String
-  createdAt            DateTime          @default(now())
-  updatedAt            DateTime          @updatedAt
+  appliedAmount       Decimal           @default(0) @db.Decimal(18, 2)
+  status              CustodyFundStatus @default(OPEN)
+  businessDate        DateTime          @db.Date
+  description         String
+  createdByUserId     String
+  createdAt           DateTime          @default(now())
+  updatedAt           DateTime          @updatedAt
 
   beneficiaryEntity FinancialEntity      @relation("CustodyFundEntity", fields: [beneficiaryEntityId], references: [id], onDelete: Cascade)
   holdingAccount    FinancialAccount     @relation("CustodyFundAccount", fields: [holdingAccountId], references: [id])
@@ -482,27 +486,27 @@ model CustodyFund {
 
 /// Liquidación (total, parcial o agrupada) o gasto pagado desde la custodia.
 model CustodyMovement {
-  id                   String             @id @default(uuid())
+  id                   String              @id @default(uuid())
   beneficiaryEntityId  String
   holdingAccountId     String
   /// Cuenta de la empresa dueña que recibe el dinero (banco o caja). Nulo si es un gasto.
   targetAccountId      String?
   /// Gasto registrado en la empresa dueña (sólo para `type = EXPENSE`).
-  expenseTransactionId String?            @unique
+  expenseTransactionId String?             @unique
   type                 CustodyMovementType
-  amount               Decimal            @db.Decimal(18, 2)
-  businessDate         DateTime           @db.Date
+  amount               Decimal             @db.Decimal(18, 2)
+  businessDate         DateTime            @db.Date
   description          String
-  clientOperationId    String             @unique
-  status               TxnStatus          @default(POSTED)
+  clientOperationId    String              @unique
+  status               TxnStatus           @default(POSTED)
   voidedAt             DateTime?
   voidReason           String?
   /// Asientos creados: uno en la unidad que custodia y otro en la empresa dueña.
   holdingEntryId       String?
   beneficiaryEntryId   String?
   createdByUserId      String
-  createdAt            DateTime           @default(now())
-  updatedAt            DateTime           @updatedAt
+  createdAt            DateTime            @default(now())
+  updatedAt            DateTime            @updatedAt
 
   beneficiaryEntity  FinancialEntity       @relation("CustodyMovementEntity", fields: [beneficiaryEntityId], references: [id], onDelete: Cascade)
   holdingAccount     FinancialAccount      @relation("CustodyMovementHoldingAccount", fields: [holdingAccountId], references: [id])
@@ -550,9 +554,9 @@ model LedgerAccount {
   createdAt     DateTime          @default(now())
   updatedAt     DateTime          @updatedAt
 
-  entity        FinancialEntity?  @relation(fields: [entityId], references: [id], onDelete: Cascade)
+  entity FinancialEntity? @relation(fields: [entityId], references: [id], onDelete: Cascade)
 
-  lines            JournalLine[]
+  lines             JournalLine[]
   financialAccounts FinancialAccount[]
 
   @@index([type])
@@ -588,14 +592,14 @@ model FinancialAccount {
 
   journalLines    JournalLine[]
   transactions    FinancialTransaction[]
-  transfersOut    Transfer[]    @relation("TransferFromAccount")
-  transfersIn     Transfer[]    @relation("TransferToAccount")
+  transfersOut    Transfer[]              @relation("TransferFromAccount")
+  transfersIn     Transfer[]              @relation("TransferToAccount")
   loans           Loan[]
   loanPayments    LoanPayment[]
   reconciliations ClosingReconciliation[]
-  custodyFunds    CustodyFund[]     @relation("CustodyFundAccount")
-  custodyHeld     CustodyMovement[] @relation("CustodyMovementHoldingAccount")
-  custodyTargets  CustodyMovement[] @relation("CustodyMovementTargetAccount")
+  custodyFunds    CustodyFund[]           @relation("CustodyFundAccount")
+  custodyHeld     CustodyMovement[]       @relation("CustodyMovementHoldingAccount")
+  custodyTargets  CustodyMovement[]       @relation("CustodyMovementTargetAccount")
 
   @@unique([entityId, name])
   @@index([entityId, status])
@@ -607,22 +611,22 @@ model FinancialAccount {
 // ============================================================================
 
 model TransactionCategory {
-  id        String       @id @default(uuid())
-  entityId  String?
-  name      String
-  kind      CategoryKind
-  isSystem  Boolean      @default(false)
-  isActive  Boolean      @default(true)
-  color     String?
+  id                String       @id @default(uuid())
+  entityId          String?
+  name              String
+  kind              CategoryKind
+  isSystem          Boolean      @default(false)
+  isActive          Boolean      @default(true)
+  color             String?
   /// Cuenta del catálogo que se usa por defecto al registrar en esta categoría.
   defaultLedgerCode String?
-  parentId  String?
-  createdAt DateTime     @default(now())
-  updatedAt DateTime     @updatedAt
+  parentId          String?
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
 
-  entity     FinancialEntity?    @relation(fields: [entityId], references: [id], onDelete: Cascade)
-  parent     TransactionCategory? @relation("CategoryTree", fields: [parentId], references: [id])
-  children   TransactionCategory[] @relation("CategoryTree")
+  entity   FinancialEntity?      @relation(fields: [entityId], references: [id], onDelete: Cascade)
+  parent   TransactionCategory?  @relation("CategoryTree", fields: [parentId], references: [id])
+  children TransactionCategory[] @relation("CategoryTree")
 
   transactions FinancialTransaction[]
   allocations  BudgetAllocation[]
@@ -644,30 +648,30 @@ model Counterparty {
   createdAt DateTime         @default(now())
   updatedAt DateTime         @updatedAt
 
-  entity     FinancialEntity? @relation(fields: [entityId], references: [id], onDelete: Cascade)
+  entity       FinancialEntity?       @relation(fields: [entityId], references: [id], onDelete: Cascade)
   transactions FinancialTransaction[]
-  loans      Loan[]
-  receivables Receivable[]
-  payables   Payable[]
-  recurrings RecurringObligation[]
+  loans        Loan[]
+  receivables  Receivable[]
+  payables     Payable[]
+  recurrings   RecurringObligation[]
 
   @@unique([entityId, name])
   @@index([type, isActive])
 }
 
 model Attachment {
-  id           String   @id @default(uuid())
-  entityId     String
-  filename     String
-  mimeType     String
-  sizeBytes    Int
-  sha256       String
-  storagePath  String
+  id               String   @id @default(uuid())
+  entityId         String
+  filename         String
+  mimeType         String
+  sizeBytes        Int
+  sha256           String
+  storagePath      String
   uploadedByUserId String?
-  createdAt    DateTime @default(now())
+  createdAt        DateTime @default(now())
 
-  entity       FinancialEntity @relation(fields: [entityId], references: [id], onDelete: Cascade)
-  uploadedBy   User?           @relation(fields: [uploadedByUserId], references: [id])
+  entity       FinancialEntity        @relation(fields: [entityId], references: [id], onDelete: Cascade)
+  uploadedBy   User?                  @relation(fields: [uploadedByUserId], references: [id])
   transactions FinancialTransaction[]
 
   @@index([entityId])
@@ -679,31 +683,31 @@ model Attachment {
 // ============================================================================
 
 model JournalEntry {
-  id             String             @id @default(uuid())
+  id              String             @id @default(uuid())
   /// Número secuencial global, sólo para ordenar y auditar.
-  sequence       Int                @default(autoincrement())
-  entityId       String
+  sequence        Int                @default(autoincrement())
+  entityId        String
   /// Fecha de negocio (America/Santo_Domingo), sin hora.
-  businessDate   DateTime           @db.Date
-  description    String
+  businessDate    DateTime           @db.Date
+  description     String
   /// Origen del asiento: TRANSACTION | TRANSFER | LOAN_PAYMENT | CLOSING | ADJUSTMENT | ...
-  sourceType     String
-  sourceId       String?
-  status         JournalEntryStatus @default(POSTED)
+  sourceType      String
+  sourceId        String?
+  status          JournalEntryStatus @default(POSTED)
   /// Si este asiento es el reverso de otro, aquí se referencia.
-  reversesEntryId String?           @unique
-  postedAt       DateTime           @default(now())
-  createdAt      DateTime           @default(now())
+  reversesEntryId String?            @unique
+  postedAt        DateTime           @default(now())
+  createdAt       DateTime           @default(now())
   createdByUserId String?
 
-  entity   FinancialEntity    @relation(fields: [entityId], references: [id], onDelete: Cascade)
-  createdBy User?             @relation("EntryCreatedBy", fields: [createdByUserId], references: [id])
-  lines    JournalLine[]
+  entity       FinancialEntity        @relation(fields: [entityId], references: [id], onDelete: Cascade)
+  createdBy    User?                  @relation("EntryCreatedBy", fields: [createdByUserId], references: [id])
+  lines        JournalLine[]
   /// Uno o varios movimientos pueden apuntar al mismo asiento (transferencia
   /// dentro de la misma unidad: un asiento, dos movimientos).
   transactions FinancialTransaction[]
-  reverses JournalEntry?      @relation("EntryReversal", fields: [reversesEntryId], references: [id])
-  reversedBy JournalEntry?    @relation("EntryReversal")
+  reverses     JournalEntry?          @relation("EntryReversal", fields: [reversesEntryId], references: [id])
+  reversedBy   JournalEntry?          @relation("EntryReversal")
 
   @@unique([entityId, sequence])
   @@index([entityId, businessDate])
@@ -711,18 +715,18 @@ model JournalEntry {
 }
 
 model JournalLine {
-  id               String   @id @default(uuid())
-  entryId          String
-  ledgerAccountId  String
+  id                 String   @id @default(uuid())
+  entryId            String
+  ledgerAccountId    String
   /// Cuenta financiera afectada, cuando el movimiento toca efectivo/banco.
   financialAccountId String?
-  debit            Decimal  @default(0) @db.Decimal(18, 2)
-  credit           Decimal  @default(0) @db.Decimal(18, 2)
-  memo             String?
-  createdAt        DateTime @default(now())
+  debit              Decimal  @default(0) @db.Decimal(18, 2)
+  credit             Decimal  @default(0) @db.Decimal(18, 2)
+  memo               String?
+  createdAt          DateTime @default(now())
 
-  entry           JournalEntry      @relation(fields: [entryId], references: [id], onDelete: Cascade)
-  ledgerAccount   LedgerAccount     @relation(fields: [ledgerAccountId], references: [id])
+  entry            JournalEntry      @relation(fields: [entryId], references: [id], onDelete: Cascade)
+  ledgerAccount    LedgerAccount     @relation(fields: [ledgerAccountId], references: [id])
   financialAccount FinancialAccount? @relation(fields: [financialAccountId], references: [id])
 
   @@index([entryId])
@@ -735,10 +739,10 @@ model JournalLine {
 // ============================================================================
 
 model FinancialTransaction {
-  id             String      @id @default(uuid())
+  id             String    @id @default(uuid())
   entityId       String
   kind           TxnKind
-  status         TxnStatus   @default(POSTED)
+  status         TxnStatus @default(POSTED)
   accountId      String
   categoryId     String?
   counterpartyId String?
@@ -751,52 +755,52 @@ model FinancialTransaction {
   journalEntryId String?
 
   /// Importe SIEMPRE positivo; el signo lo determina `kind` + el asiento contable.
-  amount         Decimal     @db.Decimal(18, 2)
-  currency       String      @default("DOP")
-  businessDate   DateTime    @db.Date
-  occurredAt     DateTime    @default(now())
-  description    String
-  reference      String?
+  amount       Decimal  @db.Decimal(18, 2)
+  currency     String   @default("DOP")
+  businessDate DateTime @db.Date
+  occurredAt   DateTime @default(now())
+  description  String
+  reference    String?
   /// Método de cobro/pago: EFECTIVO, TRANSFERENCIA, TARJETA, BIZUM, CHEQUE, OTRO...
-  method         String?
+  method       String?
 
   /// Idempotencia: identificador generado en el dispositivo. Un reintento no duplica.
-  clientOperationId String   @unique
-  deviceId       String?
-  recordedOffline Boolean    @default(false)
-  syncStatus     SyncStatus  @default(CONFIRMED)
-  syncedAt       DateTime?
+  clientOperationId String     @unique
+  deviceId          String?
+  recordedOffline   Boolean    @default(false)
+  syncStatus        SyncStatus @default(CONFIRMED)
+  syncedAt          DateTime?
 
   /// Anulación: nunca se borra un movimiento confirmado.
-  voidedAt       DateTime?
-  voidReason     String?
-  voidedByTransactionId String? @unique
+  voidedAt              DateTime?
+  voidReason            String?
+  voidedByTransactionId String?   @unique
 
   createdByUserId String
-  createdAt      DateTime    @default(now())
-  updatedAt      DateTime    @updatedAt
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
-  entity      FinancialEntity  @relation(fields: [entityId], references: [id], onDelete: Cascade)
-  account     FinancialAccount @relation(fields: [accountId], references: [id])
-  category    TransactionCategory? @relation(fields: [categoryId], references: [id])
-  counterparty Counterparty?   @relation(fields: [counterpartyId], references: [id])
-  transfer    Transfer?        @relation(fields: [transferId], references: [id], onDelete: SetNull)
-  loan        Loan?            @relation(fields: [loanId], references: [id], onDelete: SetNull)
-  loanPayment LoanPayment?     @relation(fields: [loanPaymentId], references: [id], onDelete: SetNull)
-  receivable  Receivable?      @relation(fields: [receivableId], references: [id], onDelete: SetNull)
-  payable     Payable?         @relation(fields: [payableId], references: [id], onDelete: SetNull)
-  attachment  Attachment?      @relation(fields: [attachmentId], references: [id])
-  journalEntry JournalEntry?   @relation(fields: [journalEntryId], references: [id])
-  createdBy   User             @relation("TxnCreatedBy", fields: [createdByUserId], references: [id])
+  entity             FinancialEntity       @relation(fields: [entityId], references: [id], onDelete: Cascade)
+  account            FinancialAccount      @relation(fields: [accountId], references: [id])
+  category           TransactionCategory?  @relation(fields: [categoryId], references: [id])
+  counterparty       Counterparty?         @relation(fields: [counterpartyId], references: [id])
+  transfer           Transfer?             @relation(fields: [transferId], references: [id], onDelete: SetNull)
+  loan               Loan?                 @relation(fields: [loanId], references: [id], onDelete: SetNull)
+  loanPayment        LoanPayment?          @relation(fields: [loanPaymentId], references: [id], onDelete: SetNull)
+  receivable         Receivable?           @relation(fields: [receivableId], references: [id], onDelete: SetNull)
+  payable            Payable?              @relation(fields: [payableId], references: [id], onDelete: SetNull)
+  attachment         Attachment?           @relation(fields: [attachmentId], references: [id])
+  journalEntry       JournalEntry?         @relation(fields: [journalEntryId], references: [id])
+  createdBy          User                  @relation("TxnCreatedBy", fields: [createdByUserId], references: [id])
   voidingTransaction FinancialTransaction? @relation("TxnVoid", fields: [voidedByTransactionId], references: [id])
   voidedTransaction  FinancialTransaction? @relation("TxnVoid")
   /// Si este gasto se registró desde una lista de compras personales, aquí está
   /// el enlace. Es sólo informativo: el movimiento es un gasto normal.
-  shoppingList ShoppingList?
+  shoppingList       ShoppingList?
   /// Si este movimiento dejó dinero de su empresa en una cuenta de otra unidad.
-  custodySource CustodyFund?    @relation("CustodySourceTransaction")
+  custodySource      CustodyFund?          @relation("CustodySourceTransaction")
   /// Si este gasto se pagó con dinero que estaba en custodia.
-  custodyExpense CustodyMovement? @relation("CustodyExpenseTransaction")
+  custodyExpense     CustodyMovement?      @relation("CustodyExpenseTransaction")
 
   @@index([entityId, businessDate])
   @@index([accountId, businessDate])
@@ -815,24 +819,24 @@ model FinancialTransaction {
 /// Distinta unidad: dos asientos que usan la cuenta puente 1150, de modo que
 /// la consolidación NUNCA cuenta la transferencia como ingreso.
 model Transfer {
-  id            String    @id @default(uuid())
-  entityId      String
-  fromAccountId String
-  toAccountId   String
-  amount        Decimal   @db.Decimal(18, 2)
-  currency      String    @default("DOP")
-  businessDate  DateTime  @db.Date
-  description   String
-  status        TxnStatus @default(POSTED)
-  isCrossEntity Boolean   @default(false)
-  clientOperationId String @unique
-  createdByUserId String
-  createdAt     DateTime  @default(now())
+  id                String    @id @default(uuid())
+  entityId          String
+  fromAccountId     String
+  toAccountId       String
+  amount            Decimal   @db.Decimal(18, 2)
+  currency          String    @default("DOP")
+  businessDate      DateTime  @db.Date
+  description       String
+  status            TxnStatus @default(POSTED)
+  isCrossEntity     Boolean   @default(false)
+  clientOperationId String    @unique
+  createdByUserId   String
+  createdAt         DateTime  @default(now())
 
-  entity      FinancialEntity  @relation(fields: [entityId], references: [id], onDelete: Cascade)
-  fromAccount FinancialAccount @relation("TransferFromAccount", fields: [fromAccountId], references: [id])
-  toAccount   FinancialAccount @relation("TransferToAccount", fields: [toAccountId], references: [id])
-  createdBy   User             @relation("TransferCreatedBy", fields: [createdByUserId], references: [id])
+  entity       FinancialEntity        @relation(fields: [entityId], references: [id], onDelete: Cascade)
+  fromAccount  FinancialAccount       @relation("TransferFromAccount", fields: [fromAccountId], references: [id])
+  toAccount    FinancialAccount       @relation("TransferToAccount", fields: [toAccountId], references: [id])
+  createdBy    User                   @relation("TransferCreatedBy", fields: [createdByUserId], references: [id])
   transactions FinancialTransaction[]
 
   @@index([entityId, businessDate])
@@ -845,31 +849,31 @@ model Transfer {
 // ============================================================================
 
 model Loan {
-  id                 String           @id @default(uuid())
-  entityId           String
-  direction          LoanDirection
-  counterpartyId     String?
-  name               String
+  id                String           @id @default(uuid())
+  entityId          String
+  direction         LoanDirection
+  counterpartyId    String?
+  name              String
   /// Importe originalmente pactado.
-  principalAmount    Decimal          @db.Decimal(18, 2)
+  principalAmount   Decimal          @db.Decimal(18, 2)
   /// Saldo de capital pendiente (se recalcula con cada pago).
-  currentBalance     Decimal          @db.Decimal(18, 2)
-  currency           String           @default("DOP")
+  currentBalance    Decimal          @db.Decimal(18, 2)
+  currency          String           @default("DOP")
   /// Tasa anual en porcentaje (12.5 = 12,5%). Null si no se conoce: no se inventa.
-  annualRatePct      Decimal?         @db.Decimal(9, 6)
-  interestType       InterestType     @default(NONE)
-  paymentFrequency   PaymentFrequency @default(MONTHLY)
-  installmentAmount  Decimal?         @db.Decimal(18, 2)
-  installmentCount   Int?
-  startDate          DateTime         @db.Date
-  firstDueDate       DateTime?        @db.Date
-  nextDueDate        DateTime?        @db.Date
-  accountId          String?
-  status             LoanStatus       @default(ACTIVE)
-  notes              String?
-  closedAt           DateTime?
-  createdAt          DateTime         @default(now())
-  updatedAt          DateTime         @updatedAt
+  annualRatePct     Decimal?         @db.Decimal(9, 6)
+  interestType      InterestType     @default(NONE)
+  paymentFrequency  PaymentFrequency @default(MONTHLY)
+  installmentAmount Decimal?         @db.Decimal(18, 2)
+  installmentCount  Int?
+  startDate         DateTime         @db.Date
+  firstDueDate      DateTime?        @db.Date
+  nextDueDate       DateTime?        @db.Date
+  accountId         String?
+  status            LoanStatus       @default(ACTIVE)
+  notes             String?
+  closedAt          DateTime?
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
 
   entity       FinancialEntity   @relation(fields: [entityId], references: [id], onDelete: Cascade)
   counterparty Counterparty?     @relation(fields: [counterpartyId], references: [id])
@@ -883,23 +887,23 @@ model Loan {
 }
 
 model LoanPayment {
-  id              String   @id @default(uuid())
-  loanId          String
-  businessDate    DateTime @db.Date
-  totalAmount     Decimal  @db.Decimal(18, 2)
-  principalAmount Decimal  @default(0) @db.Decimal(18, 2)
-  interestAmount  Decimal  @default(0) @db.Decimal(18, 2)
-  feeAmount       Decimal  @default(0) @db.Decimal(18, 2)
-  penaltyAmount   Decimal  @default(0) @db.Decimal(18, 2)
-  accountId       String
-  notes           String?
-  clientOperationId String @unique
-  createdByUserId String
-  createdAt       DateTime @default(now())
+  id                String   @id @default(uuid())
+  loanId            String
+  businessDate      DateTime @db.Date
+  totalAmount       Decimal  @db.Decimal(18, 2)
+  principalAmount   Decimal  @default(0) @db.Decimal(18, 2)
+  interestAmount    Decimal  @default(0) @db.Decimal(18, 2)
+  feeAmount         Decimal  @default(0) @db.Decimal(18, 2)
+  penaltyAmount     Decimal  @default(0) @db.Decimal(18, 2)
+  accountId         String
+  notes             String?
+  clientOperationId String   @unique
+  createdByUserId   String
+  createdAt         DateTime @default(now())
 
-  loan      Loan             @relation(fields: [loanId], references: [id], onDelete: Cascade)
-  account   FinancialAccount @relation(fields: [accountId], references: [id])
-  createdBy User             @relation("LoanPaymentCreatedBy", fields: [createdByUserId], references: [id])
+  loan         Loan                   @relation(fields: [loanId], references: [id], onDelete: Cascade)
+  account      FinancialAccount       @relation(fields: [accountId], references: [id])
+  createdBy    User                   @relation("LoanPaymentCreatedBy", fields: [createdByUserId], references: [id])
   transactions FinancialTransaction[]
 
   @@index([loanId, businessDate])
@@ -922,8 +926,8 @@ model Receivable {
   createdAt      DateTime         @default(now())
   updatedAt      DateTime         @updatedAt
 
-  entity       FinancialEntity @relation(fields: [entityId], references: [id], onDelete: Cascade)
-  counterparty Counterparty?   @relation(fields: [counterpartyId], references: [id])
+  entity       FinancialEntity        @relation(fields: [entityId], references: [id], onDelete: Cascade)
+  counterparty Counterparty?          @relation(fields: [counterpartyId], references: [id])
   transactions FinancialTransaction[]
 
   @@index([entityId, status])
@@ -947,8 +951,8 @@ model Payable {
   createdAt      DateTime         @default(now())
   updatedAt      DateTime         @updatedAt
 
-  entity       FinancialEntity @relation(fields: [entityId], references: [id], onDelete: Cascade)
-  counterparty Counterparty?   @relation(fields: [counterpartyId], references: [id])
+  entity       FinancialEntity        @relation(fields: [entityId], references: [id], onDelete: Cascade)
+  counterparty Counterparty?          @relation(fields: [counterpartyId], references: [id])
   transactions FinancialTransaction[]
 
   @@index([entityId, status])
@@ -958,22 +962,22 @@ model Payable {
 /// Obligación recurrente (alquiler, internet, nómina, cuota...). Es una plantilla:
 /// FINANZA avisa antes del vencimiento y opcionalmente pre-carga el movimiento.
 model RecurringObligation {
-  id             String           @id @default(uuid())
-  entityId       String
-  name           String
-  direction      LoanDirection    @default(PAYABLE)
-  amount         Decimal          @db.Decimal(18, 2)
-  currency       String           @default("DOP")
-  frequency      PaymentFrequency @default(MONTHLY)
-  nextDueDate    DateTime         @db.Date
-  categoryId     String?
-  counterpartyId String?
-  autoCreate     Boolean          @default(false)
-  remindDaysBefore Int            @default(3)
-  status         RecurringStatus  @default(ACTIVE)
-  notes          String?
-  createdAt      DateTime         @default(now())
-  updatedAt      DateTime         @updatedAt
+  id               String           @id @default(uuid())
+  entityId         String
+  name             String
+  direction        LoanDirection    @default(PAYABLE)
+  amount           Decimal          @db.Decimal(18, 2)
+  currency         String           @default("DOP")
+  frequency        PaymentFrequency @default(MONTHLY)
+  nextDueDate      DateTime         @db.Date
+  categoryId       String?
+  counterpartyId   String?
+  autoCreate       Boolean          @default(false)
+  remindDaysBefore Int              @default(3)
+  status           RecurringStatus  @default(ACTIVE)
+  notes            String?
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
 
   entity       FinancialEntity @relation(fields: [entityId], references: [id], onDelete: Cascade)
   counterparty Counterparty?   @relation(fields: [counterpartyId], references: [id])
@@ -987,17 +991,17 @@ model RecurringObligation {
 // ============================================================================
 
 model Budget {
-  id        String        @id @default(uuid())
+  id        String       @id @default(uuid())
   entityId  String
   name      String
-  period    BudgetPeriod  @default(MONTHLY)
-  startDate DateTime      @db.Date
-  endDate   DateTime?     @db.Date
-  status    BudgetStatus  @default(ACTIVE)
-  currency  String        @default("DOP")
+  period    BudgetPeriod @default(MONTHLY)
+  startDate DateTime     @db.Date
+  endDate   DateTime?    @db.Date
+  status    BudgetStatus @default(ACTIVE)
+  currency  String       @default("DOP")
   notes     String?
-  createdAt DateTime      @default(now())
-  updatedAt DateTime      @updatedAt
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
 
   entity      FinancialEntity    @relation(fields: [entityId], references: [id], onDelete: Cascade)
   allocations BudgetAllocation[]
@@ -1006,14 +1010,14 @@ model Budget {
 }
 
 model BudgetAllocation {
-  id         String   @id @default(uuid())
-  budgetId   String
-  categoryId String
-  limitAmount Decimal @db.Decimal(18, 2)
-  warnPct    Int?     @default(80)
-  alertPct   Int?     @default(100)
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  id          String   @id @default(uuid())
+  budgetId    String
+  categoryId  String
+  limitAmount Decimal  @db.Decimal(18, 2)
+  warnPct     Int?     @default(80)
+  alertPct    Int?     @default(100)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
   budget   Budget              @relation(fields: [budgetId], references: [id], onDelete: Cascade)
   category TransactionCategory @relation(fields: [categoryId], references: [id])
@@ -1026,43 +1030,43 @@ model BudgetAllocation {
 // ============================================================================
 
 model DailyClosing {
-  id             String         @id @default(uuid())
-  entityId       String
-  businessDate   DateTime       @db.Date
-  status         ClosingStatus  @default(PENDING)
+  id           String        @id @default(uuid())
+  entityId     String
+  businessDate DateTime      @db.Date
+  status       ClosingStatus @default(PENDING)
 
-  expectedCash   Decimal?       @db.Decimal(18, 2)
-  countedCash    Decimal?       @db.Decimal(18, 2)
-  difference     Decimal?       @db.Decimal(18, 2)
+  expectedCash Decimal? @db.Decimal(18, 2)
+  countedCash  Decimal? @db.Decimal(18, 2)
+  difference   Decimal? @db.Decimal(18, 2)
 
-  totalIncome    Decimal        @default(0) @db.Decimal(18, 2)
-  totalExpense   Decimal        @default(0) @db.Decimal(18, 2)
+  totalIncome  Decimal @default(0) @db.Decimal(18, 2)
+  totalExpense Decimal @default(0) @db.Decimal(18, 2)
 
   /// Detalle por cuenta: [{ accountId, name, expected, counted, difference }]
-  balancesJson   Json?
+  balancesJson    Json?
   differencesJson Json?
-  checklistJson  Json?
-  explanation    String?
-  notes          String?
+  checklistJson   Json?
+  explanation     String?
+  notes           String?
 
   /// Control de versiones: reabrir NO reescribe la historia en silencio.
-  version        Int            @default(1)
-  reopenCount    Int            @default(0)
+  version          Int       @default(1)
+  reopenCount      Int       @default(0)
   lastReopenReason String?
-  lastReopenedAt DateTime?
+  lastReopenedAt   DateTime?
 
-  closedByUserId String?
-  closedAt       DateTime?
+  closedByUserId    String?
+  closedAt          DateTime?
   /// Idempotencia del cierre enviado desde un dispositivo offline.
-  clientOperationId String?     @unique
-  deviceId       String?
-  recordedOffline Boolean       @default(false)
+  clientOperationId String?   @unique
+  deviceId          String?
+  recordedOffline   Boolean   @default(false)
 
-  createdAt      DateTime       @default(now())
-  updatedAt      DateTime       @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  entity   FinancialEntity @relation(fields: [entityId], references: [id], onDelete: Cascade)
-  closedBy User?           @relation("ClosingClosedBy", fields: [closedByUserId], references: [id])
+  entity          FinancialEntity         @relation(fields: [entityId], references: [id], onDelete: Cascade)
+  closedBy        User?                   @relation("ClosingClosedBy", fields: [closedByUserId], references: [id])
   reconciliations ClosingReconciliation[]
 
   /// Un solo cierre por unidad financiera y día de negocio: evita duplicados.
@@ -1071,19 +1075,19 @@ model DailyClosing {
 }
 
 model ClosingReconciliation {
-  id             String   @id @default(uuid())
-  closingId      String
-  accountId      String
-  expectedAmount Decimal  @db.Decimal(18, 2)
-  countedAmount  Decimal  @db.Decimal(18, 2)
-  differenceAmount Decimal @db.Decimal(18, 2)
-  explanation    String?
+  id               String    @id @default(uuid())
+  closingId        String
+  accountId        String
+  expectedAmount   Decimal   @db.Decimal(18, 2)
+  countedAmount    Decimal   @db.Decimal(18, 2)
+  differenceAmount Decimal   @db.Decimal(18, 2)
+  explanation      String?
   resolvedByUserId String?
-  resolvedAt     DateTime?
-  createdAt      DateTime @default(now())
+  resolvedAt       DateTime?
+  createdAt        DateTime  @default(now())
 
-  closing   DailyClosing      @relation(fields: [closingId], references: [id], onDelete: Cascade)
-  account   FinancialAccount  @relation(fields: [accountId], references: [id])
+  closing    DailyClosing     @relation(fields: [closingId], references: [id], onDelete: Cascade)
+  account    FinancialAccount @relation(fields: [accountId], references: [id])
   resolvedBy User?            @relation("ReconResolvedBy", fields: [resolvedByUserId], references: [id])
 
   @@unique([closingId, accountId])
@@ -1095,27 +1099,27 @@ model ClosingReconciliation {
 // ============================================================================
 
 model Notification {
-  id           String                @id @default(uuid())
+  id           String               @id @default(uuid())
   userId       String
   entityId     String?
   type         String
   title        String
   body         String
-  severity     NotificationSeverity  @default(INFO)
-  status       NotificationStatus    @default(PENDING)
+  severity     NotificationSeverity @default(INFO)
+  status       NotificationStatus   @default(PENDING)
   /// Clave de deduplicación: evita enviar el mismo aviso dos veces.
-  dedupeKey    String?               @unique
+  dedupeKey    String?              @unique
   relatedType  String?
   relatedId    String?
   /// Ruta de la app que resuelve la tarea pendiente.
   actionUrl    String?
-  scheduledFor DateTime              @default(now())
+  scheduledFor DateTime             @default(now())
   sentAt       DateTime?
   readAt       DateTime?
   failReason   String?
-  createdAt    DateTime              @default(now())
+  createdAt    DateTime             @default(now())
 
-  user   User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user   User             @relation(fields: [userId], references: [id], onDelete: Cascade)
   entity FinancialEntity? @relation(fields: [entityId], references: [id], onDelete: Cascade)
 
   @@index([userId, status, scheduledFor])
@@ -1207,37 +1211,37 @@ enum ShoppingListStatus {
 ///    auditoría incluidas). Aquí sólo se guarda el vínculo resultante.
 ///  · `transactionId` es único: una lista no puede generar dos gastos.
 model ShoppingList {
-  id         String              @id @default(uuid())
-  entityId   String
-  name       String
-  status     ShoppingListStatus  @default(DRAFT)
-  currency   String              @default("DOP")
-  notes      String?
+  id          String             @id @default(uuid())
+  entityId    String
+  name        String
+  status      ShoppingListStatus @default(DRAFT)
+  currency    String             @default("DOP")
+  notes       String?
   /// Fecha en la que se piensa hacer la compra (no es un movimiento).
   plannedDate DateTime?          @db.Date
   completedAt DateTime?
 
   /// Presupuesto estimado de la lista, calculado al guardar (para poder ordenar
   /// y comparar sin sumar siempre). Nunca se muestra como dinero gastado.
-  estimatedTotal Decimal?        @db.Decimal(18, 2)
+  estimatedTotal Decimal? @db.Decimal(18, 2)
   /// Importe realmente pagado: sólo lo escribe el usuario al finalizar.
-  actualTotal    Decimal?        @db.Decimal(18, 2)
+  actualTotal    Decimal? @db.Decimal(18, 2)
 
   /// Movimiento financiero confirmado que se generó desde esta lista.
-  transactionId    String? @unique
-  journalEntryId   String?
+  transactionId     String? @unique
+  journalEntryId    String?
   /// Identificador idempotente del envío (si el usuario pulsa dos veces, no se duplica).
   clientOperationId String? @unique
   /// Identificador de la lista generado en el dispositivo: permite crearla sin
   /// conexión y enviarla después sin duplicarla.
-  deviceListId     String? @unique
+  deviceListId      String? @unique
 
   createdByUserId String
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
-  entity      FinancialEntity     @relation(fields: [entityId], references: [id], onDelete: Cascade)
-  createdBy   User                @relation("ShoppingListCreatedBy", fields: [createdByUserId], references: [id])
+  entity      FinancialEntity       @relation(fields: [entityId], references: [id], onDelete: Cascade)
+  createdBy   User                  @relation("ShoppingListCreatedBy", fields: [createdByUserId], references: [id])
   transaction FinancialTransaction? @relation(fields: [transactionId], references: [id], onDelete: SetNull)
   items       ShoppingListItem[]
 
@@ -1247,26 +1251,90 @@ model ShoppingList {
 
 /// Producto dentro de una lista de compras.
 model ShoppingListItem {
-  id     String @id @default(uuid())
-  listId String
-  name   String
+  id                 String    @id @default(uuid())
+  listId             String
+  name               String
   /// Cantidad (admite decimales: 1,5 kg).
-  quantity Decimal @db.Decimal(18, 3) @default(1)
+  quantity           Decimal   @default(1) @db.Decimal(18, 3)
   /// Unidad de medida opcional (kg, litro, unidad…).
-  unit     String?
+  unit               String?
   /// Precio estimado por unidad (lo que el usuario cree que costará).
-  estimatedUnitPrice Decimal? @db.Decimal(18, 2)
+  estimatedUnitPrice Decimal?  @db.Decimal(18, 2)
   /// Precio real pagado por unidad (lo apunta al comprar).
-  actualUnitPrice    Decimal? @db.Decimal(18, 2)
-  isPurchased Boolean  @default(false)
-  purchasedAt DateTime?
-  categoryId  String?
-  notes       String?
-  sortOrder   Int      @default(0)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  actualUnitPrice    Decimal?  @db.Decimal(18, 2)
+  isPurchased        Boolean   @default(false)
+  purchasedAt        DateTime?
+  categoryId         String?
+  notes              String?
+  sortOrder          Int       @default(0)
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
 
   list ShoppingList @relation(fields: [listId], references: [id], onDelete: Cascade)
 
   @@index([listId, isPurchased])
+}
+
+// ============================================================================
+// RECORDATORIOS Y NOTAS
+// ============================================================================
+
+/// Cada cuánto vuelve a avisar un recordatorio.
+enum ReminderRepeat {
+  /// Una sola vez, en la fecha y hora indicadas.
+  ONCE
+  /// Todos los días, a la misma hora.
+  DAILY
+  /// Cada mes, el mismo día y a la misma hora (si el mes es más corto, el último día).
+  MONTHLY
+}
+
+/// Nota o lista que el usuario necesita tener a mano y, si lo pide, que la app le
+/// recuerde (avisos push y calendario de Google).
+model Reminder {
+  id              String         @id @default(uuid())
+  /// Dueño del recordatorio: quien lo ve y lo recibe.
+  userId          String
+  /// Unidad financiera opcional: sirve para saber si el aviso es del negocio o de casa.
+  entityId        String?
+  title           String
+  /// Una nota suelta o una lista de puntos enumerados.
+  isList          Boolean        @default(false)
+  /// Texto libre de la nota (cuando no es lista).
+  notes           String?
+  /// Lista enumerada: [{ id, text }]. El orden del array es el orden de los puntos.
+  itemsJson       Json?
+  /// Si es true, la app avisa por notificación y el calendario lo incluye.
+  alertEnabled    Boolean        @default(false)
+  /// Primer aviso (instante con hora). Después se repite según `repeat`.
+  alertAt         DateTime?
+  /// Zona horaria del usuario en el momento de crearlo (para las repeticiones).
+  timezone        String         @default("America/Santo_Domingo")
+  repeat          ReminderRepeat @default(ONCE)
+  isActive        Boolean        @default(true)
+  /// Quien lo creó: para borrarlo hay que escribir SU contraseña.
+  createdByUserId String
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  user    User             @relation("ReminderOwner", fields: [userId], references: [id], onDelete: Cascade)
+  creator User             @relation("ReminderCreatedBy", fields: [createdByUserId], references: [id], onDelete: Cascade)
+  entity  FinancialEntity? @relation(fields: [entityId], references: [id], onDelete: SetNull)
+
+  @@index([userId, isActive])
+  @@index([alertAt])
+  @@index([entityId])
+}
+
+/// Enlace secreto para que Google Calendar (u otro calendario) se suscriba a los
+/// recordatorios y a los compromisos mensuales **sin** guardar la contraseña.
+model CalendarFeed {
+  id         String    @id @default(uuid())
+  userId     String    @unique
+  token      String    @unique
+  isActive   Boolean   @default(true)
+  lastUsedAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }

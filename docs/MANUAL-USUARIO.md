@@ -313,3 +313,29 @@ anterior: en la base de datos sólo se guarda un hash de Argon2id.
 Sólo ocurre por tres motivos, y la pantalla te dice cuál: la sesión caducó por seguridad, se alcanzó su
 duración máxima, o se cerró desde otro dispositivo. Un corte de internet o un fallo momentáneo del
 servidor **no** cierran la sesión: puedes seguir trabajando y se reintenta solo.
+
+## Recordatorios y notas
+
+En el menú lateral, **Recordatorios y notas** guarda lo que no se puede olvidar:
+
+- **Nota simple**: un texto con su detalle.
+- **Lista de puntos**: los puntos quedan numerados en orden.
+
+Si marcas **Requiere aviso**, eliges fecha y hora, y cómo se repite: **una sola vez**, **todos los días** o
+**cada mes** (si el mes es más corto, el aviso cae el último día). La app avisa a esa hora por notificación.
+
+**Borrar** un recordatorio pide la **contraseña de quien lo creó**: así un aviso importante no desaparece
+por un toque de más. Sin la contraseña correcta no se borra nada y queda anotado en Auditoría.
+
+### Llevarlo a Google Calendar
+
+En la misma pantalla, abre **«Su calendario de FINANZA»** y copia el enlace:
+
+1. En Google Calendar (ordenador): *Otros calendarios → «+» → Suscribirse a un calendario*.
+2. Pega el enlace y guarda. Google lo revisa cada hora.
+
+Ese calendario trae los recordatorios con su repetición **y también** los compromisos mensuales, las
+cuotas de los préstamos y las cuentas por pagar: todo lo que tiene fecha. El enlace es secreto; si se
+filtra, pulsa **Cambiar enlace** y el anterior deja de funcionar.
+
+Para un solo recordatorio, el botón **«Añadir a Google Calendar»** lo crea con su repetición ya puesta.

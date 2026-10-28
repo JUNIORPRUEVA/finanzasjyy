@@ -160,6 +160,7 @@ src/
 ├── prisma/          servicio Prisma con transacciones y reintentos
 ├── security/        control de acceso por unidad
 ├── daily-control/   «Mi control diario»: tareas, semáforo y constancia
+├── reminders/       recordatorios y notas + calendario ICS (Google Calendar)
 └── <18 módulos>     auth, entities, accounts, categories, counterparties, ledger,
                      transactions, transfers, loans, obligations, budgets, closings,
                      dashboard, reports, sync, notifications, attachments, audit, health
