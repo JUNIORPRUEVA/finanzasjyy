@@ -243,6 +243,7 @@ export const APP_ROUTES: Array<{ path: string; name: string }> = [
   { path: '/cierres', name: 'Cierre del día' },
   { path: '/traspasos', name: 'Traspasos' },
   { path: '/custodia', name: 'Fondos en custodia' },
+  { path: '/datos', name: 'Salud de los datos' },
   { path: '/deudas', name: 'Préstamos y deudas' },
   { path: '/obligaciones', name: 'Obligaciones' },
   { path: '/presupuestos', name: 'Presupuestos' },

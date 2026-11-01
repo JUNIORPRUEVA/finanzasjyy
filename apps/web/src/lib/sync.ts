@@ -249,6 +249,100 @@ export async function localSyncStatus(): Promise<{
   };
 }
 
+/**
+ * REPARA UNA OPERACIÓN ATASCADA, de verdad.
+ *
+ * Reenviar con otro identificador no arregla un dato inválido: si el servidor
+ * dijo «esa categoría es de ingresos y el movimiento es un gasto», volverá a
+ * decirlo siempre. Aquí se corrige el DATO, que es lo único que puede funcionar:
+ *
+ *   · Si el problema es la categoría (no existe, está desactivada o es del tipo
+ *     contrario), se cambia por una categoría válida del mismo tipo que el
+ *     movimiento. Si no hay ninguna, se quita la categoría y el servidor usa la
+ *     cuenta contable por defecto de ese tipo.
+ *   · Si el problema es la cuenta (cerrada o de otra unidad), se avisa: eso hay
+ *     que decidirlo, no se puede adivinar.
+ *
+ * Lo que NUNCA se toca: el importe, la fecha, la unidad ni la cuenta. Así el
+ * movimiento sigue siendo exactamente el que el usuario registró.
+ */
+export interface ResultadoReparacion {
+  arreglada: boolean;
+  cambios: string[];
+  motivo?: string;
+}
+
+export function repararPayload(
+  operation: QueuedOperation,
+  categorias: Array<{ id: string; name: string; kind: string }>,
+): { payload: Record<string, unknown>; resultado: ResultadoReparacion } {
+  const payload = { ...(operation.payload as Record<string, unknown>) };
+  const cambios: string[] = [];
+  const error = (operation.lastError ?? '').toLowerCase();
+  const kind = String(payload.kind ?? '');
+
+  // 1. Categoría del tipo contrario (el caso que reportó el usuario).
+  const problemaDeCategoria =
+    error.includes('categoría') ||
+    error.includes('categoria') ||
+    (typeof payload.categoryId === 'string' && payload.categoryId.length > 0 && error.includes('tipo'));
+  if (problemaDeCategoria && (kind === 'INCOME' || kind === 'EXPENSE')) {
+    const valida = categorias.find((categoria) => categoria.kind === kind);
+    const actual = categorias.find((categoria) => categoria.id === payload.categoryId);
+    if (!actual || actual.kind !== kind) {
+      if (valida) {
+        payload.categoryId = valida.id;
+        cambios.push(`categoría → «${valida.name}» (de ${kind === 'EXPENSE' ? 'gastos' : 'ingresos'})`);
+      } else {
+        delete payload.categoryId;
+        cambios.push('se quitó la categoría inválida (se usará la cuenta por defecto)');
+      }
+    }
+  }
+
+  if (cambios.length === 0) {
+    const motivo = (operation.lastError ?? '').trim();
+    return {
+      payload,
+      resultado: {
+        arreglada: false,
+        cambios,
+        motivo:
+          motivo.length > 0
+            ? `No se puede corregir sola: ${motivo}`
+            : 'No se puede corregir sola: el servidor no dijo qué dato está mal.',
+      },
+    };
+  }
+
+  return { payload, resultado: { arreglada: true, cambios } };
+}
+
+/** Guarda una operación ya corregida con un identificador nuevo y la envía. */
+export async function guardarOperacionReparada(
+  operation: QueuedOperation,
+  payload: Record<string, unknown>,
+): Promise<void> {
+  const nuevoId = newOperationId(operation.type.toLowerCase());
+  await removeQueuedOperation(operation.id);
+  await enqueueOperation({
+    id: nuevoId,
+    type: operation.type,
+    payload,
+    summary: operation.summary,
+    amount: operation.amount,
+    entityId: operation.entityId,
+    entityName: operation.entityName,
+    occurredAt: operation.occurredAt,
+  });
+  await syncPendingOperations();
+}
+
+/** Descarta una operación que NO llegó al servidor (nunca se descarta algo aplicado). */
+export async function descartarOperacion(id: string): Promise<void> {
+  await removeQueuedOperation(id);
+}
+
 /** Desbloquea una operación para volver a intentarla (tras revisarla). */
 export async function retryOperation(id: string): Promise<void> {
   await markOperationStatus(id, 'PENDING');

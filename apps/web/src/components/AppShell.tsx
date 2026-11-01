@@ -407,6 +407,28 @@ export function AppShell({ children }: { children: React.ReactNode }) {  const {
             </button>
           </div>
 
+          {/* Salud de los datos: un icono fijo, siempre a la derecha, que abre la
+              página donde se arregla lo que no llegó al servidor. Se pone
+              SIEMPRE (no sólo cuando hay problemas) para que se sepa dónde está. */}
+          <Link
+            to="/datos"
+            aria-label={pendingTotal > 0 ? `Salud de los datos: ${pendingTotal} sin confirmar` : 'Salud de los datos'}
+            title="Salud de los datos"
+            className={`relative flex h-11 w-11 shrink-0 items-center justify-center rounded-full transition hover:bg-surface-2 ${
+              pendingTotal > 0 ? 'text-warning' : 'text-muted hover:text-ink'
+            }`}
+          >
+            <IconAlert size={19} />
+            {pendingTotal > 0 ? (
+              <span
+                aria-hidden="true"
+                className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-warning px-1 text-[0.6rem] font-bold text-white"
+              >
+                {pendingTotal > 9 ? '9+' : pendingTotal}
+              </span>
+            ) : null}
+          </Link>
+
           {/* Estado de sincronización: un indicador con acción */}
           <button
             type="button"
