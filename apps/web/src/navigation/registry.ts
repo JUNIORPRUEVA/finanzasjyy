@@ -1,7 +1,6 @@
 import type { ComponentType } from 'react';
 import {
   IconBag,
-  IconBell,
   IconBuilding,
   IconCalendar,
   IconChart,
@@ -204,18 +203,6 @@ export const DRAWER_ENTRIES: NavEntry[] = [
     group: 'gestion',
     availability: 'ready',
     order: 18,
-  },
-  {
-    // Notas y avisos: lo que no se puede olvidar. La app avisa a la hora fijada
-    // y el enlace de calendario lo lleva también a Google Calendar.
-    id: 'recordatorios',
-    label: 'Recordatorios y notas',
-    hint: 'Lo que no se puede olvidar, con aviso',
-    icon: IconBell,
-    to: '/recordatorios',
-    group: 'gestion',
-    availability: 'ready',
-    order: 19,
   },
 
   // --- Análisis y documentos ------------------------------------------------

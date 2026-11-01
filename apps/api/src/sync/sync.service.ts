@@ -422,6 +422,55 @@ export class SyncService {
   }
 
   /** Estado de sincronización que ve el usuario en la app. */
+  /**
+   * Aviso del «agente de datos» del dispositivo: hay operaciones que no han
+   * llegado al servidor. Se guarda en la AUDITORÍA (no en una tabla nueva) para
+   * que un administrador lo vea en «Auditoría» con el detalle técnico.
+   * No crea ni modifica ningún movimiento: sólo deja constancia.
+   */
+  async reportProblem(
+    user: AuthenticatedUser,
+    dto: {
+      description: string;
+      deviceId?: string;
+      platform?: string;
+      isOnline?: boolean;
+      pending?: number;
+      rejected?: number;
+      conflict?: number;
+      lastError?: string | null;
+      operations?: Array<Record<string, unknown>>;
+    },
+    meta: RequestMetaInfo,
+  ) {
+    await this.audit.record({
+      userId: user.userId,
+      action: 'sync.problem_reported',
+      entityType: 'SyncOperation',
+      entityId: user.userId,
+      after: {
+        description: dto.description,
+        deviceId: dto.deviceId ?? null,
+        platform: dto.platform ?? null,
+        isOnline: dto.isOnline ?? null,
+        pending: dto.pending ?? 0,
+        rejected: dto.rejected ?? 0,
+        conflict: dto.conflict ?? 0,
+        lastError: dto.lastError ?? null,
+        operations: dto.operations ?? [],
+      },
+      ip: meta.ip,
+      userAgent: meta.userAgent,
+    });
+
+    return {
+      received: true,
+      message:
+        'Aviso registrado en la auditoría. Un administrador podrá ver el detalle y decidir qué hacer con las operaciones que no llegaron al servidor.',
+    };
+  }
+
+  /** Estado real de sincronización (lo que la app muestra al usuario). */
   async status(user: AuthenticatedUser) {
     const [pending, failed, conflicts, lastApplied, devices] = await Promise.all([
       this.prisma.syncOperation.count({ where: { userId: user.userId, status: { in: ['RECEIVED'] } } }),

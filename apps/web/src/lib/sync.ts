@@ -254,6 +254,122 @@ export async function retryOperation(id: string): Promise<void> {
   await markOperationStatus(id, 'PENDING');
 }
 
+// ---------------------------------------------------------------------------
+// AGENTE DE SALUD DE LOS DATOS
+// ---------------------------------------------------------------------------
+// Responde a «¿queda algo mío sin llegar al servidor?» y permite arreglarlo.
+// Antes, una operación que el servidor rechazaba o que quedaba en conflicto se
+// quedaba en el teléfono para siempre: el contador de pendientes NO las incluía,
+// así que la app decía «al día» y el dinero nunca se movía.
+
+export interface QueueHealth {
+  /** Se reintentan solas (pendientes y con error técnico). */
+  pending: number;
+  /** El servidor no las aplicó: hay que corregirlas o repararlas. */
+  rejected: number;
+  /** Mismo identificador con otros datos: hay que decidir cuál vale. */
+  conflict: number;
+  /** Rechazadas + en conflicto: requieren una acción del usuario. */
+  stuck: number;
+  total: number;
+  oldestOccurredAt: string | null;
+  lastError: string | null;
+  lastSyncedAt: string | null;
+  isOnline: boolean;
+}
+
+export async function queueHealth(): Promise<QueueHealth> {
+  const queued = await listQueuedOperations();
+  const pending = queued.filter((operation) => operation.status !== 'CONFLICT' && operation.status !== 'REJECTED');
+  const rejected = queued.filter((operation) => operation.status === 'REJECTED');
+  const conflict = queued.filter((operation) => operation.status === 'CONFLICT');
+  const withError = queued.find((operation) => operation.lastError);
+  const oldest = queued.length > 0 ? queued[0].occurredAt : null;
+
+  return {
+    pending: pending.length,
+    rejected: rejected.length,
+    conflict: conflict.length,
+    stuck: rejected.length + conflict.length,
+    total: queued.length,
+    oldestOccurredAt: oldest,
+    lastError: withError?.lastError ?? null,
+    lastSyncedAt: await getMeta('lastSyncedAt'),
+    isOnline: navigator.onLine,
+  };
+}
+
+/**
+ * REPARA Y REENVÍA las operaciones que el servidor no aplicó.
+ *
+ * Por qué con un identificador NUEVO: si el servidor respondió REJECTED, no
+ * aplicó nada; si respondió CONFLICT fue porque ESE identificador ya existía con
+ * otros datos. Reenviar el mismo identificador volvería a chocar, así que se
+ * genera uno nuevo y el contenido (importe, cuenta, fecha) no se toca. Lo que
+ * nunca se hace es inventar ni duplicar dinero: el servidor sigue deduplicando
+ * por identificador y el usuario ve el resultado.
+ */
+export async function repairAndResend(ids?: string[]): Promise<{ repaired: number }> {
+  const queued = await listQueuedOperations();
+  const objetivo = queued.filter(
+    (operation) => operation.status !== 'PENDING' && (!ids || ids.includes(operation.id)),
+  );
+
+  let repaired = 0;
+  for (const operation of objetivo) {
+    const nuevoId = newOperationId(operation.type.toLowerCase());
+    await removeQueuedOperation(operation.id);
+    await enqueueOperation({
+      id: nuevoId,
+      type: operation.type,
+      payload: operation.payload,
+      summary: operation.summary,
+      amount: operation.amount,
+      entityId: operation.entityId,
+      entityName: operation.entityName,
+      occurredAt: operation.occurredAt,
+    });
+    repaired += 1;
+  }
+
+  if (repaired > 0) {
+    // Se reintenta enseguida lo reparado.
+    await syncPendingOperations();
+  }
+  return { repaired };
+}
+
+/**
+ * Avisa al administrador de que este dispositivo tiene datos sin subir.
+ * Queda registrado en la auditoría del sistema con el detalle técnico.
+ */
+export async function reportProblemToAdmin(input: {
+  description: string;
+  health: QueueHealth;
+}): Promise<void> {
+  const operaciones = await listQueuedOperations();
+  await api.post('/sync/report', {
+    description: input.description.slice(0, 300),
+    deviceId: deviceInfo.deviceId(),
+    platform: deviceInfo.platform(),
+    isOnline: input.health.isOnline,
+    pending: input.health.pending,
+    rejected: input.health.rejected,
+    conflict: input.health.conflict,
+    lastError: input.health.lastError,
+    operations: operaciones.slice(0, 20).map((operation) => ({
+      clientOperationId: operation.id,
+      type: operation.type,
+      status: operation.status,
+      summary: operation.summary,
+      amount: operation.amount,
+      occurredAt: operation.occurredAt,
+      lastError: operation.lastError,
+    })),
+  });
+}
+
+
 export function registerConnectivityListeners(onChange: (online: boolean) => void): () => void {
   const handleOnline = () => onChange(true);
   const handleOffline = () => onChange(false);

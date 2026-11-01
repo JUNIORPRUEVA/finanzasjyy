@@ -3,6 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../lib/api';
 import { useAuth } from '../store/auth';
+import { AgenteDeSalud } from '../components/AgenteDeSalud';
 import {
   AmountDisplay,
   Badge,
@@ -285,6 +286,9 @@ export function DashboardPage() {
           )}
         </div>
       </Card>
+
+      {/* El agente de datos: lo primero que ve si algo no llegó al servidor. */}
+      <AgenteDeSalud />
 
       {/* Cómo va hoy */}
       <div className="grid grid-cols-2 gap-3">

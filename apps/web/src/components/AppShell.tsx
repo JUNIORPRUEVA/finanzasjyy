@@ -4,7 +4,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../lib/api';
 import { countPendingOperations, countShoppingPending } from '../lib/db';
 import { flushShoppingQueue } from '../lib/shopping-offline';
-import { syncPendingOperations } from '../lib/sync';
+import { syncPendingOperations, queueHealth } from '../lib/sync';
 import { useAuth } from '../store/auth';
 import { BOTTOM_NAV } from '../navigation/registry';
 import { aplicarActualizacion, EVENTO_ACTUALIZACION } from '../lib/pwa';
@@ -110,6 +110,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {  const {
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [pendingLocal, setPendingLocal] = useState(0);
   const [pendingShopping, setPendingShopping] = useState(0);
+  // Operaciones que el servidor NO aplicó (rechazadas o en conflicto). No se
+  // reintentan solas: necesitan una decisión, así que se cuentan aparte para que
+  // no desaparezcan del aviso (antes se quedaban invisibles para siempre).
+  const [stuckLocal, setStuckLocal] = useState(0);
   const [syncing, setSyncing] = useState(false);
   const [quickOpen, setQuickOpen] = useState(false);
   const [entitySheetOpen, setEntitySheetOpen] = useState(false);
@@ -230,11 +234,35 @@ export function AppShell({ children }: { children: React.ReactNode }) {  const {
     const refreshLocal = async () => {
       setPendingLocal(await countPendingOperations());
       setPendingShopping(await countShoppingPending());
+      const health = await queueHealth();
+      setStuckLocal(health.stuck);
     };
     void refreshLocal();
     const interval = setInterval(refreshLocal, 5_000);
     return () => clearInterval(interval);
   }, []);
+
+  // REINTENTO PERIÓDICO (el arreglo de raíz del «dice que sí pero no se pasa»):
+  // antes sólo se enviaba al recuperar la conexión. Si el envío fallaba una vez
+  // y el contador no cambiaba, nadie lo volvía a intentar y el movimiento se
+  // quedaba en el teléfono para siempre.
+  useEffect(() => {
+    if (!user) {
+      return;
+    }
+    const interval = setInterval(() => {
+      if (navigator.onLine && !syncing) {
+        void syncPendingOperations().then(async (result) => {
+          setPendingLocal(result.pendingAfter);
+          setStuckLocal((await queueHealth()).stuck);
+          if (result.applied + result.duplicates > 0) {
+            await queryClient.invalidateQueries();
+          }
+        });
+      }
+    }, 60_000);
+    return () => clearInterval(interval);
+  }, [user, syncing, queryClient]);
 
   useEffect(() => {
     const handleOnline = () => setIsOnline(true);
@@ -290,7 +318,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {  const {
   };
 
   const mandatory = tasksQuery.data?.mandatoryCount ?? 0;
-  const pendingTotal = pendingLocal + pendingShopping;
+  const pendingTotal = pendingLocal + pendingShopping + stuckLocal;
 
   // «Sin conexión» significa una cosa muy concreta: **no se puede hablar con el
   // servidor**. Da igual que sea porque el teléfono no tiene datos o porque el

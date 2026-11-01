@@ -46,9 +46,6 @@ const ShoppingDetailPage = lazy(() =>
 const AuditPage = lazy(() => import('./pages/Audit').then((module) => ({ default: module.AuditPage })));
 const PeoplePage = lazy(() => import('./pages/People').then((module) => ({ default: module.PeoplePage })));
 const CustodyPage = lazy(() => import('./pages/Custody').then((module) => ({ default: module.CustodyPage })));
-const RemindersPage = lazy(() =>
-  import('./pages/Reminders').then((module) => ({ default: module.RemindersPage })),
-);
 
 /** Esqueleto de pantalla: misma silueta que las pantallas reales. */
 function PageSkeleton() {
@@ -116,7 +113,6 @@ export default function App() {
           <Route path="/auditoria" element={<AuditPage />} />
           <Route path="/personas" element={<PeoplePage />} />
           <Route path="/custodia" element={<CustodyPage />} />
-          <Route path="/recordatorios" element={<RemindersPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </Suspense>

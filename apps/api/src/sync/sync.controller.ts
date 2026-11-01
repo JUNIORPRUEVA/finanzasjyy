@@ -1,8 +1,54 @@
 import { Body, Controller, Get, Post, Query } from '@nestjs/common';
+import { IsArray, IsBoolean, IsIn, IsInt, IsOptional, IsString, MaxLength, Min } from 'class-validator';
 import { CurrentUser, type AuthenticatedUser } from '../common/http.decorators.js';
 import { RequestMeta, type RequestMetaInfo } from '../common/request-meta.js';
 import { ValidationError } from '../common/errors.js';
 import { SyncService } from './sync.service.js';
+
+/** Aviso del dispositivo nuevo: datos que no se han podido subir al servidor. */
+class ReportProblemDto {
+  @IsString()
+  @MaxLength(300)
+  description!: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  deviceId?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  platform?: string;
+
+  @IsOptional()
+  @IsIn([true, false])
+  isOnline?: boolean;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  pending?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  rejected?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  conflict?: number;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  lastError?: string | null;
+
+  @IsOptional()
+  @IsArray()
+  operations?: Array<Record<string, unknown>>;
+}
 
 @Controller('sync')
 export class SyncController {
@@ -35,6 +81,16 @@ export class SyncController {
   @Get('status')
   status(@CurrentUser() user: AuthenticatedUser) {
     return this.sync.status(user);
+  }
+
+  /**
+   * El agente de datos del dispositivo pide ayuda: hay operaciones que no han
+   * llegado al servidor. Queda en la auditoría para que un administrador lo vea
+   * (quién, desde qué dispositivo y con qué error), sin tocar ningún movimiento.
+   */
+  @Post('report')
+  report(@CurrentUser() user: AuthenticatedUser, @Body() dto: ReportProblemDto, @RequestMeta() meta: RequestMetaInfo) {
+    return this.sync.reportProblem(user, dto, meta);
   }
 
   /** Conflictos y rechazos pendientes de decidir por el usuario. */
