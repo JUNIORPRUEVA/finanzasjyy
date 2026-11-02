@@ -54,6 +54,14 @@ export const CHART_OF_ACCOUNTS: ChartAccountSeed[] = [
   },
   { code: '1200', name: 'Cuentas por cobrar', type: 'ASSET', normalBalance: 'DEBIT' },
   { code: '1210', name: 'Cuentas por cobrar a clientes', type: 'ASSET', normalBalance: 'DEBIT' },
+  {
+    code: '1230',
+    name: 'Participación en empresas propias',
+    type: 'ASSET',
+    normalBalance: 'DEBIT',
+    description:
+      'En la unidad del PROPIETARIO: el valor que tiene dentro de sus empresas. Cuando se lleva dinero de una empresa a su cuenta, baja esta cuenta y sube el banco: su patrimonio no cambia y NO se reconoce ningún ingreso. Es el espejo del retiro del propietario (3200) en los libros de la empresa.',
+  },
   { code: '1250', name: 'Préstamos otorgados', type: 'ASSET', normalBalance: 'DEBIT' },
   { code: '1300', name: 'Inventario de mercancía', type: 'ASSET', normalBalance: 'DEBIT' },
   { code: '1400', name: 'Activos fijos', type: 'ASSET', normalBalance: 'DEBIT' },
@@ -156,7 +164,16 @@ export const LEDGER = {
   MERCHANT: '1120',
   COMPANY_CASH_WITH_OWNER: '1130',
   INTERCOMPANY: '1150',
+  /** Participación del propietario en sus empresas (en la unidad personal). */
+  OWNER_STAKE_IN_COMPANIES: '1230',
   RECEIVABLE: '1210',
+  /**
+   * «Me deben» en general (no a un cliente). Se usa en la unidad del PROPIETARIO
+   * cuando la empresa le queda debiendo dinero que él adelantó: es el espejo
+   * exacto del pasivo 2350 en los libros de la empresa. No es un préstamo ni un
+   * ingreso: es un derecho de cobro que nace de un gasto ya pagado.
+   */
+  RECEIVABLE_GENERAL: '1200',
   LOAN_GIVEN: '1250',
   INVENTORY: '1300',
   PAYABLE: '2100',

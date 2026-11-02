@@ -60,6 +60,22 @@ describe('Traspaso entre unidades por la vía de sincronización', () => {
     const origenId = await crear(a.body.id, 'Banco origen', '1000.00');
     const destinoId = await crear(b.body.id, 'Banco destino', '0.00');
 
+    // FASE 2: las dos unidades tienen que estar en la MISMA persona jurídica para
+    // que el traspaso sea un traslado interno. Antes se hacía sin declararlo y el
+    // sistema no podía saber si eran la misma sociedad o dos.
+    const legal = await http
+      .post('/api/v1/entities/legal-entities')
+      .set(auth)
+      .send({ name: `Sociedad diag ${runId}`, kind: 'COMPANY' })
+      .expect(201);
+    for (const entityId of [a.body.id, b.body.id]) {
+      await http
+        .patch(`/api/v1/entities/${entityId}/structure`)
+        .set(auth)
+        .send({ legalEntityId: legal.body.id })
+        .expect(200);
+    }
+
     const push = await http
       .post('/api/v1/sync/push')
       .set(auth)

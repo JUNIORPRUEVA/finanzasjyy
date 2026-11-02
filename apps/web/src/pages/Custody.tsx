@@ -20,6 +20,7 @@ import {
   Tabs,
 } from '../components/ui';
 import { formatMoney, todayBusinessDate } from '../lib/format';
+import { IconChevronDown } from '../components/icons';
 
 /**
  * FONDOS EN CUSTODIA — DINERO DE LA EMPRESA EN CUENTAS PERSONALES
@@ -146,6 +147,20 @@ const ETIQUETA_ORIGEN: Record<string, string> = {
   RECEIVABLE_SETTLEMENT: 'Cobro de factura',
 };
 
+/**
+ * CONCEPTO AUTOMÁTICO
+ * -------------------
+ * El concepto no aportaba nada nuevo: el tipo de registro ya dice si es un cobro,
+ * una apertura o un gasto, y la empresa ya está elegida. Se genera solo —incluido
+ * el nombre de la empresa— y se puede cambiar si se quiere más detalle.
+ */
+const CONCEPTO_POR_MODO: Record<ModoRegistro, string> = {
+  APERTURA: 'Dinero ya depositado',
+  COBRO: 'Cobro recibido',
+  FACTURA: 'Cobro de factura',
+  GASTO: 'Gasto de la empresa',
+};
+
 function comoLista<T>(valor: unknown): T[] {
   if (Array.isArray(valor)) {
     return valor as T[];
@@ -174,6 +189,8 @@ export function CustodyPage() {
   const [facturaId, setFacturaId] = useState('');
   const [mensaje, setMensaje] = useState<{ tono: 'positive' | 'negative' | 'warning'; texto: string } | null>(null);
   const [anulando, setAnulando] = useState<{ id: string; motivo: string } | null>(null);
+  /** Concepto, fecha y factura sólo aparecen si hacen falta. */
+  const [masOpciones, setMasOpciones] = useState(false);
 
   const resumenQuery = useQuery<ResumenCustodia>({
     queryKey: ['custodia-resumen', cuentaFiltro],
@@ -248,6 +265,10 @@ export function CustodyPage() {
   const filasPendientes = pendienteQuery.data?.rows ?? [];
   const totalPendiente = pendienteQuery.data?.total ?? '0.00';
 
+  const empresaElegidaNombre = entities.find((entity) => entity.id === empresaId)?.name ?? '';
+  const conceptoFinal =
+    concepto.trim() || `${CONCEPTO_POR_MODO[modo]}${empresaElegidaNombre ? ` de ${empresaElegidaNombre}` : ''}`;
+
   const invalidar = async () => {
     await queryClient.invalidateQueries({ queryKey: ['custodia-resumen'] });
     await queryClient.invalidateQueries({ queryKey: ['custodia-pendiente'] });
@@ -264,7 +285,7 @@ export function CustodyPage() {
         holdingAccountId: cuentaId,
         amount: importe,
         businessDate: fecha,
-        description: concepto.trim(),
+        description: conceptoFinal,
         clientOperationId: newOperationId(modo === 'APERTURA' ? 'cusap' : modo === 'GASTO' ? 'cusgas' : 'cus'),
       };
 
@@ -366,7 +387,6 @@ export function CustodyPage() {
     !mismaUnidad &&
     importe !== '' &&
     Number(importe) > 0 &&
-    concepto.trim().length >= 3 &&
     (modo !== 'GASTO' || categoriaId !== '') &&
     (modo !== 'FACTURA' || facturaId !== '') &&
     !registrar.isPending;
@@ -643,13 +663,35 @@ export function CustodyPage() {
           ) : null}
 
           <MoneyInput label="Importe" value={importe} onChange={setImporte} />
-          <Field
-            label="Concepto"
-            value={concepto}
-            onChange={setConcepto}
-            placeholder="Ej.: cobros de FULLTECH ya depositados / venta de equipos"
-          />
-          <Field label="Fecha" value={fecha} onChange={setFecha} type="date" />
+
+          {/* El concepto y la fecha casi nunca se tocan: se generan solos. */}
+          <button
+            type="button"
+            onClick={() => setMasOpciones((abierto) => !abierto)}
+            aria-expanded={masOpciones}
+            className="flex w-full items-center justify-between rounded-xl px-1 py-2 text-left text-xs text-muted transition hover:text-ink"
+          >
+            <span>
+              Concepto y fecha <span className="text-faint">· {fecha === todayBusinessDate(preferences?.timezone) ? 'hoy' : fecha}</span>
+            </span>
+            <IconChevronDown
+              size={16}
+              className={`shrink-0 text-faint transition-transform ${masOpciones ? 'rotate-180' : ''}`}
+            />
+          </button>
+
+          {masOpciones ? (
+            <div className="space-y-3">
+              <Field
+                label={`Concepto (opcional)`}
+                value={concepto}
+                onChange={setConcepto}
+                placeholder={conceptoFinal}
+                hint={concepto.trim() === '' ? `Si lo deja vacío se guardará como «${conceptoFinal}».` : undefined}
+              />
+              <Field label="Fecha" value={fecha} onChange={setFecha} type="date" />
+            </div>
+          ) : null}
 
           <Button fullWidth disabled={!puedeRegistrar} onClick={() => registrar.mutate()}>
             {registrar.isPending ? 'Registrando…' : 'Guardar registro'}

@@ -296,7 +296,11 @@ export class ReportsService {
           where: {
             entityId: { in: entityIds },
             status: 'POSTED',
-            kind: 'EXPENSE',
+            // Un gasto pagado por el propietario es un gasto de la empresa como
+            // cualquier otro: si no estuviera aquí, el informe no cuadraría con
+            // el libro. El movimiento espejo del propietario tiene OTRO tipo
+            // (`OWNER_ADVANCE_TO_COMPANY`), así que no se cuenta dos veces.
+            kind: { in: ['EXPENSE', 'OWNER_PAID_COMPANY_EXPENSE'] },
             businessDate: { gte: range.from, lte: range.to },
           },
           _sum: { amount: true },
@@ -559,7 +563,9 @@ export class ReportsService {
               where: {
                 entityId: budget.entityId,
                 categoryId: allocation.categoryId,
-                kind: 'EXPENSE',
+                // Igual que en el informe por categorías: un gasto pagado por el
+                // propietario consume presupuesto de la empresa.
+                kind: { in: ['EXPENSE', 'OWNER_PAID_COMPANY_EXPENSE'] },
                 status: 'POSTED',
                 businessDate: { gte: budget.startDate },
               },

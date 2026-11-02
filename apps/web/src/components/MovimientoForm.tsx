@@ -8,7 +8,8 @@ import { useAuth } from '../store/auth';
 import { Button, Field, MoneyInput, Notice, Select } from './ui';
 import { BotonNuevaCategoria, NuevaCategoriaSheet } from './NuevaCategoriaSheet';
 import { IconChevronDown } from './icons';
-import { todayBusinessDate } from '../lib/format';
+import { formatMoney, todayBusinessDate } from '../lib/format';
+import { guardarUltimaCuenta, leerUltimaCuenta } from '../lib/preferencias';
 
 /**
  * FORMULARIO DE UN MOVIMIENTO
@@ -35,10 +36,12 @@ export type EntryKind = 'INCOME' | 'EXPENSE' | 'OWNER_WITHDRAWAL' | 'OWNER_CONTR
 
 /** Cómo se llama cada operación donde se elige y en su pantalla. */
 export const TITULO_MOVIMIENTO: Record<EntryKind, string> = {
-  INCOME: 'Registrar ingreso',
-  EXPENSE: 'Registrar gasto',
-  OWNER_WITHDRAWAL: 'Retiro personal',
-  OWNER_CONTRIBUTION: 'Registrar aporte',
+  INCOME: 'Recibí dinero',
+  EXPENSE: 'Gasté dinero',
+  // El nombre dice lo que la persona hace, no lo que el libro mayor anota. Antes
+  // decía «Retiro personal», que se confundía con «pasar dinero a mi cuenta».
+  OWNER_WITHDRAWAL: 'Dinero para mí',
+  OWNER_CONTRIBUTION: 'Aporte a un negocio',
   ADJUSTMENT: 'Ajuste de saldo',
 };
 
@@ -103,9 +106,26 @@ const PREGUNTA_IMPORTE: Record<EntryKind, string> = {
 const EJEMPLO_DESCRIPCION: Record<EntryKind, string> = {
   INCOME: 'Ej.: Venta del día',
   EXPENSE: 'Ej.: Combustible',
-  OWNER_WITHDRAWAL: 'Ej.: Retiro para la casa',
+  OWNER_WITHDRAWAL: 'Ej.: Gastos de la casa',
   OWNER_CONTRIBUTION: 'Ej.: Aporte de capital',
   ADJUSTMENT: 'Ej.: Faltante en el cierre',
+};
+
+/**
+ * QUÉ SE GUARDA SI NO SE ESCRIBE DESCRIPCIÓN
+ * ------------------------------------------
+ * La descripción dejó de ser obligatoria: es un campo que se rellena «por si
+ * acaso» y obligaba a inventar una palabra para poder guardar un gasto de 200
+ * pesos. Ahora, si está vacía, se usa la categoría elegida (que ya dice qué fue)
+ * o este texto genérico. Sigue siendo editable antes de guardar, y lo que se
+ * guardará se muestra en el propio campo para que no haya sorpresas.
+ */
+const DESCRIPCION_POR_DEFECTO: Record<EntryKind, string> = {
+  INCOME: 'Ingreso',
+  EXPENSE: 'Gasto',
+  OWNER_WITHDRAWAL: 'Dinero para mí',
+  OWNER_CONTRIBUTION: 'Aporte',
+  ADJUSTMENT: 'Ajuste de saldo',
 };
 
 interface Account {
@@ -115,6 +135,10 @@ interface Account {
   type: string;
   isCreditCard: boolean;
   balance: string;
+  /** Parte del saldo que es de empresas y no se puede gastar. */
+  custody?: string;
+  /** Lo que de verdad se puede usar. */
+  available?: string | null;
 }
 
 interface Category {
@@ -192,11 +216,34 @@ export function MovimientoForm({ kind, initialEntityId }: MovimientoFormProps) {
     return [];
   }, [categoriesQuery.data, categoriasLocales, kind]);
 
+  // LA DESCRIPCIÓN QUE SE VA A GUARDAR, calculada antes de pintar el campo:
+  // así se puede enseñar dentro del propio formulario y no hay sorpresas al
+  // guardar. Orden: lo que escribió la persona → la categoría elegida → genérico.
+  const nombreCategoria = categories.find((category) => category.id === categoryId)?.name ?? '';
+  const descripcionFinal = description.trim() || nombreCategoria || DESCRIPCION_POR_DEFECTO[kind];
+
+  /**
+   * LA CUENTA QUE YA SE USÓ
+   * -----------------------
+   * Se recuerda la cuenta del último movimiento de este mismo tipo en esta misma
+   * unidad (ver `lib/preferencias.ts`). Sólo se usa si esa cuenta sigue estando
+   * en la lista del servidor: un identificador recordado nunca puede provocar un
+   * movimiento en una cuenta que ya no existe o a la que no se tiene acceso.
+   *
+   * También corrige un caso que antes pasaba desapercibido: al cambiar de unidad
+   * financiera, la cuenta elegida se quedaba la de la unidad anterior y el
+   * formulario mostraba una cuenta que ya no estaba en la lista.
+   */
   useEffect(() => {
-    if (!accountId && accounts.length > 0) {
-      setAccountId(accounts[0].id);
+    if (accounts.length === 0) {
+      return;
     }
-  }, [accounts, accountId]);
+    if (accounts.some((account) => account.id === accountId)) {
+      return;
+    }
+    const recordada = leerUltimaCuenta(kind, entityId);
+    setAccountId(accounts.some((account) => account.id === recordada) ? recordada : accounts[0].id);
+  }, [accounts, accountId, kind, entityId]);
 
   // La forma de pago sigue a la cuenta elegida: si el dinero sale del banco es
   // una transferencia; si sale de la caja, efectivo. Si la persona la cambia a
@@ -209,6 +256,41 @@ export function MovimientoForm({ kind, initialEntityId }: MovimientoFormProps) {
     }
   }, [tipoCuentaSeleccionada]);
 
+  /**
+   * AVISO DE SALDO
+   * --------------
+   * Antes no se decía nada: se podía apuntar un gasto de 5.000 desde una cuenta con
+   * 200 y el formulario lo aceptaba en silencio. Ahora se avisa con el saldo que
+   * quedaría.
+   *
+   * Es un AVISO, no un bloqueo, y a propósito: el saldo de FINANZA es el que
+   * resulta del libro, y una cuenta puede estar legítimamente en descubierto
+   * (una diferencia bancaria pendiente de conciliar, por ejemplo). Bloquear aquí
+   * impediría registrar operaciones que sí ocurrieron en el banco. El bloqueo de
+   * sobregiros injustificados es una fase aparte, con sus propias reglas.
+   */
+  const cuentaSeleccionada = accounts.find((account) => account.id === accountId);
+  /**
+   * Lo que se puede gastar NO es el saldo del banco: si en esa cuenta hay dinero
+   * de una empresa (fondos en custodia), ese dinero no es del propietario. El
+   * servidor devuelve `available` ya descontado; si no viniera, se usa el saldo.
+   */
+  const saldoCuenta =
+    cuentaSeleccionada === undefined
+      ? null
+      : cuentaSeleccionada.available !== null && cuentaSeleccionada.available !== undefined
+        ? Number(cuentaSeleccionada.available)
+        : Number(cuentaSeleccionada.balance);
+  const custodiaCuenta = Number(cuentaSeleccionada?.custody ?? 0);
+  const superaSaldo =
+    kind !== 'INCOME' &&
+    cuentaSeleccionada !== undefined &&
+    !cuentaSeleccionada.isCreditCard &&
+    saldoCuenta !== null &&
+    amount !== '' &&
+    Number(amount) > 0 &&
+    Number(amount) > saldoCuenta;
+
   const createMutation = useMutation({
     mutationFn: async () => {
       const entity = entities.find((item) => item.id === entityId);
@@ -218,7 +300,7 @@ export function MovimientoForm({ kind, initialEntityId }: MovimientoFormProps) {
         accountId,
         amount,
         businessDate,
-        description: description.trim(),
+        description: descripcionFinal,
       };
 
       if (kind === 'INCOME' || kind === 'EXPENSE') {
@@ -234,7 +316,7 @@ export function MovimientoForm({ kind, initialEntityId }: MovimientoFormProps) {
       return submitOrQueue({
         type: 'TRANSACTION',
         payload,
-        summary: description.trim() || kind,
+        summary: descripcionFinal,
         amount,
         entityId,
         entityName: entity?.name ?? null,
@@ -257,6 +339,8 @@ export function MovimientoForm({ kind, initialEntityId }: MovimientoFormProps) {
       setAmount('');
       setDescription('');
       setCategoryId('');
+      // La próxima vez que se registre lo mismo, se abre con la misma cuenta.
+      guardarUltimaCuenta(kind, accountId, entityId);
 
       void queryClient.invalidateQueries({ queryKey: ['dashboard-summary'] });
       void queryClient.invalidateQueries({ queryKey: ['accounts'] });
@@ -280,7 +364,6 @@ export function MovimientoForm({ kind, initialEntityId }: MovimientoFormProps) {
 
   const listo =
     Boolean(entityId && accountId && amount) &&
-    description.trim().length >= 2 &&
     (kind !== 'ADJUSTMENT' ||
       (ajusteCargo.length === 4 && ajusteAbono.length === 4 && ajusteMotivo.length >= 5));
   const resumenOpciones = [businessDate === todayBusinessDate(preferences?.timezone) ? 'Hoy' : businessDate, method]
@@ -341,14 +424,6 @@ export function MovimientoForm({ kind, initialEntityId }: MovimientoFormProps) {
 
       <MoneyInput label={PREGUNTA_IMPORTE[kind]} value={amount} onChange={setAmount} autoFocus />
 
-      <Field
-        label="Descripción"
-        value={description}
-        onChange={setDescription}
-        placeholder={EJEMPLO_DESCRIPCION[kind]}
-        enterKeyHint="done"
-      />
-
       <Select
         label="Cuenta"
         value={accountId}
@@ -358,6 +433,29 @@ export function MovimientoForm({ kind, initialEntityId }: MovimientoFormProps) {
           label: `${account.name}${account.isCreditCard ? ' (tarjeta)' : ''} · ${account.balance}`,
         }))}
       />
+
+      {/* «Dinero para mí» se confundía con «pasar dinero a mi cuenta personal».
+          Una línea basta para decir qué pasa de verdad con ese dinero. */}
+      {kind === 'OWNER_WITHDRAWAL' ? (
+        <Notice tone="neutral">
+          Sale de la empresa y <strong>no es un gasto</strong>: no cambia el resultado del negocio. Tampoco entra en
+          sus cuentas personales: aquí sólo se anota el dinero que sacó.
+        </Notice>
+      ) : null}
+
+      {superaSaldo && cuentaSeleccionada ? (
+        <Notice tone="warning" title="Sale más dinero del que hay disponible">
+          Quedaría en{' '}
+          {formatMoney((Number(saldoCuenta ?? 0) - Number(amount)).toFixed(2), preferences?.currency ?? 'DOP')}.{' '}
+          {custodiaCuenta > 0 ? (
+            <>
+              En esta cuenta hay {formatMoney(custodiaCuenta.toFixed(2), preferences?.currency ?? 'DOP')} de una empresa:
+              ese dinero no es suyo y no cuenta como disponible.{' '}
+            </>
+          ) : null}
+          Puede continuar si es correcto (por ejemplo, un descubierto acordado), pero conviene revisarlo.
+        </Notice>
+      ) : null}
 
       {kind === 'INCOME' || kind === 'EXPENSE' ? (
         <Select
@@ -369,6 +467,18 @@ export function MovimientoForm({ kind, initialEntityId }: MovimientoFormProps) {
           action={<BotonNuevaCategoria onClick={() => setCrearCategoria(true)} />}
         />
       ) : null}
+
+      {/* La descripción ya no es obligatoria: va al final, después de lo que sí
+          hace falta, y se explica qué se guardará si se deja vacía. */}
+      <Field
+        label="Descripción (opcional)"
+        value={description}
+        onChange={setDescription}
+        placeholder={EJEMPLO_DESCRIPCION[kind]}
+        enterKeyHint="done"
+        hint={description.trim() === '' ? `Si lo deja vacío se guardará como «${descripcionFinal}».` : undefined}
+      />
+
 
       {kind === 'ADJUSTMENT' ? (
         <div className="space-y-3 rounded-xl border border-border-soft bg-surface-2/60 p-3">

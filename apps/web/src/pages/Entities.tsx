@@ -56,6 +56,116 @@ function asArray<T>(value: unknown): T[] {
   return [];
 }
 
+// ============================================================================
+// ESTRUCTURA JURÍDICA
+// ============================================================================
+
+interface UnidadEstructura {
+  id: string;
+  code: string;
+  name: string;
+  type: string;
+  isActive: boolean;
+  parentEntityId: string | null;
+}
+
+interface PersonaJuridica {
+  id: string;
+  code: string;
+  name: string;
+  kind: 'COMPANY' | 'INDIVIDUAL';
+  entities: UnidadEstructura[];
+}
+
+interface EstructuraResponse {
+  legalEntities: PersonaJuridica[];
+  unconfirmed: UnidadEstructura[];
+  explanation: string;
+}
+
+/**
+ * UNA FILA = UNA UNIDAD
+ * ---------------------
+ * Se enseña la persona jurídica y de qué unidad depende, con su estado. Si algo
+ * está sin confirmar se dice claramente y se puede resolver aquí mismo.
+ *
+ * Lo que esta pantalla NO hace: asignar sola. Una unidad sin confirmar se queda
+ * sin confirmar hasta que alguien lo decida, porque de esa relación dependen los
+ * asientos de todos sus movimientos.
+ */
+function FilaEstructura({
+  unidad,
+  personas,
+  unidades,
+  onGuardar,
+  guardando,
+}: {
+  unidad: UnidadEstructura;
+  personas: PersonaJuridica[];
+  unidades: UnidadEstructura[];
+  onGuardar: (datos: { id: string; legalEntityId: string | null; parentEntityId: string | null }) => void;
+  guardando: boolean;
+}) {
+  const personaActual = personas.find((persona) => persona.entities.some((fila) => fila.id === unidad.id));
+  const [legalEntityId, setLegalEntityId] = useState(personaActual?.id ?? '');
+  const [parentEntityId, setParentEntityId] = useState(unidad.parentEntityId ?? '');
+
+  const opcionesPersona = personas.map((persona) => ({
+    value: persona.id,
+    label: `${persona.name}${persona.kind === 'INDIVIDUAL' ? ' (persona física)' : ''}`,
+  }));
+  const opcionesPadre = unidades
+    .filter((fila) => fila.id !== unidad.id && fila.type !== 'PERSONAL')
+    .map((fila) => ({ value: fila.id, label: fila.name }));
+
+  const confirmada = Boolean(personaActual);
+
+  return (
+    <section aria-label={unidad.name} className="rounded-lg border border-border-soft p-2">
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <p className="truncate text-sm font-medium text-ink">{unidad.name}</p>
+          <p className="truncate text-xs text-faint">
+            {unidad.code} · {TYPES.find((fila) => fila.value === unidad.type)?.label ?? unidad.type}
+          </p>
+        </div>
+        <Badge tone={confirmada ? 'positive' : 'warning'}>{confirmada ? 'confirmada' : 'sin confirmar'}</Badge>
+      </div>
+
+      <div className="mt-2 space-y-2">
+        <Select
+          label="Persona jurídica"
+          value={legalEntityId}
+          onChange={setLegalEntityId}
+          options={opcionesPersona}
+          placeholder="— Sin confirmar —"
+        />
+        <Select
+          label="Depende de (opcional)"
+          value={parentEntityId}
+          onChange={setParentEntityId}
+          options={opcionesPadre}
+          placeholder="— No depende de otra —"
+        />
+        <Button
+          size="sm"
+          variant="secondary"
+          disabled={guardando}
+          onClick={() =>
+            onGuardar({
+              id: unidad.id,
+              legalEntityId: legalEntityId === '' ? null : legalEntityId,
+              parentEntityId: parentEntityId === '' ? null : parentEntityId,
+            })
+          }
+        >
+          {guardando ? 'Guardando…' : 'Guardar'}
+        </Button>
+      </div>
+    </section>
+  );
+}
+
 export function EntitiesPage() {
   const { reload } = useAuth();
   const queryClient = useQueryClient();
@@ -65,12 +175,84 @@ export function EntitiesPage() {
 
   const entities = useMemo(() => asArray<EntityRow>(entitiesQuery.data), [entitiesQuery.data]);
 
+  const [message, setMessage] = useState<{ tone: 'positive' | 'warning' | 'negative'; text: string } | null>(null);
+
+  // ---------------------------------------------------------------------
+  // Estructura jurídica
+  // ---------------------------------------------------------------------
+  const estructuraQuery = useQuery<EstructuraResponse>({
+    queryKey: ['estructura-juridica'],
+    queryFn: () => api.get<EstructuraResponse>('/entities/legal-entities'),
+  });
+
+  const estructura = estructuraQuery.data;
+
+  /** Todas las unidades, confirmadas o no, para poder elegir de quién depende cada una. */
+  const todasLasUnidades = useMemo(() => {
+    if (!estructura) {
+      return [] as UnidadEstructura[];
+    }
+    const porId = new Map<string, UnidadEstructura>();
+    for (const persona of estructura.legalEntities) {
+      for (const unidad of persona.entities) {
+        porId.set(unidad.id, unidad);
+      }
+    }
+    for (const unidad of estructura.unconfirmed) {
+      porId.set(unidad.id, unidad);
+    }
+    return [...porId.values()];
+  }, [estructura]);
+
+  const [guardandoEstructura, setGuardandoEstructura] = useState('');
+
+  const guardarEstructura = async (datos: {
+    id: string;
+    legalEntityId: string | null;
+    parentEntityId: string | null;
+  }) => {
+    setGuardandoEstructura(datos.id);
+    setMessage(null);
+    try {
+      await api.patch(`/entities/${datos.id}/structure`, {
+        legalEntityId: datos.legalEntityId,
+        parentEntityId: datos.parentEntityId,
+      });
+      setMessage({ tone: 'positive', text: 'Relación jurídica guardada. Queda registrada en la auditoría.' });
+      await queryClient.invalidateQueries({ queryKey: ['estructura-juridica'] });
+    } catch (error) {
+      setMessage({
+        tone: 'negative',
+        text: error instanceof ApiError ? error.message : 'No se pudo guardar la relación jurídica.',
+      });
+    } finally {
+      setGuardandoEstructura('');
+    }
+  };
+
+  const [nombrePersona, setNombrePersona] = useState('');
+  const [tipoPersona, setTipoPersona] = useState<'COMPANY' | 'INDIVIDUAL'>('COMPANY');
+
+  const crearPersona = async () => {
+    setMessage(null);
+    try {
+      await api.post('/entities/legal-entities', { name: nombrePersona.trim(), kind: tipoPersona });
+      setNombrePersona('');
+      setMessage({ tone: 'positive', text: 'Persona jurídica creada.' });
+      await queryClient.invalidateQueries({ queryKey: ['estructura-juridica'] });
+    } catch (error) {
+      setMessage({
+        tone: 'negative',
+        text: error instanceof ApiError ? error.message : 'No se pudo crear la persona jurídica.',
+      });
+    }
+  };
+
   const [name, setName] = useState('');
   const [code, setCode] = useState('');
   const [type, setType] = useState('BUSINESS');
   const [description, setDescription] = useState('');
   const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState<{ tone: 'positive' | 'warning' | 'negative'; text: string } | null>(null);
 
   const create = async () => {
     setBusy(true);
@@ -116,6 +298,82 @@ export function EntitiesPage() {
   return (
     <div className="space-y-4">
       {message ? <Notice tone={message.tone}>{message.text}</Notice> : null}
+
+      {/* ESTRUCTURA JURÍDICA: de quién es cada unidad. De esto depende que un
+          traspaso sea un movimiento interno o una operación que hay que
+          clasificar, así que tiene que verse y poder confirmarse. */}
+      <Card className="space-y-3">
+        <SectionTitle
+          title="Personas jurídicas"
+          hint="Quién es el dueño legal de cada unidad"
+        />
+        <p className="text-xs leading-snug text-muted">
+          Una unidad sin confirmar <strong>no se asigna sola</strong>: hasta que usted lo diga, la aplicación no permite
+          mover dinero hacia o desde ella.
+        </p>
+
+        {estructuraQuery.isLoading ? <Spinner label="Leyendo la estructura…" /> : null}
+
+        {estructura ? (
+          <>
+            <div className="space-y-1">
+              {estructura.legalEntities.map((persona) => (
+                <div key={persona.id} className="rounded-lg border border-border-soft p-2">
+                  <p className="text-sm font-medium text-ink">
+                    {persona.name}
+                    {persona.kind === 'INDIVIDUAL' ? (
+                      <span className="ml-1 text-xs font-normal text-muted">persona física</span>
+                    ) : null}
+                  </p>
+                  <p className="text-xs text-faint">
+                    {persona.entities.length === 0
+                      ? 'Sin unidades asignadas'
+                      : persona.entities.map((unidad) => unidad.name).join(' · ')}
+                  </p>
+                </div>
+              ))}
+            </div>
+
+            <div className="space-y-2 border-t border-border-soft pt-3">
+              <p className="text-xs font-medium uppercase tracking-wide text-muted">
+                {todasLasUnidades.length} unidad(es) · {estructura.unconfirmed.length} sin confirmar
+              </p>
+              {todasLasUnidades.map((unidad) => (
+                <FilaEstructura
+                  key={unidad.id}
+                  unidad={unidad}
+                  personas={estructura.legalEntities}
+                  unidades={todasLasUnidades}
+                  onGuardar={(datos) => void guardarEstructura(datos)}
+                  guardando={guardandoEstructura === unidad.id}
+                />
+              ))}
+            </div>
+
+            <div className="space-y-2 border-t border-border-soft pt-3">
+              <p className="text-xs font-medium uppercase tracking-wide text-muted">Nueva persona jurídica</p>
+              <Field
+                label="Nombre de la persona jurídica"
+                value={nombrePersona}
+                onChange={setNombrePersona}
+                placeholder="Ej.: Otra S.R.L."
+              />
+              <Select
+                label="Tipo de persona jurídica"
+                value={tipoPersona}
+                onChange={(valor) => setTipoPersona(valor as 'COMPANY' | 'INDIVIDUAL')}
+                options={[
+                  { value: 'COMPANY', label: 'Sociedad' },
+                  { value: 'INDIVIDUAL', label: 'Persona física' },
+                ]}
+              />
+              <Button size="sm" disabled={nombrePersona.trim().length < 2} onClick={() => void crearPersona()}>
+                Crear
+              </Button>
+            </div>
+          </>
+        ) : null}
+      </Card>
 
       <Card>
         <SectionTitle

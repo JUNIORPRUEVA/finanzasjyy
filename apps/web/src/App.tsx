@@ -30,6 +30,9 @@ const DailyControlPage = lazy(() =>
   import('./pages/DailyControl').then((module) => ({ default: module.DailyControlPage })),
 );
 const TransfersPage = lazy(() => import('./pages/Transfers').then((module) => ({ default: module.TransfersPage })));
+const DineroParaMiPage = lazy(() =>
+  import('./pages/DineroParaMi').then((module) => ({ default: module.DineroParaMiPage })),
+);
 const DebtsPage = lazy(() => import('./pages/Debts').then((module) => ({ default: module.DebtsPage })));
 const ObligationsPage = lazy(() =>
   import('./pages/Obligations').then((module) => ({ default: module.ObligationsPage })),
@@ -46,6 +49,12 @@ const ShoppingDetailPage = lazy(() =>
 const AuditPage = lazy(() => import('./pages/Audit').then((module) => ({ default: module.AuditPage })));
 const PeoplePage = lazy(() => import('./pages/People').then((module) => ({ default: module.PeoplePage })));
 const CustodyPage = lazy(() => import('./pages/Custody').then((module) => ({ default: module.CustodyPage })));
+const ReimbursementsPage = lazy(() =>
+  import('./pages/Reimbursements').then((module) => ({ default: module.ReimbursementsPage })),
+);
+const ReconciliationPage = lazy(() =>
+  import('./pages/Reconciliation').then((module) => ({ default: module.ReconciliationPage })),
+);
 const DatosPage = lazy(() => import('./pages/Datos').then((module) => ({ default: module.DatosPage })));
 
 /** Esqueleto de pantalla: misma silueta que las pantallas reales. */
@@ -104,6 +113,7 @@ export default function App() {
           <Route path="/ajustes" element={<SettingsPage />} />
           <Route path="/control" element={<DailyControlPage />} />
           <Route path="/traspasos" element={<TransfersPage />} />
+          <Route path="/dinero-para-mi" element={<DineroParaMiPage />} />
           <Route path="/deudas" element={<DebtsPage />} />
           <Route path="/obligaciones" element={<ObligationsPage />} />
           <Route path="/presupuestos" element={<BudgetsPage />} />
@@ -114,6 +124,8 @@ export default function App() {
           <Route path="/auditoria" element={<AuditPage />} />
           <Route path="/personas" element={<PeoplePage />} />
           <Route path="/custodia" element={<CustodyPage />} />
+          <Route path="/reembolsos" element={<ReimbursementsPage />} />
+          <Route path="/conciliacion" element={<ReconciliationPage />} />
           <Route path="/datos" element={<DatosPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

@@ -60,6 +60,20 @@ async function elegirCuenta(page: Page, etiqueta: string | RegExp, nombreCuenta:
   await select.selectOption(valor!);
 }
 
+/**
+ * Abre «Concepto y fecha» si está cerrado.
+ *
+ * El bloque recuerda si estaba abierto (el formulario es el mismo para los cuatro
+ * tipos de registro), así que pulsar siempre lo cerraría en el segundo paso.
+ * Se mira `aria-expanded`, que es justo el estado que la pantalla anuncia.
+ */
+async function abrirConceptoYFecha(page: Page): Promise<void> {
+  const boton = page.getByRole('button', { name: /Concepto y fecha/ });
+  if ((await boton.getAttribute('aria-expanded')) !== 'true') {
+    await boton.click();
+  }
+}
+
 test('el propietario registra y liquida dinero de una empresa en sus cuentas personales', async ({ page }, testInfo) => {
   const errores = collectConsoleErrors(page);
   await ensureAuthenticated(page);
@@ -91,7 +105,9 @@ test('el propietario registra y liquida dinero de una empresa en sus cuentas per
   // custodia que dinero libre hay en la cuenta. Las cifras grandes se prueban en
   // `apps/api/test/custodia.e2e-spec.ts`, sobre una base recién creada.
   await page.getByLabel('Importe', { exact: true }).fill('1000');
-  await page.getByLabel('Concepto').fill('Cobros de FULLTECH ya depositados antes de FINANZA');
+  // El concepto vive detrás de «Concepto y fecha» (se genera solo si no se escribe).
+  await abrirConceptoYFecha(page);
+  await page.getByLabel('Concepto (opcional)').fill('Cobros de FULLTECH ya depositados antes de FINANZA');
   await page.getByRole('button', { name: 'Guardar registro' }).click();
   await expect(page.getByText(/Fondos registrados/i)).toBeVisible({ timeout: 30_000 });
 
@@ -100,7 +116,8 @@ test('el propietario registra y liquida dinero de una empresa en sus cuentas per
   await page.getByLabel('¿De qué empresa es el dinero?').selectOption({ label: 'FULLTECH' });
   await elegirCuenta(page, '¿En qué cuenta suya está?', 'Banreservas personal (custodia)');
   await page.getByLabel('Importe', { exact: true }).fill('500');
-  await page.getByLabel('Concepto').fill('Venta de equipos cobrada en Banreservas personal');
+  await abrirConceptoYFecha(page);
+  await page.getByLabel('Concepto (opcional)').fill('Venta de equipos cobrada en Banreservas personal');
   await page.getByRole('button', { name: 'Guardar registro' }).click();
   await expect(page.getByText(/Cobro registrado/i)).toBeVisible({ timeout: 30_000 });
 

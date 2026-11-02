@@ -4,12 +4,14 @@ import {
   IconBuilding,
   IconCalendar,
   IconChart,
+  IconCheck,
   IconDebt,
   IconFile,
   IconHome,
   IconList,
   IconLock,
   IconPlus,
+  IconRefresh,
   IconSettings,
   IconTarget,
   IconTransfer,
@@ -163,6 +165,19 @@ export const DRAWER_ENTRIES: NavEntry[] = [
     order: 11,
   },
   {
+    // Cierra el ciclo de la custodia por el otro lado: en vez de que una empresa
+    // tenga dinero suyo en custodia, es el propietario quien adelantó un gasto
+    // de la empresa y hay que devolvérselo.
+    id: 'reembolsos',
+    label: 'Reembolsos',
+    hint: 'Pagué algo del negocio con mi dinero',
+    icon: IconRefresh,
+    to: '/reembolsos',
+    group: 'gestion',
+    availability: 'ready',
+    order: 12,
+  },
+  {
     id: 'deudas',
     label: 'Deudas y préstamos',
     hint: 'Cuotas, tarjetas e intereses',
@@ -171,6 +186,18 @@ export const DRAWER_ENTRIES: NavEntry[] = [
     group: 'gestion',
     availability: 'ready',
     order: 13,
+  },
+  {
+    // Comparar el saldo del libro con el del banco. Va aquí, al lado de las
+    // cuentas, porque es lo que se hace al revisar el extracto.
+    id: 'conciliacion',
+    label: 'Conciliar cuentas',
+    hint: 'Comparar con el banco y corregir diferencias',
+    icon: IconCheck,
+    to: '/conciliacion',
+    group: 'gestion',
+    availability: 'ready',
+    order: 15,
   },
   // «Por cobrar», «por pagar» y «recurrentes» son tres pestañas de la MISMA
   // pantalla: se quedan en una entrada, como en Ajustes.

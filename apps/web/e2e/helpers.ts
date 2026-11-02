@@ -64,7 +64,16 @@ export function navAddButton(page: Page) {
  * aunque la aplicación esté perfecta.
  */
 export function quickMenu(page: Page) {
-  return page.getByRole('dialog', { name: '¿Qué quiere registrar?' });
+  return page.getByRole('dialog', { name: '¿Qué desea hacer?' });
+}
+
+/**
+ * Despliega «Más operaciones» dentro del panel de acciones.
+ * Las ocasionales no están en el DOM hasta que se piden: así el panel enseña
+ * cuatro cosas y no nueve.
+ */
+export async function masOperaciones(page: Page) {
+  await quickMenu(page).getByRole('button', { name: /Más operaciones/ }).click();
 }
 
 /** Botón de tres líneas que abre el menú lateral. */
@@ -242,7 +251,10 @@ export const APP_ROUTES: Array<{ path: string; name: string }> = [
   { path: '/control', name: 'Mi control diario' },
   { path: '/cierres', name: 'Cierre del día' },
   { path: '/traspasos', name: 'Traspasos' },
+  { path: '/dinero-para-mi', name: 'Dinero para mí' },
   { path: '/custodia', name: 'Fondos en custodia' },
+  { path: '/reembolsos', name: 'Pagué algo del negocio con mi dinero' },
+  { path: '/conciliacion', name: 'Conciliar con el banco' },
   { path: '/datos', name: 'Salud de los datos' },
   { path: '/deudas', name: 'Préstamos y deudas' },
   { path: '/obligaciones', name: 'Obligaciones' },

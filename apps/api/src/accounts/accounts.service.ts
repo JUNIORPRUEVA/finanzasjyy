@@ -35,6 +35,7 @@ export interface UpdateAccountInput {
   paymentDueDay?: number | null;
   openingBalance?: string;
   openingDate?: string;
+  allowOverdraft?: boolean;
 }
 
 /**
@@ -151,7 +152,31 @@ export class AccountsService {
       financialAccountIds: accounts.map((account) => account.id),
     });
 
-    return accounts.map((account) => this.present(account, dec(balances.get(account.id)?.balance ?? 0), balances.get(account.id)?.movementCount ?? 0));
+    /**
+     * SALDO CONTABLE ≠ SALDO DISPONIBLE
+     * ---------------------------------
+     * En una cuenta personal puede haber dinero de una empresa (fondos en
+     * custodia). Ese dinero está en el banco —el saldo contable es correcto— pero
+     * el propietario no puede gastarlo. `available` descuenta esa parte.
+     *
+     * No se inventa nada: la custodia pendiente ya está registrada en el libro
+     * (cuenta 2150) y aquí sólo se agrupa por cuenta para poder enseñarla.
+     */
+    const funds = await this.prisma.custodyFund.findMany({
+      where: { holdingAccountId: { in: accounts.map((account) => account.id) }, status: { in: ['OPEN', 'PARTIAL'] } },
+      select: { holdingAccountId: true, originalAmount: true, appliedAmount: true },
+    });
+    const custodyByAccount = new Map<string, ReturnType<typeof dec>>();
+    for (const fund of funds) {
+      const pendiente = dec(fund.originalAmount).minus(dec(fund.appliedAmount));
+      custodyByAccount.set(fund.holdingAccountId, (custodyByAccount.get(fund.holdingAccountId) ?? dec(0)).plus(pendiente));
+    }
+
+    return accounts.map((account) => {
+      const balance = dec(balances.get(account.id)?.balance ?? 0);
+      const custody = custodyByAccount.get(account.id) ?? dec(0);
+      return this.present(account, balance, balances.get(account.id)?.movementCount ?? 0, custody);
+    });
   }
 
   async get(user: AuthenticatedUser, accountId: string) {
@@ -218,6 +243,7 @@ export class AccountsService {
         paymentDueDay: input.paymentDueDay === null ? null : input.paymentDueDay,
         openingBalance,
         openingDate: input.openingDate ? toBusinessDate(input.openingDate) : undefined,
+        allowOverdraft: input.allowOverdraft,
       },
     });
 
@@ -296,12 +322,22 @@ export class AccountsService {
       paymentDueDay: number | null;
       status: string;
       notes: string | null;
+      allowOverdraft: boolean;
       ledgerAccount?: { code: string; name: string; normalBalance: string };
       entity?: { id: string; code: string; name: string; currency: string };
     },
     balance: ReturnType<typeof dec>,
     movementCount = 0,
+    /** Dinero de empresas que está en esta cuenta y no es del propietario. */
+    custody: ReturnType<typeof dec> = dec(0),
   ) {
+    const saldo = dec(balance);
+    const enCustodia = dec(custody);
+    // En una tarjeta de crédito el «disponible» es el límite menos la deuda.
+    const disponible = account.isCreditCard
+      ? (account.creditLimit === null ? null : dec(account.creditLimit).minus(saldo))
+      : saldo.minus(enCustodia);
+
     return {
       id: account.id,
       entityId: account.entityId,
@@ -319,7 +355,13 @@ export class AccountsService {
       creditLimit: account.creditLimit === null ? null : dec(account.creditLimit).toFixed(2),
       statementDay: account.statementDay,
       paymentDueDay: account.paymentDueDay,
-      balance: dec(balance).toFixed(2),
+      balance: saldo.toFixed(2),
+      /** Parte del saldo que es de empresas (no se puede gastar). */
+      custody: enCustodia.toFixed(2),
+      /** Lo que de verdad se puede usar: saldo − custodia (o límite − deuda). */
+      available: disponible === null ? null : disponible.toFixed(2),
+      /** Política de la cuenta: si está en `false`, el servidor no deja sobregirarla. */
+      allowOverdraft: account.allowOverdraft,
       movementCount,
       ledgerAccount: account.ledgerAccount,
     };

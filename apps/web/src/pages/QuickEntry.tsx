@@ -13,6 +13,21 @@ import { IconChevronLeft } from '../components/icons';
  * Se quitaron la tarjeta de «Cuentas disponibles» y las notas de pie (fecha de
  * negocio, zona horaria): eran ruido al lado de lo único que se viene a hacer.
  */
+/**
+ * SUBTÍTULO DE CADA PANTALLA
+ * --------------------------
+ * Una sola línea que dice qué se está apuntando y qué NO pasa, sin explicar
+ * contabilidad. Es el único texto de ayuda de la pantalla: si hiciera falta más,
+ * es que el formulario está pidiendo demasiado.
+ */
+const SUBTITULO_MOVIMIENTO: Record<EntryKind, string> = {
+  INCOME: 'Importe, cuenta y listo. La descripción es opcional.',
+  EXPENSE: 'Importe, cuenta y listo. La descripción es opcional.',
+  OWNER_WITHDRAWAL: 'Dinero que saca de un negocio para usted. No es un gasto.',
+  OWNER_CONTRIBUTION: 'Dinero suyo que entra en un negocio.',
+  ADJUSTMENT: 'Corrige un saldo dejando rastro de por qué.',
+};
+
 export function QuickEntryPage() {
   const [params] = useSearchParams();
 
@@ -32,7 +47,7 @@ export function QuickEntryPage() {
         </Link>
         <div className="min-w-0">
           <h1 className="truncate text-base font-bold tracking-tight text-ink">{TITULO_MOVIMIENTO[kind]}</h1>
-          <p className="truncate text-xs text-muted">Importe, descripción y cuenta. Nada más hace falta.</p>
+          <p className="truncate text-xs text-muted">{SUBTITULO_MOVIMIENTO[kind]}</p>
         </div>
       </div>
 

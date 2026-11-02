@@ -14,6 +14,8 @@ import { CategoriesModule } from './categories/categories.module.js';
 import { ClosingsModule } from './closings/closings.module.js';
 import { CounterpartiesModule } from './counterparties/counterparties.module.js';
 import { CustodyModule } from './custody/custody.module.js';
+import { ReimbursementsModule } from './reimbursements/reimbursements.module.js';
+import { ReconciliationModule } from './reconciliation/reconciliation.module.js';
 import { DailyControlModule } from './daily-control/daily-control.module.js';
 import { DashboardModule } from './dashboard/dashboard.module.js';
 import { EntitiesModule } from './entities/entities.module.js';
@@ -67,6 +69,8 @@ import { TransfersModule } from './transfers/transfers.module.js';
     CategoriesModule,
     CounterpartiesModule,
     CustodyModule,
+    ReimbursementsModule,
+    ReconciliationModule,
     LedgerModule,
     TransactionsModule,
     TransfersModule,

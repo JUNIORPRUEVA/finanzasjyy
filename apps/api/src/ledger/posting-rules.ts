@@ -166,6 +166,16 @@ export function buildPostingLines(context: PostingContext): PostingLine[] {
         'Los movimientos de custodia se contabilizan con CustodyService (dos asientos: empresa dueña y unidad que custodia).',
       );
 
+    // Los reembolsos al propietario tampoco: cada uno genera DOS asientos (la
+    // empresa y las finanzas personales) y los construye `ReimbursementsService`,
+    // que es quien conoce las dos unidades y la deuda con el propietario.
+    case 'OWNER_PAID_COMPANY_EXPENSE':
+    case 'OWNER_REIMBURSEMENT_PAYMENT':
+    case 'OWNER_ADVANCE_TO_COMPANY':
+      throw new InvariantError(
+        'Los reembolsos al propietario se contabilizan con ReimbursementsService (dos asientos: gasto en la empresa y derecho de cobro en la unidad del propietario).',
+      );
+
     default: {
       const exhaustive: never = context.kind;
       throw new InvariantError(`Tipo de movimiento no soportado: ${String(exhaustive)}`);

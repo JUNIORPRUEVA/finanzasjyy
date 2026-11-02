@@ -38,10 +38,18 @@ Leyenda: ✅ hecho y probado · 🟡 hecho en el servidor, sin interfaz todavía
 
 | Función | Estado | Detalle |
 | --- | --- | --- |
-| Registrar ingresos | ✅ | Pantalla «Registrar», con categoría, método y fecha de negocio |
+| Registrar ingresos | ✅ | Pantalla «Recibí dinero», con categoría, método y fecha de negocio |
 | Registrar gastos | ✅ | Igual, con categoría obligatoria por tipo |
+| Descripción opcional y automática | ✅ | Si se deja vacía se usa la categoría o un texto por tipo; el campo enseña qué se guardará |
 | Retiros del propietario | ✅ | Cuenta 3200, separados del gasto del negocio |
+| **Dinero para mí (empresa → cuenta personal)** | ✅ | `/dinero-para-mi`: el dinero sale del negocio **y entra en la cuenta personal**. Naturaleza declarada: «es mi dinero» (empresa 3200 / personal 1230) o «la empresa me lo presta» (empresa 1250 / personal 2202, exige documento). Sin naturaleza no se registra; nunca toca cuentas de resultado |
 | Aportes del propietario | ✅ | Cuenta 3100 |
+| **Estructura jurídica de las unidades** | ✅ | Persona jurídica + unidad de la que depende; A/B/C/D clasificado; lo que cruza sociedades se rechaza hasta clasificarlo |
+| **Reembolsos («pagué algo del negocio con mi dinero»)** | ✅ | El gasto se reconoce una vez en la empresa; en PERSONAL es un derecho de cobro (1200), no un gasto. Devolución total o parcial sin gasto nuevo. Anulación con reverso |
+| **Saldo disponible real** | ✅ | `balance` (contable) · `custody` (de empresas) · `available` (suyo) |
+| **Conciliación guiada con el banco** | ✅ | Compara, explica la diferencia, exige causa y sólo ajusta con autorización explícita; se puede guardar sin tocar el saldo |
+| **Estructura jurídica editable** | ✅ | Unidades financieras → Personas jurídicas: asignar sociedad/persona física, dependencia y estado, con auditoría |
+| **Bloqueo de sobregiro por cuenta** | ✅ | Opt-in por cuenta (`allowOverdraft`): si se activa, el servidor rechaza el gasto que deje la cuenta en negativo |
 | Ajustes manuales (debe/haber explícitos) | ✅ | Sólo con cuentas indicadas; es la vía para diferencias de caja |
 | Saldo de cuenta por período | ✅ | Calculado del libro; incluye saldo inicial |
 | Listado de movimientos con filtros, búsqueda y paginación | ✅ | Pantalla «Movimientos» |
@@ -132,7 +140,7 @@ personal. El banco tiene ese dinero de verdad, pero no es suyo.
 | Consumo de presupuestos en porcentaje | ✅ | |
 | Tareas pendientes (cierre de ayer sin hacer, cuentas sin recuento, etc.) | ✅ | Menú lateral → *Mi control diario* (barra inferior, con contador) |
 | Códigos de color VERDE/AMARILLO/ROJO | ✅ | Reglas explicitadas, no decorativas |
-| Acciones rápidas con nombre llano | ✅ | Botón central *Añadir*: ingreso, gasto, transferencia, retiro personal, compras y cerrar el día |
+| Acciones rápidas con nombre llano | ✅ | Botón central *Añadir*: **Recibí dinero**, **Gasté dinero**, **Moví dinero**, **Dinero para mí** y *Más operaciones* (custodia, aportes, ajustes y cierre) |
 | Estados vacíos honestos | ✅ | Sin movimientos no se muestran gráficos; sin presupuesto no se dice «va bien»; sin cierre no se dice «cerrado» |
 
 ## 8 bis. Compras personales (nuevo)

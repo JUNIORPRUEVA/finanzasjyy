@@ -124,6 +124,18 @@ class UpdateAccountDto {
   @IsOptional()
   @IsString()
   openingDate?: string;
+
+  /**
+   * ¿Se permite que esta cuenta quede en negativo?
+   *
+   * En `true` (por defecto) FINANZA avisa pero no bloquea, porque el saldo del
+   * libro puede no coincidir con el banco mientras haya diferencias sin
+   * conciliar. En `false` el servidor RECHAZA cualquier gasto que deje la cuenta
+   * por debajo de cero.
+   */
+  @IsOptional()
+  @IsBoolean()
+  allowOverdraft?: boolean;
 }
 
 class ListAccountsQuery {

@@ -60,7 +60,7 @@ test.describe('personas con acceso', () => {
     const descripcion = `Firma de prueba ${Date.now()}`;
     await page.goto('/registrar?kind=EXPENSE');
     await page.getByLabel('¿Cuánto salió?').fill('10.00');
-    await page.getByLabel('Descripción').fill(descripcion);
+    await page.getByLabel('Descripción (opcional)').fill(descripcion);
 
     // Antes de guardar, la propia pantalla avisa de a quién va a firmar.
     await expect(page.getByText(/Se guardará como/i)).toBeVisible();

@@ -117,6 +117,19 @@ enum TxnKind {
   /// empezar a usar FINANZA. No es un ingreso ni un cobro: se reconoce contra el
   /// patrimonio de apertura (3400) para no inventar ventas ni recobrar facturas.
   CUSTODY_OPENING
+  /// El propietario paga un gasto DE LA EMPRESA con dinero propio. En los libros
+  /// de la empresa: gasto + deuda con el propietario (2350). En los del
+  /// propietario: sale el dinero y nace un derecho de cobro. El gasto se
+  /// reconoce UNA sola vez (en la empresa), nunca también como gasto personal.
+  OWNER_PAID_COMPANY_EXPENSE
+  /// La empresa devuelve al propietario el dinero que adelantó. Se paga la deuda
+  /// (2350): NO es un gasto nuevo ni un ingreso para nadie.
+  OWNER_REIMBURSEMENT_PAYMENT
+  /// En los libros del PROPIETARIO: adelantó dinero suyo para pagar un gasto de
+  /// la empresa. Nace un derecho de cobro (1200) y NO es un gasto personal.
+  /// Se distingue del gasto de la empresa para que un informe consolidado no
+  /// cuente la misma operación dos veces.
+  OWNER_ADVANCE_TO_COMPANY
 }
 
 enum TxnStatus {
@@ -367,6 +380,15 @@ model PushSubscription {
 
 /// Unidad financiera independiente (FULLTECH, PHYTOEMAGRY, FULLPOS CLOUD,
 /// FINANZAS PERSONALES, o cualquier fuente de ingresos nueva).
+///
+/// JERARQUÍA JURÍDICA (dos niveles distintos, no confundirlos):
+///   · `legalEntityId`  → la PERSONA JURÍDICA de la que cuelga la unidad. Es la
+///     que decide si un movimiento es interno o entre sujetos distintos.
+///   · `parentEntityId` → la unidad de la que ésta forma parte comercialmente
+///     (APPYRA es una marca de FULLTECH, no una sociedad).
+///
+/// Una unidad SIN `legalEntityId` es de naturaleza jurídica DESCONOCIDA: el
+/// sistema no adivina y no la trata como si fuera de nadie.
 model FinancialEntity {
   id          String     @id @default(uuid())
   code        String     @unique
@@ -381,7 +403,16 @@ model FinancialEntity {
   createdAt   DateTime   @default(now())
   updatedAt   DateTime   @updatedAt
 
+  /// Persona jurídica dueña de esta unidad. NULL = pendiente de confirmar.
+  legalEntityId String?
+  /// Unidad de la que forma parte (marca, línea de negocio). NULL = no depende de otra.
+  parentEntityId String?
+
   owner User @relation("EntityOwner", fields: [ownerUserId], references: [id])
+
+  legalEntity   LegalEntity?      @relation(fields: [legalEntityId], references: [id])
+  parentEntity  FinancialEntity?  @relation("EntityHierarchy", fields: [parentEntityId], references: [id])
+  childEntities FinancialEntity[] @relation("EntityHierarchy")
 
   members          EntityMember[]
   accounts         FinancialAccount[]
@@ -403,9 +434,42 @@ model FinancialEntity {
   custodyFunds     CustodyFund[]          @relation("CustodyFundEntity")
   custodyMovements CustodyMovement[]      @relation("CustodyMovementEntity")
   reminders        Reminder[]
+  reimbursementsOwed OwnerReimbursement[] @relation("ReimbursementCompany")
+  reimbursementsPaid OwnerReimbursement[] @relation("ReimbursementOwner")
 
   @@index([isActive])
   @@index([ownerUserId])
+  @@index([legalEntityId])
+  @@index([parentEntityId])
+}
+
+/// Persona jurídica: la sociedad (FULLTECH SRL) o la persona física propietaria.
+///
+/// Se modela como TABLA y no como una cadena de texto a propósito: así la
+/// relación no puede quedar apuntando a algo que no existe, y una unidad no
+/// puede «pertenecer» a dos sociedades a la vez por un error de escritura.
+enum LegalEntityKind {
+  /// Sociedad mercantil (SRL, SA…). Lo que se reparte son dividendos.
+  COMPANY
+  /// Persona física. Lo que recibe es retribución, reembolso o préstamo.
+  INDIVIDUAL
+}
+
+model LegalEntity {
+  id        String          @id @default(uuid())
+  code      String          @unique
+  name      String
+  kind      LegalEntityKind @default(COMPANY)
+  /// RNC / NIF, si se conoce. Sirve para documentar, no para validar.
+  taxId     String?
+  notes     String?
+  isActive  Boolean         @default(true)
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
+
+  entities FinancialEntity[]
+
+  @@index([kind])
 }
 
 model EntityMember {
@@ -580,6 +644,16 @@ model FinancialAccount {
   ledgerAccountId String
   isCreditCard    Boolean       @default(false)
   creditLimit     Decimal?      @db.Decimal(18, 2)
+  ///
+  /// ¿Se permite que esta cuenta quede en negativo?
+  ///
+  /// Se deja en `true` por defecto A PROPÓSITO: el saldo de FINANZA sale del
+  /// libro mayor y puede no coincidir con el banco mientras haya diferencias sin
+  /// conciliar. Bloquear por defecto dejaría al propietario sin poder registrar
+  /// operaciones que sí ocurrieron (por ejemplo, con su cuenta personal ya en
+  /// negativo por una diferencia pendiente). El bloqueo es una decisión suya,
+  /// cuenta por cuenta, y se activa desde Cuentas y bancos.
+  allowOverdraft  Boolean       @default(true)
   statementDay    Int?
   paymentDueDay   Int?
   status          AccountStatus @default(ACTIVE)
@@ -600,6 +674,11 @@ model FinancialAccount {
   custodyFunds    CustodyFund[]           @relation("CustodyFundAccount")
   custodyHeld     CustodyMovement[]       @relation("CustodyMovementHoldingAccount")
   custodyTargets  CustodyMovement[]       @relation("CustodyMovementTargetAccount")
+
+  reimbursementsPaid       OwnerReimbursement[]        @relation("ReimbursementOwnerAccount")
+  reimbursementPaymentsOut OwnerReimbursementPayment[] @relation("ReimbursementPaymentCompanyAccount")
+  reimbursementPaymentsIn  OwnerReimbursementPayment[] @relation("ReimbursementPaymentOwnerAccount")
+  reconciliationsDetail    AccountReconciliation[]
 
   @@unique([entityId, name])
   @@index([entityId, status])
@@ -630,6 +709,7 @@ model TransactionCategory {
 
   transactions FinancialTransaction[]
   allocations  BudgetAllocation[]
+  ownerReimbursements OwnerReimbursement[]
 
   @@unique([entityId, name, kind])
   @@index([kind, isActive])
@@ -732,6 +812,72 @@ model JournalLine {
   @@index([entryId])
   @@index([ledgerAccountId])
   @@index([financialAccountId])
+}
+
+// ============================================================================
+// CONCILIACIÓN DE CUENTAS (saldo del libro contra saldo del banco)
+// ============================================================================
+
+enum ReconciliationStatus {
+  /// Informativa: se vio la diferencia pero NO se ha contabilizado nada.
+  DRAFT
+  /// Se contabilizó el ajuste (con su asiento y su motivo).
+  CONFIRMED
+  /// Se revisó y se decidió no ajustar (se espera a que aparezca el movimiento).
+  DISMISSED
+}
+
+/// POR QUÉ existe la diferencia. Sin causa no hay ajuste: una diferencia «no sé»
+/// no se convierte nunca en un gasto o un ingreso.
+enum ReconciliationCause {
+  /// Falta apuntar un movimiento que sí está en el banco.
+  UNRECORDED_MOVEMENT
+  /// Un traspaso que sale de una cuenta y aún no ha llegado a la otra.
+  PENDING_TRANSFER
+  /// El saldo inicial documentado no era el correcto.
+  OPENING_BALANCE_ERROR
+  /// Hay un movimiento registrado dos veces.
+  DUPLICATE_MOVEMENT
+  /// Todavía no se sabe. Se anota y se espera: NO se ajusta.
+  UNIDENTIFIED
+  /// Diferencia real de caja/banca revisada y autorizada expresamente.
+  /// Es la ÚNICA que puede generar un asiento de ajuste.
+  AUTHORIZED_CASH_DIFFERENCE
+}
+
+/// Una conciliación: «el banco dice X, el libro dice Y».
+///
+/// Se guarda SIEMPRE, incluso cuando el resultado es «cuadra»: así queda
+/// constancia de quién miró, cuándo y con qué cifra. Nunca se escribe el saldo a
+/// mano: si hay diferencia y se decide corregir, se crea un asiento auditable y
+/// aquí se guarda su identificador.
+model AccountReconciliation {
+  id              String               @id @default(uuid())
+  accountId       String
+  asOf            DateTime             @db.Date
+  /// Saldo que figura en el banco (lo que dice el extracto).
+  informedBalance Decimal              @db.Decimal(18, 2)
+  /// Saldo del libro en el momento de conciliar.
+  ledgerBalance   Decimal              @db.Decimal(18, 2)
+  /// Parte del saldo que era de empresas (no es del propietario).
+  custody         Decimal              @default(0) @db.Decimal(18, 2)
+  /// informed − ledger. Positivo: el banco tiene más. Negativo: falta dinero.
+  difference      Decimal              @db.Decimal(18, 2)
+  status          ReconciliationStatus @default(DRAFT)
+  /// Por qué existe la diferencia. Obligatoria al revisar.
+  cause           ReconciliationCause?
+  /// Texto libre con la causa concreta y qué se comprobó.
+  causeDetail     String?
+  /// Asiento de ajuste, si se confirmó. Sin él, la diferencia no se ha tocado.
+  journalEntryId  String?
+  notes           String?
+  createdAt       DateTime             @default(now())
+  confirmedAt     DateTime?
+
+  account FinancialAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@index([accountId, asOf])
+  @@index([status])
 }
 
 // ============================================================================
@@ -957,6 +1103,85 @@ model Payable {
 
   @@index([entityId, status])
   @@index([dueDate])
+}
+
+// ============================================================================
+// REEMBOLSOS AL PROPIETARIO
+// ============================================================================
+
+enum ReimbursementStatus {
+  OPEN
+  PARTIAL
+  SETTLED
+  VOIDED
+}
+
+/// «Pagué algo del negocio con mi dinero».
+///
+/// Se modela aparte de `Payable` a propósito: una cuenta por pagar normal es una
+/// deuda con un proveedor que nace con una factura. Esta es una deuda con el
+/// PROPIETARIO que nace de un gasto ya pagado con su dinero, y necesita dos
+/// asientos (uno en cada unidad) atados al mismo hecho.
+///
+/// Lo que garantiza que no haya duplicaciones:
+///   · El gasto se reconoce UNA vez, en la empresa (cuenta 6xxx).
+///   · El propietario NO registra un gasto: registra un derecho de cobro.
+///   · El pago posterior sólo mueve el derecho y la deuda, nunca resultados.
+model OwnerReimbursement {
+  id              String              @id @default(uuid())
+  /// Unidad que debe el dinero (la empresa).
+  companyEntityId String
+  /// Unidad del propietario que pagó (PERSONAL).
+  ownerEntityId   String
+  /// Cuenta personal de la que salió el dinero.
+  ownerAccountId  String
+  categoryId      String?
+  description     String
+  originalAmount  Decimal             @db.Decimal(18, 2)
+  /// Lo ya devuelto por la empresa. Nunca supera `originalAmount`.
+  settledAmount   Decimal             @default(0) @db.Decimal(18, 2)
+  currency        String              @default("DOP")
+  businessDate    DateTime            @db.Date
+  status          ReimbursementStatus @default(OPEN)
+  /// Asiento del gasto en la empresa (D gasto / C 2350).
+  companyEntryId  String
+  /// Asiento de la salida de dinero en la unidad del propietario.
+  ownerEntryId    String
+  /// Idempotencia: el mismo envío del dispositivo no crea dos reembolsos.
+  clientOperationId String            @unique
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+
+  companyEntity FinancialEntity      @relation("ReimbursementCompany", fields: [companyEntityId], references: [id], onDelete: Cascade)
+  ownerEntity   FinancialEntity      @relation("ReimbursementOwner", fields: [ownerEntityId], references: [id])
+  ownerAccount  FinancialAccount     @relation("ReimbursementOwnerAccount", fields: [ownerAccountId], references: [id])
+  category      TransactionCategory? @relation(fields: [categoryId], references: [id])
+  payments      OwnerReimbursementPayment[]
+
+  @@index([companyEntityId, status])
+  @@index([ownerEntityId, status])
+}
+
+/// Devolución (total o parcial) del dinero adelantado por el propietario.
+model OwnerReimbursementPayment {
+  id                String   @id @default(uuid())
+  reimbursementId   String
+  /// Cuenta de la empresa de la que sale el dinero.
+  companyAccountId  String
+  /// Cuenta personal que lo recibe.
+  ownerAccountId    String
+  amount            Decimal  @db.Decimal(18, 2)
+  businessDate      DateTime @db.Date
+  companyEntryId    String
+  ownerEntryId      String
+  clientOperationId String   @unique
+  createdAt         DateTime @default(now())
+
+  reimbursement  OwnerReimbursement @relation(fields: [reimbursementId], references: [id], onDelete: Cascade)
+  companyAccount FinancialAccount   @relation("ReimbursementPaymentCompanyAccount", fields: [companyAccountId], references: [id])
+  ownerAccount   FinancialAccount   @relation("ReimbursementPaymentOwnerAccount", fields: [ownerAccountId], references: [id])
+
+  @@index([reimbursementId, businessDate])
 }
 
 /// Obligación recurrente (alquiler, internet, nómina, cuota...). Es una plantilla:

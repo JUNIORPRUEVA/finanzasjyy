@@ -19,13 +19,15 @@ import {
   IconAlert,
   IconArrowDown,
   IconArrowUp,
-  IconBag,
   IconBuilding,
   IconCheck,
+  IconChevronDown,
   IconChevronRight,
+  IconDots,
   IconMenu,
   IconRefresh,
   IconTransfer,
+  IconUser,
   IconWallet,
   IconWifiOff,
 } from './icons';
@@ -59,17 +61,24 @@ interface PendingTasks {
 }
 
 /**
- * ACCIONES RÁPIDAS DEL BOTÓN CENTRAL
- * ----------------------------------
- * Cada una lleva su icono porque en una lista de seis opciones la vista necesita
- * un ancla: se reconoce «el bolso» de Compras antes de leer nada. Van agrupadas
- * por para qué sirven, que es como se piensa al entrar aquí («voy a apuntar un
- * gasto» / «voy a la compra»), no por orden de llegada al código.
+ * ACCIONES DEL BOTÓN CENTRAL
+ * --------------------------
+ * CAMBIO DE CRITERIO (simplificación): antes había seis opciones repartidas en
+ * dos grupos («Movimientos» y «Otros»), y dos de ellas repetían destinos que ya
+ * están en la barra de abajo («Compras») o en el menú lateral. Seis opciones
+ * obligan a leer; cuatro se reconocen de un vistazo.
  *
- * Las de movimiento abren su PÁGINA COMPLETA (`/registrar?kind=…`): el formulario
- * necesita sitio para todo lo que hay que poder revisar antes de guardar, y así
- * lo que se abre es exactamente lo que se eligió, sin pestañas para cambiar de
- * tipo dentro.
+ * Ahora hay **cuatro acciones diarias** y un quinto acceso, «Más operaciones»,
+ * que NO navega: despliega las ocasionales en el mismo panel. Así lo que se usa
+ * todos los días está siempre en el mismo sitio y en el mismo orden, y lo raro no
+ * ocupa espacio hasta que se pide.
+ *
+ * Los nombres están en primera persona («Recibí dinero», «Gasté dinero») porque
+ * es como se piensa la operación justo después de que ocurra, sin traducir a
+ * vocabulario contable.
+ *
+ * Las acciones abren su PÁGINA COMPLETA (`/registrar?kind=…`): lo que se abre es
+ * exactamente lo que se eligió, sin pestañas para cambiar de tipo dentro.
  */
 interface AccionRapida {
   label: string;
@@ -78,28 +87,51 @@ interface AccionRapida {
   to: string;
 }
 
-const QUICK_ACTIONS: Array<{ titulo: string; acciones: AccionRapida[] }> = [
+/** Lo que se hace casi todos los días. Cuatro, siempre en el mismo orden. */
+const ACCIONES_DIARIAS: AccionRapida[] = [
+  { to: '/registrar?kind=INCOME', label: 'Recibí dinero', hint: 'Entró dinero', icon: IconArrowDown },
+  { to: '/registrar?kind=EXPENSE', label: 'Gasté dinero', hint: 'Salió dinero', icon: IconArrowUp },
+  { to: '/traspasos', label: 'Moví dinero', hint: 'De una cuenta suya a otra', icon: IconTransfer },
   {
-    titulo: 'Movimientos',
-    acciones: [
-      { to: '/registrar?kind=INCOME', label: 'Registrar ingreso', hint: 'Entra dinero', icon: IconArrowDown },
-      { to: '/registrar?kind=EXPENSE', label: 'Registrar gasto', hint: 'Sale dinero', icon: IconArrowUp },
-      { to: '/traspasos', label: 'Transferir dinero', hint: 'Entre sus cuentas o negocios', icon: IconTransfer },
-      {
-        to: '/registrar?kind=OWNER_WITHDRAWAL',
-        label: 'Retiro personal',
-        hint: 'Saca dinero para usted, no es gasto',
-        icon: IconWallet,
-      },
-    ],
+    to: '/dinero-para-mi',
+    label: 'Dinero para mí',
+    hint: 'Saca dinero de un negocio para usted',
+    icon: IconUser,
+  },
+];
+
+/**
+ * Lo que se hace de vez en cuando. «Compras» NO está aquí: ya es un destino de la
+ * barra inferior y repetirlo era ruido (se pidió expresamente no duplicar).
+ */
+const ACCIONES_OCASIONALES: AccionRapida[] = [
+  {
+    to: '/custodia',
+    label: 'Fondos en custodia',
+    hint: 'Dinero de una empresa en su cuenta personal',
+    icon: IconWallet,
   },
   {
-    titulo: 'Otros',
-    acciones: [
-      { to: '/compras', label: 'Compras', hint: 'Lista de la compra', icon: IconBag },
-      { to: '/cierres', label: 'Cerrar el día', hint: 'Cuadrar las cuentas del día', icon: IconCheck },
-    ],
+    to: '/reembolsos',
+    label: 'Reembolso del negocio',
+    hint: 'Pagué algo del negocio con mi dinero',
+    icon: IconRefresh,
   },
+  {
+    to: '/registrar?kind=OWNER_CONTRIBUTION',
+    label: 'Aporte a un negocio',
+    hint: 'Puse dinero propio en la empresa',
+    icon: IconArrowDown,
+  },
+  {
+    // Sigue disponible, pero aparte a propósito: es una corrección contable
+    // autorizada, no una operación del día a día.
+    to: '/registrar?kind=ADJUSTMENT',
+    label: 'Ajuste autorizado',
+    hint: 'Corrige un saldo dejando rastro',
+    icon: IconRefresh,
+  },
+  { to: '/cierres', label: 'Cerrar el día', hint: 'Cuadrar las cuentas del día', icon: IconCheck },
 ];
 
 export function AppShell({ children }: { children: React.ReactNode }) {  const { user, entities, sessionState, offlineAllowedUntil, reload, logout } = useAuth();
@@ -116,6 +148,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {  const {
   const [stuckLocal, setStuckLocal] = useState(0);
   const [syncing, setSyncing] = useState(false);
   const [quickOpen, setQuickOpen] = useState(false);
+  /** «Más operaciones» empieza plegado y se cierra al cerrar el panel. */
+  const [masOperaciones, setMasOperaciones] = useState(false);
   const [entitySheetOpen, setEntitySheetOpen] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [confirmLogout, setConfirmLogout] = useState(false);
@@ -203,6 +237,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {  const {
 
   const cerrarAcciones = () => {
     setQuickOpen(false);
+    setMasOperaciones(false);
   };
 
   /**
@@ -216,6 +251,35 @@ export function AppShell({ children }: { children: React.ReactNode }) {  const {
       return to;
     }
     return `${to}&entityId=${encodeURIComponent(unidad)}`;
+  };
+
+  /**
+   * Una fila del panel de acciones. Se usa igual para las diarias y para las
+   * ocasionales: la única diferencia es cuándo aparecen, no cómo se ven.
+   * Altura mínima de 3,5 rem (56 px): se pulsa con el pulgar, no con puntero fino.
+   */
+  const renderAccion = (accion: AccionRapida) => {
+    const Icon = accion.icon;
+    return (
+      <button
+        key={accion.to}
+        type="button"
+        onClick={() => {
+          cerrarAcciones();
+          void navigate(conUnidad(accion.to));
+        }}
+        className="flex min-h-[3.5rem] w-full items-center gap-3 px-3 py-2.5 text-left transition hover:bg-surface-2 active:bg-surface-2"
+      >
+        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-brand-soft text-brand">
+          <Icon size={20} />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-sm font-semibold text-ink">{accion.label}</span>
+          <span className="block truncate text-[0.72rem] leading-snug text-muted">{accion.hint}</span>
+        </span>
+        <IconChevronRight size={18} className="shrink-0 text-faint" />
+      </button>
+    );
   };
 
   const menuButtonRef = useRef<HTMLButtonElement | null>(null);
@@ -666,42 +730,37 @@ export function AppShell({ children }: { children: React.ReactNode }) {  const {
         </p>
       </Sheet>
 
-      {/* Acciones rápidas del botón central. Cada una abre su pantalla: lo que se
-          elige es lo que se abre, sin pestañas para cambiar de tipo dentro. */}
-      <Panel open={quickOpen} onClose={cerrarAcciones} title="¿Qué quiere registrar?">
-        <div className="space-y-4">
-          {QUICK_ACTIONS.map((grupo) => (
-            <section key={grupo.titulo}>
-              <h2 className="px-1 pb-1.5 text-[0.68rem] font-semibold uppercase tracking-[0.08em] text-faint">
-                {grupo.titulo}
-              </h2>
-              <div className="divide-y divide-border-soft overflow-hidden rounded-2xl border border-border-soft bg-surface">
-                {grupo.acciones.map((accion) => {
-                  const Icon = accion.icon;
-                  return (
-                    <button
-                      key={accion.to}
-                      type="button"
-                      onClick={() => {
-                        cerrarAcciones();
-                        void navigate(conUnidad(accion.to));
-                      }}
-                      className="flex min-h-[3.5rem] w-full items-center gap-3 px-3 py-2.5 text-left transition hover:bg-surface-2 active:bg-surface-2"
-                    >
-                      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-brand-soft text-brand">
-                        <Icon size={20} />
-                      </span>
-                      <span className="min-w-0 flex-1">
-                        <span className="block truncate text-sm font-semibold text-ink">{accion.label}</span>
-                        <span className="block truncate text-[0.72rem] leading-snug text-muted">{accion.hint}</span>
-                      </span>
-                      <IconChevronRight size={18} className="shrink-0 text-faint" />
-                    </button>
-                  );
-                })}
-              </div>
-            </section>
-          ))}
+      {/* Acciones del botón central. Arriba, las cuatro de todos los días; debajo,
+          «Más operaciones», que despliega las ocasionales en el mismo panel. */}
+      <Panel open={quickOpen} onClose={cerrarAcciones} title="¿Qué desea hacer?">
+        <div className="space-y-3">
+          <div className="divide-y divide-border-soft overflow-hidden rounded-2xl border border-border-soft bg-surface">
+            {ACCIONES_DIARIAS.map(renderAccion)}
+          </div>
+
+          <div className="divide-y divide-border-soft overflow-hidden rounded-2xl border border-border-soft bg-surface">
+            <button
+              type="button"
+              onClick={() => setMasOperaciones((abierto) => !abierto)}
+              aria-expanded={masOperaciones}
+              className="flex min-h-[3.5rem] w-full items-center gap-3 px-3 py-2.5 text-left transition hover:bg-surface-2 active:bg-surface-2"
+            >
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-surface-2 text-muted">
+                <IconDots size={20} />
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-sm font-semibold text-ink">Más operaciones</span>
+                <span className="block truncate text-[0.72rem] leading-snug text-muted">
+                  Custodia, aportes, ajustes y cierre del día
+                </span>
+              </span>
+              <IconChevronDown
+                size={18}
+                className={`shrink-0 text-faint transition-transform ${masOperaciones ? 'rotate-180' : ''}`}
+              />
+            </button>
+            {masOperaciones ? ACCIONES_OCASIONALES.map(renderAccion) : null}
+          </div>
         </div>
       </Panel>
 

@@ -136,6 +136,23 @@ export const IconLock = (props: IconProps) => (
 );
 
 /** Dos personas: «quién entra en la app». */
+/** Una sola persona: «dinero para mí» (el propietario, no el negocio). */
+export const IconUser = (props: IconProps) => (
+  <Icon {...props}>
+    <circle cx="12" cy="8" r="3.5" />
+    <path d="M5 20c0-3.3 3.1-5.5 7-5.5s7 2.2 7 5.5" />
+  </Icon>
+);
+
+/** Tres puntos: «más operaciones», lo que no se usa a diario. */
+export const IconDots = (props: IconProps) => (
+  <Icon {...props}>
+    <circle cx="12" cy="12" r="0.9" />
+    <circle cx="6" cy="12" r="0.9" />
+    <circle cx="18" cy="12" r="0.9" />
+  </Icon>
+);
+
 export const IconUsers = (props: IconProps) => (
   <Icon {...props}>
     <circle cx="9" cy="8" r="3.2" />

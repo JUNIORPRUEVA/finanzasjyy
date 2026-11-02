@@ -38,6 +38,8 @@ describe('FINANZA — flujo financiero completo (e2e)', () => {
   let cashAccountId = '';
   let bankAccountId = '';
   let otherCashAccountId = '';
+  /** Cuenta de caja de la unidad PERSONAL (distinta de la unidad hermana). */
+  let personalCashAccountId = '';
   let fuelCategoryId = '';
   let suppliesCategoryId = '';
 
@@ -365,10 +367,32 @@ describe('FINANZA — flujo financiero completo (e2e)', () => {
     });
 
     it('transferencia entre unidades distintas queda cuadrada en la cuenta puente', async () => {
+      // FASE 2: para que un traspaso entre unidades sea un movimiento INTERNO,
+      // las dos tienen que ser de la misma persona jurídica. Se crea una unidad
+      // hermana de negocio (la segunda unidad de este fichero son las finanzas
+      // personales, que es un sujeto jurídico distinto por definición).
+      const srl = await http
+        .post('/api/v1/entities/legal-entities')
+        .set(auth())
+        .send({ name: `SRL flujo ${runId}`, kind: 'COMPANY' })
+        .expect(201);
+      await http.patch(`/api/v1/entities/${entityId}/structure`).set(auth()).send({ legalEntityId: srl.body.id }).expect(200);
+
+      const hermana = await http
+        .post('/api/v1/entities')
+        .set(auth())
+        .send({ name: `E2E Hermana ${runId}`, type: 'BUSINESS' })
+        .expect(201);
+      await http
+        .patch(`/api/v1/entities/${hermana.body.id}/structure`)
+        .set(auth())
+        .send({ legalEntityId: srl.body.id, parentEntityId: entityId })
+        .expect(200);
+
       const otherCash = await http
         .post('/api/v1/accounts')
         .set(auth())
-        .send({ entityId: otherEntityId, name: 'Caja personal', type: 'CASH', openingBalance: '0', openingDate: today })
+        .send({ entityId: hermana.body.id, name: 'Caja hermana', type: 'CASH', openingBalance: '0', openingDate: today })
         .expect(201);
       otherCashAccountId = otherCash.body.id;
 
@@ -379,7 +403,7 @@ describe('FINANZA — flujo financiero completo (e2e)', () => {
           fromAccountId: cashAccountId,
           toAccountId: otherCashAccountId,
           amount: '1000.00',
-          description: 'Dinero para uso personal',
+          description: 'Traspaso interno entre unidades de la misma sociedad',
           clientOperationId: `e2e-cross-transfer-${runId}`,
         })
         .expect(201);
@@ -390,6 +414,27 @@ describe('FINANZA — flujo financiero completo (e2e)', () => {
 
       const cash = await http.get(`/api/v1/accounts/${cashAccountId}`).set(auth()).expect(200);
       expect(cash.body.balance).toBe('4749.50');
+
+      // Y lo que NO se puede hacer: mover dinero de la sociedad a las finanzas
+      // personales con un simple traspaso. Eso es retirada, retribución o
+      // préstamo, y hay que clasificarlo antes de contabilizarlo.
+      const cajaPersonal = await http
+        .post('/api/v1/accounts')
+        .set(auth())
+        .send({ entityId: otherEntityId, name: 'Caja personal', type: 'CASH', openingBalance: '0', openingDate: today })
+        .expect(201);
+      const rechazo = await http
+        .post('/api/v1/transfers')
+        .set(auth())
+        .send({
+          fromAccountId: cashAccountId,
+          toAccountId: cajaPersonal.body.id,
+          amount: '100.00',
+          description: 'Dinero para uso personal',
+        })
+        .expect(400);
+      expect(String(rechazo.body.message)).toMatch(/clasificar|no está confirmada/i);
+      personalCashAccountId = cajaPersonal.body.id;
     });
   });
 
@@ -853,7 +898,7 @@ describe('FINANZA — flujo financiero completo (e2e)', () => {
         .send({
           entityId: otherEntityId,
           kind: 'INCOME',
-          accountId: otherCashAccountId,
+          accountId: personalCashAccountId,
           amount: '500.00',
           description: 'Ingreso de la unidad personal',
           clientOperationId: `e2e-other-income-${runId}`,

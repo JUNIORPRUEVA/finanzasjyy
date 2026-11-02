@@ -3,6 +3,7 @@ import { IsBooleanString, IsOptional } from 'class-validator';
 import { CurrentUser, type AuthenticatedUser } from '../common/http.decorators.js';
 import { RequestMeta, type RequestMetaInfo } from '../common/request-meta.js';
 import { CreateEntityDto, EntityMemberDto, UpdateEntityDto } from './entities.dto.js';
+import { CreateLegalEntityDto, EntityStructureDto } from './entities.dto.js';
 import { EntitiesService } from './entities.service.js';
 
 class ListEntitiesQuery {
@@ -18,6 +19,21 @@ export class EntitiesController {
   @Get()
   list(@CurrentUser() user: AuthenticatedUser, @Query() query: ListEntitiesQuery) {
     return this.entities.list(user, query.includeInactive === 'true');
+  }
+
+  /** Personas jurídicas y qué unidades cuelgan de cada una. */
+  @Get('legal-entities')
+  listLegalEntities(@CurrentUser() user: AuthenticatedUser) {
+    return this.entities.listLegalEntities(user);
+  }
+
+  @Post('legal-entities')
+  createLegalEntity(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: CreateLegalEntityDto,
+    @RequestMeta() meta: RequestMetaInfo,
+  ) {
+    return this.entities.createLegalEntity(user, dto, meta);
   }
 
   @Post()
@@ -52,6 +68,22 @@ export class EntitiesController {
     @RequestMeta() meta: RequestMetaInfo,
   ) {
     return this.entities.deactivate(user, id, meta);
+  }
+
+  /**
+   * Fija la persona jurídica de la unidad y de qué unidad depende.
+   *
+   * Es lo que hace posible distinguir un traslado interno de la sociedad de un
+   * movimiento entre sujetos jurídicos distintos.
+   */
+  @Patch(':id/structure')
+  setStructure(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+    @Body() dto: EntityStructureDto,
+    @RequestMeta() meta: RequestMetaInfo,
+  ) {
+    return this.entities.setStructure(user, id, dto, meta);
   }
 
   @Post(':id/members')

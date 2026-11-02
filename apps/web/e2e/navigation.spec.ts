@@ -4,8 +4,10 @@ import {
   BOTTOM_NAV,
   collectConsoleErrors,
   ensureAuthenticated,
+  ensureTestAccount,
   expectNoHorizontalOverflow,
   expectNoWideElement,
+  masOperaciones,
   navAddButton,
   quickMenu,
 } from './helpers';
@@ -89,10 +91,10 @@ test.describe('navegación inferior', () => {
     await expect(page).toHaveURL(/\/movimientos/);
 
     await navAddButton(page).click();
-    await expect(page.getByText('¿Qué quiere registrar?')).toBeVisible();
+    await expect(page.getByText('¿Qué desea hacer?')).toBeVisible();
     // El botón de añadir es un menú: se cierra sin haber cambiado de pantalla.
     await page.getByRole('button', { name: 'Cerrar', exact: true }).first().click();
-    await expect(page.getByText('¿Qué quiere registrar?')).toBeHidden();
+    await expect(page.getByText('¿Qué desea hacer?')).toBeHidden();
 
     // «Control» puede ir acompañado del número de tareas obligatorias, así que se
     // busca por su nombre sin exigir coincidencia exacta.
@@ -122,22 +124,24 @@ test.describe('navegación inferior', () => {
     // «Retiro» y acabar registrando un gasto es justo lo que se quitó).
     const casos: Array<{ action: RegExp; url: RegExp; titulo: string; campo: string }> = [
       {
-        action: /Registrar ingreso/,
+        action: /Recibí dinero/,
         url: /\/registrar\?kind=INCOME/,
-        titulo: 'Registrar ingreso',
+        titulo: 'Recibí dinero',
         campo: '¿Cuánto entró?',
       },
       {
-        action: /Registrar gasto/,
+        action: /Gasté dinero/,
         url: /\/registrar\?kind=EXPENSE/,
-        titulo: 'Registrar gasto',
+        titulo: 'Gasté dinero',
         campo: '¿Cuánto salió?',
       },
       {
-        action: /Retiro personal/,
-        url: /\/registrar\?kind=OWNER_WITHDRAWAL/,
-        titulo: 'Retiro personal',
-        campo: '¿Cuánto retiró?',
+        // «Dinero para mí» ya no es un retiro de sólo la empresa: abre su propia
+        // pantalla, que además pregunta a qué cuenta personal llega el dinero.
+        action: /Dinero para mí/,
+        url: /\/dinero-para-mi/,
+        titulo: 'Dinero para mí',
+        campo: '¿Cuánto?',
       },
     ];
 
@@ -161,22 +165,55 @@ test.describe('navegación inferior', () => {
     await ensureAuthenticated(page);
 
     const cases: Array<{ action: RegExp; url: RegExp; expectedLabel: string }> = [
-      { action: /Transferir dinero/, url: /\/traspasos/, expectedLabel: 'Traspaso' },
-      { action: /^Compras/, url: /\/compras/, expectedLabel: 'Nueva' },
-      // La pantalla de cierre pide un «Día que se cierra»: es lo primero que se
-      // ve siempre, haya o no movimientos ese día.
-      { action: /Cerrar el día/, url: /\/cierres/, expectedLabel: 'Día que se cierra' },
+      { action: /Moví dinero/, url: /\/traspasos/, expectedLabel: 'Mover dinero' },
     ];
 
     for (const item of cases) {
-      // Se parte del inicio en cada vuelta: Compras se queda sin barra inferior,
-      // así que el botón «Añadir» no está en esa pantalla.
       await page.goto('/');
       await navAddButton(page).click();
       await quickMenu(page).getByRole('button', { name: item.action }).click();
       await expect(page).toHaveURL(item.url);
       await expect(page.getByText(item.expectedLabel, { exact: false }).first()).toBeVisible({ timeout: 15_000 });
     }
+
+    // Las ocasionales viven dentro de «Más operaciones» y no navegan hasta que se
+    // piden: el panel muestra CUATRO acciones, no nueve.
+    const ocasionales: Array<{ action: RegExp; url: RegExp; expectedLabel: string }> = [
+      { action: /Fondos en custodia/, url: /\/custodia/, expectedLabel: 'Fondos en custodia' },
+      // La pantalla de cierre pide un «Día que se cierra»: es lo primero que se
+      // ve siempre, haya o no movimientos ese día.
+      { action: /Cerrar el día/, url: /\/cierres/, expectedLabel: 'Día que se cierra' },
+    ];
+
+    for (const item of ocasionales) {
+      await page.goto('/');
+      await navAddButton(page).click();
+      await masOperaciones(page);
+      await quickMenu(page).getByRole('button', { name: item.action }).click();
+      await expect(page).toHaveURL(item.url);
+      await expect(page.getByText(item.expectedLabel, { exact: false }).first()).toBeVisible({ timeout: 15_000 });
+    }
+  });
+
+  test('el panel de añadir enseña cuatro acciones y esconde las ocasionales', async ({ page }) => {
+    await ensureAuthenticated(page);
+
+    await navAddButton(page).click();
+    const panel = quickMenu(page);
+
+    // Las cuatro de todos los días, en su orden, y una quinta puerta plegada.
+    for (const label of ['Recibí dinero', 'Gasté dinero', 'Moví dinero', 'Dinero para mí', 'Más operaciones']) {
+      await expect(panel.getByRole('button', { name: new RegExp(label) })).toBeVisible();
+    }
+
+    // «Compras» NO se repite aquí: ya es un destino de la barra inferior.
+    await expect(panel.getByRole('button', { name: /^Compras/ })).toHaveCount(0);
+    await expect(panel.getByRole('button', { name: /Fondos en custodia/ })).toHaveCount(0);
+
+    // Al desplegarla aparecen las ocasionales, sin cerrar el panel.
+    await masOperaciones(page);
+    await expect(panel.getByRole('button', { name: /Fondos en custodia/ })).toBeVisible();
+    await expect(panel.getByRole('button', { name: /Aporte a un negocio/ })).toBeVisible();
   });
 
   test('se puede cambiar de unidad financiera y el consolidado vuelve a estar disponible', async ({ page }) => {
@@ -192,6 +229,9 @@ test.describe('navegación inferior', () => {
 test.describe('formularios y diálogos', () => {
   test('el formulario de registro funciona con el teclado y muestra los campos obligatorios', async ({ page }) => {
     await ensureAuthenticated(page);
+    // Sin una cuenta no se puede registrar nada, y este fichero puede ejecutarse
+    // solo (sin las pruebas que crean cuentas antes). Se asegura aquí.
+    await ensureTestAccount(page);
     await page.goto('/registrar');
 
     // El importe está listo para escribir según se abre la pantalla.
@@ -200,12 +240,15 @@ test.describe('formularios y diálogos', () => {
     await amount.fill('99,90');
     await expect(amount).toHaveValue('99.90');
 
-    // Sin descripción no se puede registrar: el botón permanece desactivado.
+    // SIMPLIFICACIÓN: la descripción dejó de ser obligatoria. Con importe y cuenta
+    // ya se puede guardar, y si el campo se deja vacío se explica qué se guardará.
     const submit = page.getByRole('button', { name: 'Registrar movimiento' });
-    await expect(submit).toBeDisabled();
-
-    await page.getByLabel('Descripción', { exact: true }).fill('Prueba de formulario');
     await expect(submit).toBeEnabled();
+    await expect(page.getByText(/Si lo deja vacío se guardará como/i)).toBeVisible();
+
+    // Y sigue siendo editable: si se escribe, manda lo escrito.
+    await page.getByLabel('Descripción (opcional)', { exact: true }).fill('Prueba de formulario');
+    await expect(page.getByText(/Si lo deja vacío se guardará como/i)).toHaveCount(0);
   });
 
   test('la categoría que falta se puede crear sin salir del formulario y queda puesta', async ({ page }) => {
@@ -231,9 +274,9 @@ test.describe('formularios y diálogos', () => {
   test('los avisos emergentes se cierran con la tecla Escape', async ({ page }) => {
     await ensureAuthenticated(page);
     await navAddButton(page).click();
-    await expect(page.getByText('¿Qué quiere registrar?')).toBeVisible();
+    await expect(page.getByText('¿Qué desea hacer?')).toBeVisible();
     await page.keyboard.press('Escape');
-    await expect(page.getByText('¿Qué quiere registrar?')).toBeHidden();
+    await expect(page.getByText('¿Qué desea hacer?')).toBeHidden();
   });
 
   test('ningún control esencial tiene el tamaño de un alfiler', async ({ page }) => {
@@ -248,7 +291,7 @@ test.describe('formularios y diálogos', () => {
 
     // Los botones de la hoja de acciones también deben poder pulsarse con el dedo.
     await navAddButton(page).click();
-    const actionButton = page.getByRole('button', { name: /Registrar gasto/ });
+    const actionButton = page.getByRole('button', { name: /Gasté dinero/ });
     const actionBox = await actionButton.boundingBox();
     expect(actionBox!.height, 'acción de la hoja por debajo de 44 px').toBeGreaterThanOrEqual(44);
   });

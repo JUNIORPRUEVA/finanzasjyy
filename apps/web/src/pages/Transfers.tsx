@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, ApiError } from '../lib/api';
 import { submitOrQueue } from '../lib/sync';
 import { Badge, Button, Card, EmptyState, Field, MoneyInput, Notice, SectionTitle, Select, Spinner } from '../components/ui';
+import { IconChevronDown } from '../components/icons';
 import { useAuth } from '../store/auth';
 import { formatBusinessDate, formatMoney, todayBusinessDate } from '../lib/format';
 
@@ -69,6 +70,14 @@ interface TransfersResponse {
   meta?: { total: number };
 }
 
+/** Respuesta de `POST /transfers/relation`: qué hay entre las dos unidades. */
+interface RelacionJuridica {
+  relation: 'SAME_UNIT' | 'SAME_LEGAL_ENTITY' | 'DIFFERENT_LEGAL_ENTITY' | 'UNKNOWN';
+  allowed: boolean;
+  posting: string;
+  reason: string;
+}
+
 export function TransfersPage() {
   const { entities, preferences } = useAuth();
   const queryClient = useQueryClient();
@@ -90,6 +99,7 @@ export function TransfersPage() {
   const [description, setDescription] = useState('');
   const [businessDate, setBusinessDate] = useState(todayBusinessDate());
   const [reference, setReference] = useState('');
+  const [masOpciones, setMasOpciones] = useState(false);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<{ tone: 'positive' | 'warning' | 'negative'; text: string } | null>(null);
 
@@ -119,9 +129,38 @@ export function TransfersPage() {
   const isIntercompany = Boolean(fromAccount && toAccount && fromAccount.entityId !== toAccount.entityId);
   const sameAccount = Boolean(fromAccountId) && fromAccountId === toAccountId;
 
+  /**
+   * FRONTERA JURÍDICA, PREGUNTADA ANTES DE REGISTRAR
+   * -----------------------------------------------
+   * No es lo mismo mover dinero dentro de la misma sociedad que entre la
+   * sociedad y el propietario. El servidor lo decide (no el navegador) y aquí se
+   * enseña en el momento de elegir las cuentas, no después de pulsar el botón.
+   */
+  const relacionQuery = useQuery<RelacionJuridica>({
+    queryKey: ['transfer-relation', fromAccountId, toAccountId],
+    enabled: Boolean(fromAccountId && toAccountId && !sameAccount),
+    queryFn: () => api.post<RelacionJuridica>('/transfers/relation', { fromAccountId, toAccountId }),
+    retry: false,
+  });
+  const bloqueado = relacionQuery.data !== undefined && !relacionQuery.data.allowed;
+
   const availableBalance = fromAccount ? Number(fromAccount.balance) : 0;
   const exceedsBalance =
     fromAccount !== undefined && amount !== '' && Number(amount) > availableBalance && !fromAccount.isCreditCard;
+
+  /**
+   * DESCRIPCIÓN AUTOMÁTICA
+   * ----------------------
+   * «De Caja Fulltech a Ahorro Personal» ya dice todo lo que hace falta saber de
+   * un traspaso, y el sistema lo sabe porque lo acaba de elegir el usuario. Antes
+   * había que escribirla a mano, y era el único motivo por el que el botón de
+   * guardar seguía apagado con el formulario ya completo.
+   *
+   * Se sigue pudiendo cambiar: si se escribe algo, manda lo escrito.
+   */
+  const descripcionFinal =
+    description.trim() ||
+    (fromAccount && toAccount ? `De ${fromAccount.name} a ${toAccount.name}` : 'Traspaso entre cuentas');
 
   const submit = async () => {
     setMessage(null);
@@ -132,8 +171,7 @@ export function TransfersPage() {
         toAccountId,
         amount,
         businessDate,
-        description: description.trim(),
-        ...(reference.trim() ? { description: `${description.trim()} (ref. ${reference.trim()})` } : {}),
+        description: reference.trim() ? `${descripcionFinal} (ref. ${reference.trim()})` : descripcionFinal,
       };
 
       const result = await submitOrQueue({
@@ -156,8 +194,8 @@ export function TransfersPage() {
         setMessage({
           tone: 'positive',
           text: isIntercompany
-            ? 'Traspaso confirmado entre negocios. Se ha contabilizado con la cuenta puente, así que NO cuenta como ingreso en ninguna de las dos unidades.'
-            : 'Traspaso confirmado. El asiento está cuadrado y el mismo asiento respalda la salida y la entrada.',
+            ? 'Traspaso confirmado entre negocios. No cuenta como ingreso en ninguna de las dos unidades.'
+            : 'Traspaso confirmado. El saldo de las dos cuentas ya está actualizado.',
         });
       }
 
@@ -181,15 +219,15 @@ export function TransfersPage() {
     !sameAccount &&
     amount !== '' &&
     Number(amount) > 0 &&
-    description.trim().length >= 2 &&
+    !bloqueado &&
     !busy;
 
   return (
     <div className="space-y-4">
       <Card className="space-y-3">
         <SectionTitle
-          title="Traspaso entre cuentas"
-          hint="Mueva dinero del banco a la caja, entre negocios, o entre una cuenta y otra"
+          title="Mover dinero"
+          hint="De una cuenta suya a otra. No es un ingreso ni un gasto: sólo cambia de sitio."
         />
 
         {accountsQuery.isLoading ? <Spinner label="Cargando cuentas…" /> : null}
@@ -234,12 +272,16 @@ export function TransfersPage() {
               </p>
             ) : null}
 
-            {isIntercompany ? (
-              <Notice tone="neutral" title="Traspaso entre negocios">
-                El dinero sale de <strong>{fromAccount?.entity?.name}</strong> y entra en{' '}
-                <strong>{toAccount?.entity?.name}</strong>. Se contabiliza con la cuenta puente 1150 y el mismo asiento,
-                así que <strong>no cuenta como ingreso en ninguna de las dos unidades</strong> y el consolidado no se
-                infla.
+            {relacionQuery.data?.relation === 'SAME_LEGAL_ENTITY' ? (
+              <Notice tone="neutral" title="Mismo dueño">
+                Las dos cuentas son de la misma persona jurídica: es un traslado interno y no cuenta como ingreso ni
+                como gasto.
+              </Notice>
+            ) : null}
+
+            {bloqueado && relacionQuery.data ? (
+              <Notice tone="negative" title="No se puede registrar así">
+                {relacionQuery.data.reason}
               </Notice>
             ) : null}
 
@@ -266,13 +308,41 @@ export function TransfersPage() {
             ) : null}
 
             <Field
-              label="Descripción"
+              label="Descripción (opcional)"
               value={description}
               onChange={setDescription}
-              hint="Por ejemplo: traspaso a la caja de Fulltech, aporte a Phytoemagry, retiro para uso personal"
+              placeholder={fromAccount && toAccount ? `De ${fromAccount.name} a ${toAccount.name}` : 'Traspaso entre cuentas'}
+              hint={description.trim() === '' ? `Si lo deja vacío se guardará como «${descripcionFinal}».` : undefined}
             />
-            <Field label="Referencia (opcional)" value={reference} onChange={setReference} hint="Número de transferencia bancaria, comprobante…" />
-            <Field label="Fecha" value={businessDate} onChange={setBusinessDate} type="date" />
+
+            {/* La referencia y la fecha casi nunca cambian: fecha = hoy, referencia
+                = vacía. Se quedan plegadas para que el formulario corto sea corto. */}
+            <button
+              type="button"
+              onClick={() => setMasOpciones((abierto) => !abierto)}
+              aria-expanded={masOpciones}
+              className="flex w-full items-center justify-between rounded-xl px-1 py-2 text-left text-xs text-muted transition hover:text-ink"
+            >
+              <span>
+                Más opciones <span className="text-faint">· {businessDate === todayBusinessDate() ? 'hoy' : businessDate}</span>
+              </span>
+              <IconChevronDown
+                size={16}
+                className={`shrink-0 text-faint transition-transform ${masOpciones ? 'rotate-180' : ''}`}
+              />
+            </button>
+
+            {masOpciones ? (
+              <div className="space-y-3">
+                <Field label="Fecha" value={businessDate} onChange={setBusinessDate} type="date" />
+                <Field
+                  label="Referencia (opcional)"
+                  value={reference}
+                  onChange={setReference}
+                  hint="Número de transferencia bancaria, comprobante…"
+                />
+              </div>
+            ) : null}
 
             {message ? <Notice tone={message.tone}>{message.text}</Notice> : null}
 
@@ -284,7 +354,7 @@ export function TransfersPage() {
       </Card>
 
       <Card>
-        <SectionTitle title="Últimos traspasos" hint="Salida y entrada comparten el mismo asiento" />
+        <SectionTitle title="Últimos traspasos" hint="La salida y la entrada son la misma operación" />
         {transfersQuery.isLoading ? <Spinner /> : null}
         {transfersQuery.data && transfersQuery.data.data.length === 0 ? (
           <EmptyState title="No hay traspasos registrados todavía" />

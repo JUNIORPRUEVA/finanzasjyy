@@ -126,6 +126,18 @@ describe('FINANZA — integridad financiera (e2e)', () => {
       .expect(201);
     otherEntityId = other.body.id;
 
+    // FASE 2: las dos unidades son de la MISMA persona jurídica. Es lo que
+    // convierte el traspaso en un movimiento interno (cuenta puente 1150 que
+    // queda en cero) y no en una deuda entre sociedades distintas.
+    const srl = await http
+      .post('/api/v1/entities/legal-entities')
+      .set(auth())
+      .send({ name: `SRL integridad ${runId}`, kind: 'COMPANY' })
+      .expect(201);
+    for (const id of [entityId, otherEntityId]) {
+      await http.patch(`/api/v1/entities/${id}/structure`).set(auth()).send({ legalEntityId: srl.body.id }).expect(200);
+    }
+
     cashAccountId = await createAccount(entityId, `Caja ${runId}`, 'CASH');
     bankAccountId = await createAccount(entityId, `Banco ${runId}`, 'BANK');
     otherCashAccountId = await createAccount(otherEntityId, `Caja B ${runId}`, 'CASH');

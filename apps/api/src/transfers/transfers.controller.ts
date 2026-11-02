@@ -2,6 +2,7 @@ import { Body, Controller, Get, Post, Query } from '@nestjs/common';
 import { CurrentUser, type AuthenticatedUser } from '../common/http.decorators.js';
 import { RequestMeta, type RequestMetaInfo } from '../common/request-meta.js';
 import { CreateTransferDto, ListTransfersQuery } from './transfers.dto.js';
+import { PreviewTransferRelationDto } from './transfers-relation.dto.js';
 import { TransfersService } from './transfers.service.js';
 
 @Controller('transfers')
@@ -16,6 +17,15 @@ export class TransfersController {
     @RequestMeta() meta: RequestMetaInfo,
   ) {
     return this.transfers.create(user, dto, meta);
+  }
+
+  /**
+   * ¿Qué relación jurídica hay entre estas dos cuentas? No registra nada.
+   * La pantalla lo usa para avisar antes de rellenar el formulario.
+   */
+  @Post('relation')
+  relation(@CurrentUser() user: AuthenticatedUser, @Body() dto: PreviewTransferRelationDto) {
+    return this.transfers.previewRelation(user, dto.fromAccountId, dto.toAccountId);
   }
 
   @Get()

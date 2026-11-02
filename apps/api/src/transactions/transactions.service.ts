@@ -16,6 +16,7 @@ import { toBusinessDate } from '../domain/business-date.js';
 import { dec, eq, min, round2, sum, validateMoney, type DecimalInput } from '../domain/money.js';
 import { defaultPaymentMethod } from '../domain/payment-method.js';
 import { postEntry, reverseEntry, type JournalLineInput, type Tx } from '../ledger/ledger-core.js';
+import { balancesForAccounts } from '../ledger/ledger-core.js';
 import { buildPostingLines } from '../ledger/posting-rules.js';
 import { hashToken, stableStringify } from '../auth/tokens.js';
 import type { CreateTransactionDto, ListTransactionsQuery } from './transactions.dto.js';
@@ -106,6 +107,8 @@ export class TransactionsService {
 
     const amount = validateMoney(input.amount, { field: 'importe' });
     const businessDate = toBusinessDate(input.businessDate);
+
+    await this.assertFundsAvailable(account, amount, input.kind);
 
     // --- Categoría --------------------------------------------------------
     let categoryLedgerCode: string | null = null;
@@ -424,6 +427,58 @@ export class TransactionsService {
   // -------------------------------------------------------------------------
   // Internos
   // -------------------------------------------------------------------------
+
+  /**
+   * CONTROL DE FONDOS (Fase 5)
+   * --------------------------
+   * Distingue lo que el saldo contable dice de lo que se puede gastar de verdad,
+   * y sólo BLOQUEA cuando la cuenta tiene la política estricta activada.
+   *
+   * Por qué no se bloquea siempre:
+   *  · El saldo de FINANZA sale del libro mayor. Si el banco y el libro no
+   *    coinciden (una diferencia pendiente de conciliar), bloquear impediría
+   *    registrar operaciones que SÍ ocurrieron en el banco.
+   *  · El propietario tiene una cuenta personal en −105,00 de una diferencia aún
+   *    sin verificar. Con un bloqueo universal no podría apuntar nada más, y eso
+   *    no arregla la diferencia: la esconde.
+   *
+   * Por eso la decisión es por cuenta (`allowOverdraft`), se activa desde Cuentas
+   * y bancos, y queda auditada. Cuando está activa, esta comprobación impide
+   * dejar la cuenta en negativo con gastos, retiros o aportes.
+   *
+   * Las transferencias NO se comprueban aquí a propósito: mover dinero entre
+   * cuentas propias puede dejar una en negativo de forma legítima (un
+   * descubierto acordado) y esos avisos ya existen en su pantalla.
+   */
+  private static readonly SALIDAS_DE_DINERO: ReadonlySet<string> = new Set([
+    'EXPENSE',
+    'OWNER_WITHDRAWAL',
+    'OWNER_CONTRIBUTION',
+    'CREDIT_CARD_PAYMENT',
+  ]);
+
+  private async assertFundsAvailable(
+    account: { id: string; name: string; isCreditCard: boolean; allowOverdraft: boolean },
+    amount: ReturnType<typeof dec>,
+    kind: string,
+  ): Promise<void> {
+    if (account.isCreditCard || account.allowOverdraft) {
+      return;
+    }
+    if (!TransactionsService.SALIDAS_DE_DINERO.has(kind)) {
+      return;
+    }
+
+    const balances = await balancesForAccounts(this.prisma, { financialAccountIds: [account.id] });
+    const saldo = dec(balances.get(account.id)?.balance ?? 0);
+    if (saldo.minus(amount).isNegative()) {
+      throw new ValidationError(
+        `La cuenta «${account.name}» no permite saldo negativo y sólo tiene ${saldo.toFixed(2)} disponibles; ` +
+          `esta operación la dejaría en ${saldo.minus(amount).toFixed(2)}. ` +
+          'Reduzca el importe, elija otra cuenta o permita el descubierto en Cuentas y bancos si el banco lo admite.',
+      );
+    }
+  }
 
   private expectedCategoryKind(kind: TxnKind): 'INCOME' | 'EXPENSE' | null {
     switch (kind) {

@@ -154,10 +154,10 @@ test.describe('nada se pierde', () => {
 
     // 2) Registra un gasto con el botón central.
     await navAddButton(page).click();
-    // El nombre accesible de la acción incluye su explicación («Registrar gasto Sale dinero»).
-    await quickMenu(page).getByRole('button', { name: /Registrar gasto/ }).click();
+    // El nombre accesible de la acción incluye su explicación («Gasté dinero Salió dinero»).
+    await quickMenu(page).getByRole('button', { name: /Gasté dinero/ }).click();
     await page.getByLabel('¿Cuánto salió?').fill('1250.50');
-    await page.getByLabel('Descripción').fill('Compra de combustible');
+    await page.getByLabel('Descripción (opcional)').fill('Compra de combustible');
     await page.getByRole('button', { name: 'Registrar movimiento' }).click();
 
     // La aplicación NUNCA dice «guardado» si el servidor no lo ha confirmado.

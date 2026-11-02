@@ -32,9 +32,10 @@ La pantalla está pensada para el móvil. Se puede instalar:
 ### 2.0 Cómo se mueve uno por la aplicación
 
 Abajo hay **cinco sitios**, siempre los mismos: **Inicio**, **Movimientos**, **Añadir** (el botón
-del centro), **Control** y **Compras**. El botón del centro no cambia de pantalla: abre las acciones
-rápidas (registrar un ingreso, un gasto, transferir dinero, un retiro personal, compras o cerrar el
-día).
+del centro), **Control** y **Compras**. El botón del centro no cambia de pantalla: abre **cuatro
+acciones** —**Recibí dinero**, **Gasté dinero**, **Moví dinero** y **Dinero para mí**— y una quinta
+puerta, **Más operaciones**, donde viven las que se usan de vez en cuando (fondos en custodia,
+aportes, ajustes autorizados y cerrar el día).
 
 Arriba a la izquierda está el botón de tres líneas: ahí vive **todo lo demás**, en **tres bloques
 plegables** —*Gestión financiera*, *Análisis y documentos* y *Configuración*—. Se abre **sólo uno a la
@@ -67,6 +68,27 @@ La aplicación te dice **qué pasó de verdad**, sin adornos:
 
 Retirar dinero para ti **no es un gasto del negocio**: es un retiro del propietario, y se contabiliza
 aparte para que el resultado del negocio no se distorsione.
+
+### 2.1 bis «Dinero para mí»: sacar dinero de un negocio a tu cuenta
+
+Es el caso en el que el dinero sale de la empresa **y entra en tu cuenta personal**. Se hace desde
+**Dinero para mí** (menú del centro):
+
+1. Elige de qué negocio sale y de qué cuenta del negocio.
+2. Elige **a qué cuenta tuya** llega el dinero.
+3. Escribe el importe y elige qué es ese dinero:
+   - **«Es mi dinero, me lo llevo»** — no es un ingreso tuyo ni un gasto de la empresa: tu patrimonio no
+     cambia de valor, sólo pasa de «participación en tu empresa» a «dinero en tu cuenta».
+   - **«La empresa me lo presta y lo devolveré»** — queda una deuda tuya con la empresa. Exige la
+     **referencia del contrato o acuerdo**: sin ella, el botón no se activa.
+4. Guarda.
+
+Las dos cuentas bancarias quedan correctas en el acto: la del negocio baja y la tuya sube. Si no dices
+qué es el dinero, el sistema **no lo registra**: no adivina si es dividendo, nómina, préstamo o
+devolución de un adelanto. Esa clasificación legal la decide el contador, no la aplicación.
+
+Lo que **no** tienes que hacer es mover ese dinero con un **traspaso** entre el negocio y tus finanzas
+personales: ahí son dos personas jurídicas distintas y el sistema lo rechaza a propósito.
 
 ### 2.2 Al terminar el día: «Cierre» — el paso que no se salta
 

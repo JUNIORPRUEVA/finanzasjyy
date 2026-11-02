@@ -103,6 +103,76 @@ export async function runLedgerBaseline(prisma: PrismaClient): Promise<{ ledgerA
   return { ledgerAccounts: CHART_OF_ACCOUNTS.length, categories: DEFAULT_CATEGORIES.length };
 }
 
+/**
+ * PERSONAS JURÍDICAS: RELACIONES CONFIRMADAS
+ * ------------------------------------------
+ * Sólo rellena lo que el propietario confirmó expresamente:
+ *
+ *   · FULLTECH (o FULLTECH_PRINCIPAL) → sociedad FULLTECH S.R.L.
+ *   · APPYRA → MISMA sociedad, y cuelga de FULLTECH como marca.
+ *   · PERSONAL → persona física propietaria.
+ *   · Todo lo demás (PHYTOEMAGRY, FULLPOS CLOUD…) se queda SIN CONFIRMAR a
+ *     propósito: el sistema tiene que preguntar, no suponer. Tratarlas como
+ *     parte de la SRL inventaría una relación que nadie ha verificado.
+ *
+ * Nunca sobrescribe una relación ya puesta a mano: si alguien corrigió algo, se
+ * respeta. Es idempotente.
+ */
+export async function runLegalStructureSeed(prisma: PrismaClient): Promise<{ legalEntities: string[]; linked: string[] }> {
+  const srl = await prisma.legalEntity.upsert({
+    where: { code: 'FULLTECH_SRL' },
+    create: {
+      code: 'FULLTECH_SRL',
+      name: 'FULLTECH S.R.L.',
+      kind: 'COMPANY',
+      notes: 'Sociedad de responsabilidad limitada formalmente constituida.',
+    },
+    update: { name: 'FULLTECH S.R.L.', kind: 'COMPANY' },
+  });
+
+  const propietario = await prisma.legalEntity.upsert({
+    where: { code: 'PROPIETARIO' },
+    create: {
+      code: 'PROPIETARIO',
+      name: 'El propietario (persona física)',
+      kind: 'INDIVIDUAL',
+      notes: 'Finanzas personales del propietario. Sujeto jurídico distinto de la SRL.',
+    },
+    update: { name: 'El propietario (persona física)', kind: 'INDIVIDUAL' },
+  });
+
+  const linked: string[] = [];
+
+  const asignar = async (codes: string[], legalEntityId: string) => {
+    for (const code of codes) {
+      const entity = await prisma.financialEntity.findFirst({ where: { code } });
+      if (!entity || entity.legalEntityId) {
+        continue;
+      }
+      await prisma.financialEntity.update({ where: { id: entity.id }, data: { legalEntityId } });
+      linked.push(entity.code);
+    }
+  };
+
+  // La sociedad, por cualquiera de los dos códigos con los que se ha creado.
+  await asignar(['FULLTECH', 'FULLTECH_PRINCIPAL'], srl.id);
+  await asignar(['PERSONAL'], propietario.id);
+
+  // APPYRA: misma sociedad y, además, marca que cuelga de FULLTECH.
+  const fulltech = await prisma.financialEntity.findFirst({ where: { code: { in: ['FULLTECH', 'FULLTECH_PRINCIPAL'] } } });
+  const appyra = await prisma.financialEntity.findFirst({ where: { code: 'APPYRA_SISTEMAS' } });
+  if (appyra && !appyra.legalEntityId) {
+    await prisma.financialEntity.update({
+      where: { id: appyra.id },
+      data: { legalEntityId: srl.id, parentEntityId: fulltech?.id ?? null },
+    });
+    linked.push(appyra.code);
+  }
+
+  return { legalEntities: [srl.code, propietario.code], linked };
+}
+
+
 export async function runStructuralSeed(
   prisma: PrismaClient,
   options: StructuralSeedOptions = {},
@@ -170,6 +240,9 @@ export async function runStructuralSeed(
       update: { role: 'OWNER' },
     });
   }
+
+  // ---------- 5. Personas jurídicas (relaciones confirmadas) ----------
+  await runLegalStructureSeed(prisma);
 
   return {
     adminEmail,

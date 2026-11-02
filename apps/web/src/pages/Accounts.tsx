@@ -20,6 +20,12 @@ interface Account {
   creditLimit: string | null;
   balance: string;
   movementCount: number;
+  /** Parte del saldo que es de empresas (no se puede gastar). */
+  custody?: string;
+  /** Lo que de verdad se puede usar: saldo − custodia. */
+  available?: string | null;
+  /** Si está en `false`, el servidor no deja que la cuenta quede en negativo. */
+  allowOverdraft?: boolean;
   entity?: { id: string; code: string; name: string };
 }
 
@@ -87,6 +93,30 @@ export function AccountsPage() {
     }
     return mapa;
   }, [custodiaQuery.data]);
+
+  /**
+   * POLÍTICA DE SOBREGIO
+   * --------------------
+   * Se decide cuenta por cuenta, no para todas de golpe: hay cuentas donde un
+   * descubierto es normal (una cuenta corriente con un descubierto acordado) y
+   * otras donde no lo es nunca (la caja del negocio).
+   */
+  const politicaMutation = useMutation({
+    mutationFn: (datos: { id: string; allowOverdraft: boolean }) =>
+      api.patch(`/accounts/${datos.id}`, { allowOverdraft: datos.allowOverdraft }),
+    onSuccess: (_datos, variables) => {
+      setMessage({
+        tone: 'positive',
+        text: variables.allowOverdraft
+          ? 'Esta cuenta ya puede quedar en negativo (se avisa, pero no se bloquea).'
+          : 'Esta cuenta ya no puede quedar en negativo: se rechazará cualquier gasto que la sobregire.',
+      });
+      void queryClient.invalidateQueries({ queryKey: ['accounts'] });
+    },
+    onError: (error) => {
+      setMessage({ tone: 'negative', text: error instanceof ApiError ? error.message : 'No se pudo cambiar la política.' });
+    },
+  });
 
   const createMutation = useMutation({
     mutationFn: () =>
@@ -263,6 +293,28 @@ export function AccountsPage() {
                     {tieneCustodia ? 'Ver o liquidar estos fondos' : 'Registrar dinero de una empresa aquí'}
                   </Link>
                 ) : null}
+
+                {/* Dos decisiones de esta cuenta, sin salir de la pantalla:
+                    compararla con el banco y decidir si puede quedar en negativo. */}
+                <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-border-soft pt-2">
+                  <Link
+                    to={`/conciliacion?cuenta=${account.id}`}
+                    className="text-xs font-semibold text-brand underline-offset-2 hover:underline"
+                  >
+                    Conciliar con el banco
+                  </Link>
+                  {!account.isCreditCard ? (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        politicaMutation.mutate({ id: account.id, allowOverdraft: !(account.allowOverdraft ?? true) })
+                      }
+                      className="text-xs text-muted underline decoration-dotted underline-offset-2 transition hover:text-ink"
+                    >
+                      {account.allowOverdraft ?? true ? 'No permitir saldo negativo' : 'Permitir saldo negativo'}
+                    </button>
+                  ) : null}
+                </div>
               </div>
             );
           })}

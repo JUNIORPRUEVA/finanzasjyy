@@ -91,6 +91,23 @@ export async function submitOrQueue(input: {
 }): Promise<{ queued: boolean; clientOperationId: string; sentNow: boolean; error?: string }> {
   const clientOperationId = input.clientOperationId ?? newOperationId(input.type.toLowerCase());
 
+  /**
+   * OPERACIONES QUE NO SE ENCOLAN
+   * -----------------------------
+   * Un ajuste contable dice exactamente qué cuenta se carga y cuál se abona.
+   * Encolarlo sin conexión significaría aplicarlo más tarde sin que nadie pueda
+   * revisar si sigue teniendo sentido (la cuenta pudo cambiar, el saldo pudo
+   * dejar de cuadrar). Es una corrección deliberada: se hace con conexión.
+   *
+   * Los gastos, ingresos y retiros SÍ se encolan: son el día a día y, si el
+   * servidor los rechaza, quedan visibles en «Salud de los datos» para repararlos.
+   */
+  if (input.payload.kind === 'ADJUSTMENT' && !navigator.onLine) {
+    throw new OfflineError(
+      'Un ajuste contable necesita conexión: es una corrección deliberada y hay que poder comprobar las cuentas al aplicarla. Vuelva a intentarlo con internet.',
+    );
+  }
+
   if (!navigator.onLine) {
     const permission = await canOperateOffline();
     if (!permission.allowed) {

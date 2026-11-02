@@ -8,6 +8,8 @@ import { AccessService } from '../security/access.service.js';
 import { balancesForAccounts } from '../ledger/ledger-core.js';
 import { dec } from '../domain/money.js';
 import { CreateEntityDto, EntityMemberDto, UpdateEntityDto } from './entities.dto.js';
+import type { CreateLegalEntityDto, EntityStructureDto } from './entities.dto.js';
+import { validarVinculo } from '../domain/legal-structure.js';
 
 /**
  * UNIDADES FINANCIERAS
@@ -206,6 +208,215 @@ export class EntitiesService {
           ? `La unidad conserva ${transactionCount} movimientos históricos: se desactiva, no se borra.`
           : 'Unidad desactivada.',
     };
+  }
+
+  // ==========================================================================
+  // PERSONAS JURÍDICAS Y ESTRUCTURA
+  // ==========================================================================
+
+  /**
+   * Personas jurídicas con las unidades que cuelgan de cada una.
+   *
+   * Sirve para responder, de un vistazo, la pregunta que hasta ahora no tenía
+   * respuesta en FINANZA: ¿qué unidades son la misma sociedad y cuáles no?
+   */
+  async listLegalEntities(user: AuthenticatedUser) {
+    const entityIds = await this.access.listAccessibleEntityIds(user.userId);
+
+    const legalEntities = await this.prisma.legalEntity.findMany({
+      orderBy: [{ kind: 'asc' }, { name: 'asc' }],
+      include: {
+        entities: {
+          where: { id: { in: entityIds } },
+          select: {
+            id: true,
+            code: true,
+            name: true,
+            type: true,
+            isActive: true,
+            parentEntityId: true,
+            _count: { select: { accounts: true } },
+          },
+          orderBy: { name: 'asc' },
+        },
+      },
+    });
+
+    // Unidades cuya relación jurídica sigue sin confirmar: el sistema no las
+    // trata como de nadie, las deja aparte para que se puedan confirmar.
+    const sinConfirmar = await this.prisma.financialEntity.findMany({
+      where: { id: { in: entityIds }, legalEntityId: null },
+      select: { id: true, code: true, name: true, type: true, isActive: true, parentEntityId: true },
+      orderBy: { name: 'asc' },
+    });
+
+    return {
+      legalEntities: legalEntities.map((legalEntity) => ({
+        id: legalEntity.id,
+        code: legalEntity.code,
+        name: legalEntity.name,
+        kind: legalEntity.kind,
+        taxId: legalEntity.taxId,
+        notes: legalEntity.notes,
+        entities: legalEntity.entities,
+      })),
+      unconfirmed: sinConfirmar,
+      /** Explicación para la interfaz: no es un mensaje de error, es un estado. */
+      explanation:
+        sinConfirmar.length > 0
+          ? 'Estas unidades no tienen la relación jurídica confirmada. Mover dinero hacia o desde ellas está bloqueado hasta confirmarla.'
+          : 'Todas las unidades tienen su persona jurídica confirmada.',
+    };
+  }
+
+  async createLegalEntity(user: AuthenticatedUser, dto: CreateLegalEntityDto, meta: RequestMetaInfo) {
+    const code = this.slugifyCode(dto.code ?? dto.name);
+    if (!code) {
+      throw new ValidationError('No se pudo derivar un código válido para la persona jurídica');
+    }
+    const existing = await this.prisma.legalEntity.findUnique({ where: { code } });
+    if (existing) {
+      throw new ConflictError(`Ya existe una persona jurídica con el código ${code}`);
+    }
+
+    const created = await this.prisma.legalEntity.create({
+      data: {
+        code,
+        name: dto.name.trim(),
+        kind: dto.kind ?? 'COMPANY',
+        taxId: dto.taxId ?? null,
+        notes: dto.notes ?? null,
+      },
+    });
+
+    await this.audit.record({
+      userId: user.userId,
+      action: 'legalEntity.created',
+      entityType: 'LegalEntity',
+      entityId: created.id,
+      after: { code: created.code, name: created.name, kind: created.kind },
+      ip: meta.ip,
+      userAgent: meta.userAgent,
+    });
+
+    return created;
+  }
+
+  /**
+   * Fija a qué persona jurídica pertenece una unidad y de qué unidad depende.
+   *
+   * Se valida TODO aquí, en un solo sitio, porque un vínculo mal puesto cambia
+   * la contabilidad de las operaciones futuras:
+   *
+   *  · La persona jurídica tiene que existir.
+   *  · No puede haber ciclos (A depende de B que depende de A).
+   *  · El padre no puede ser la propia unidad.
+   *  · Los vínculos incompatibles se rechazan: finanzas personales dentro de una
+   *    sociedad, un negocio colgando de las finanzas personales, o un padre de
+   *    otra persona jurídica.
+   *  · Los hijos que ya dependen de esta unidad no pueden quedar en otra persona
+   *    jurídica distinta de la suya.
+   */
+  async setStructure(user: AuthenticatedUser, entityId: string, dto: EntityStructureDto, meta: RequestMetaInfo) {
+    await this.access.assertCanAdminister(user.userId, entityId);
+
+    const entity = await this.prisma.financialEntity.findUnique({ where: { id: entityId } });
+    if (!entity) {
+      throw new NotFoundError('Unidad financiera', entityId);
+    }
+
+    // `undefined` = no tocar; `null` = quitar la relación. No se confunden.
+    const legalEntityId = dto.legalEntityId === undefined ? entity.legalEntityId : dto.legalEntityId;
+    const parentEntityId = dto.parentEntityId === undefined ? entity.parentEntityId : dto.parentEntityId;
+
+    const legalEntity = legalEntityId
+      ? await this.prisma.legalEntity.findUnique({ where: { id: legalEntityId } })
+      : null;
+    if (legalEntityId && !legalEntity) {
+      throw new NotFoundError('Persona jurídica', legalEntityId);
+    }
+
+    let parent: { id: string; name: string; type: string; legalEntityId: string | null; parentEntityId: string | null } | null =
+      null;
+    if (parentEntityId) {
+      if (parentEntityId === entityId) {
+        throw new ValidationError('Una unidad no puede depender de sí misma');
+      }
+      parent = await this.prisma.financialEntity.findUnique({
+        where: { id: parentEntityId },
+        select: { id: true, name: true, type: true, legalEntityId: true, parentEntityId: true },
+      });
+      if (!parent) {
+        throw new NotFoundError('Unidad de la que depende', parentEntityId);
+      }
+
+      // Recorrido hacia arriba: si volvemos a esta unidad, hay un ciclo.
+      const vistas = new Set<string>([entityId]);
+      let actual: typeof parent | null = parent;
+      for (let salto = 0; salto < 50 && actual; salto += 1) {
+        if (vistas.has(actual.id)) {
+          throw new ValidationError('Ese vínculo crearía un ciclo entre unidades: una unidad acabaría dependiendo de sí misma.');
+        }
+        vistas.add(actual.id);
+        actual = actual.parentEntityId
+          ? await this.prisma.financialEntity.findUnique({
+              where: { id: actual.parentEntityId },
+              select: { id: true, name: true, type: true, legalEntityId: true, parentEntityId: true },
+            })
+          : null;
+      }
+    }
+
+    const motivo = validarVinculo({
+      entityType: entity.type,
+      legalEntityId,
+      legalEntityKind: legalEntity?.kind ?? null,
+      parentEntityId,
+      parentEntityType: parent?.type ?? null,
+      parentLegalEntityId: parent?.legalEntityId ?? null,
+    });
+    if (motivo) {
+      throw new ValidationError(motivo);
+    }
+
+    // Si se declara de quién depende y esa unidad ya tiene persona jurídica, la
+    // unidad la hereda: es la relación que se acaba de declarar, no una suposición.
+    let legalEntityFinal = legalEntityId;
+    if (!legalEntityFinal && parent?.legalEntityId) {
+      legalEntityFinal = parent.legalEntityId;
+    }
+
+    if (legalEntityFinal) {
+      const hijos = await this.prisma.financialEntity.findMany({
+        where: { parentEntityId: entityId },
+        select: { id: true, name: true, legalEntityId: true },
+      });
+      const incompatible = hijos.find((hijo) => hijo.legalEntityId && hijo.legalEntityId !== legalEntityFinal);
+      if (incompatible) {
+        throw new ValidationError(
+          `La unidad «${incompatible.name}» depende de ésta y pertenece a otra persona jurídica. Corrija primero esa relación.`,
+        );
+      }
+    }
+
+    const updated = await this.prisma.financialEntity.update({
+      where: { id: entityId },
+      data: { legalEntityId: legalEntityFinal, parentEntityId },
+      select: { id: true, code: true, name: true, type: true, legalEntityId: true, parentEntityId: true },
+    });
+
+    await this.audit.record({
+      userId: user.userId,
+      action: 'entity.structure.updated',
+      entityType: 'FinancialEntity',
+      entityId,
+      before: { legalEntityId: entity.legalEntityId, parentEntityId: entity.parentEntityId },
+      after: { legalEntityId: updated.legalEntityId, parentEntityId: updated.parentEntityId },
+      ip: meta.ip,
+      userAgent: meta.userAgent,
+    });
+
+    return updated;
   }
 
   async addMember(user: AuthenticatedUser, entityId: string, dto: EntityMemberDto, meta: RequestMetaInfo) {
