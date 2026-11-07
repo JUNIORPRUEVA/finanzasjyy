@@ -56,6 +56,9 @@ const ReconciliationPage = lazy(() =>
   import('./pages/Reconciliation').then((module) => ({ default: module.ReconciliationPage })),
 );
 const DatosPage = lazy(() => import('./pages/Datos').then((module) => ({ default: module.DatosPage })));
+const RemindersPage = lazy(() =>
+  import('./pages/Reminders').then((module) => ({ default: module.RemindersPage })),
+);
 
 /** Esqueleto de pantalla: misma silueta que las pantallas reales. */
 function PageSkeleton() {
@@ -127,6 +130,7 @@ export default function App() {
           <Route path="/reembolsos" element={<ReimbursementsPage />} />
           <Route path="/conciliacion" element={<ReconciliationPage />} />
           <Route path="/datos" element={<DatosPage />} />
+          <Route path="/recordatorios" element={<RemindersPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </Suspense>
