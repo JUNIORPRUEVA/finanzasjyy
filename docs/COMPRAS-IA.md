@@ -80,6 +80,11 @@ contenedor; basta con definirlas en el `.env` del servidor. `deploy/easypanel/en
 > facturación desactivada, el proveedor responde 429/401 y la app muestra «La clave de IA no es válida
 > o caducó».
 
+> **Estado en el servidor (19/11/2026):** la clave está aplicada al servicio `ventas_finanzapersonales`
+> y la API arranca con `[AiService] Lectura de facturas con IA activa (modelo gpt-4o-mini)`. Si algún
+> día se cambia, se actualiza con `docker service update --env-add OPENAI_API_KEY=...`; los detalles
+> están en `docs/DESPLIEGUE-EASYPANEL.md` §6.
+
 ## 3. Qué se envía y qué no
 
 - **Se envía**: la imagen o el PDF de la factura, únicamente para leerla.

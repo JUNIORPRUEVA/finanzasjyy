@@ -15,6 +15,11 @@ subiendo el código desde GitHub. Está pensada para hacerlo a mano, con calma, 
 > Lo que sigue queda como referencia por si algún día hay que rehacerlo desde cero, y para explicar
 > **cómo actualizar** el sistema a partir de ahora (sección 6). El detalle exacto de lo que hay en el
 > servidor está en la **sección 10**.
+>
+> **Última actualización: 19/11/2026 — commit `31302c4`** (Compras con lectura de facturas por IA,
+> catálogo de productos con su pantalla propia y formularios en hoja). La migración
+> `20261119150000_catalogo_productos` quedó aplicada y la IA está activa en el servicio de la API.
+> Antes de actualizar se guardó una copia de la base en `/root/finanza-20261119-antes-compras-ia.dump`.
 | Cosa | Estado |
 | --- | --- |
 | Código en GitHub | ✅ ya está en `https://github.com/JUNIORPRUEVA/finanzasjyy` (rama `master`) |
@@ -217,6 +222,40 @@ es crear la estructura contable y su usuario.
 3. Al arrancar, la API aplica las migraciones nuevas sola. **Nunca** se ejecuta `migrate reset` en el
    servidor: no se borran datos.
 
+### Antes de cada actualización
+
+```sh
+# copia de la base (desde la consola del contenedor de PostgreSQL)
+CID=$(docker ps --filter name=ventas_studio-db --format '{{.Names}}' | head -1)
+docker exec "$CID" pg_dump -U finanza_user -d finanza -Fc -f /tmp/finanza-antes.dump
+docker cp "$CID":/tmp/finanza-antes.dump /root/finanza-antes.dump
+```
+
+Traiga esa copia fuera del servidor (`scp`) y compruebe el `sha256sum`.
+
+### Si usa el script `deploy/servidor/actualizar.sh`
+
+```sh
+bash deploy/servidor/actualizar.sh
+```
+
+### Clave de la IA (sólo la primera vez o al cambiarla)
+
+La clave **no** vive en `/root/finanza-api.env`: se pasa al servicio de Swarm. Al actualizar la imagen
+se conserva, porque `docker service update --image` mantiene las variables del servicio.
+
+```sh
+# leer la clave de otro servicio del mismo servidor, sin escribirla en pantalla
+docker service inspect ventas_appyra-ia \
+  --format '{{range .Spec.TaskTemplate.ContainerSpec.Env}}{{println .}}{{end}}' \
+  | sed -n 's/^OPENAI_API_KEY=//p' | head -1
+
+# aplicarla a FINANZA
+docker service update --env-add OPENAI_API_KEY="LA_CLAVE" ventas_finanzapersonales
+```
+
+En los registros debe aparecer `[AiService] Lectura de facturas con IA activa`.
+
 ---
 
 ## 7. Copias de seguridad (no se salte esto)
@@ -282,6 +321,14 @@ funciona sin tocar Traefik: nginx reenvía `/api` a `http://ventas_finanzaperson
 | `/root/finanza-api.env` | Variables de la API (incluidos los dos secretos JWT y la `DATABASE_URL`) | `600` |
 | `/root/finanza-db-credentials.txt` | Usuario y contraseña de la base `finanza` | `600` |
 | `/root/finanza-acceso.txt` | Dirección, correo y contraseña **temporal** del propietario | `600` |
+
+Las variables de la IA (`OPENAI_API_KEY`, `OPENAI_MODEL`) **no** están en esos archivos: viven en la
+propia definición del servicio `ventas_finanzapersonales` (Swarm). Para comprobarlo sin ver el valor:
+
+```sh
+docker service inspect ventas_finanzapersonales \
+  --format '{{range .Spec.TaskTemplate.ContainerSpec.Env}}{{println .}}{{end}}' | sed 's/=.*/=***/'
+```
 
 Nada de eso se ha subido al repositorio, y ninguna de esas claves se ha escrito en este documento.
 
