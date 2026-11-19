@@ -16,10 +16,11 @@ subiendo el código desde GitHub. Está pensada para hacerlo a mano, con calma, 
 > **cómo actualizar** el sistema a partir de ahora (sección 6). El detalle exacto de lo que hay en el
 > servidor está en la **sección 10**.
 >
-> **Última actualización: 19/11/2026 — commit `31302c4`** (Compras con lectura de facturas por IA,
-> catálogo de productos con su pantalla propia y formularios en hoja). La migración
-> `20261119150000_catalogo_productos` quedó aplicada y la IA está activa en el servicio de la API.
-> Antes de actualizar se guardó una copia de la base en `/root/finanza-20261119-antes-compras-ia.dump`.
+> **Última actualización: 19/11/2026 — commit `2bc5f12`** (Compras con lectura de facturas por IA,
+> catálogo de productos con su pantalla propia, crear la compra desde la factura y formularios en
+> hoja). La migración `20261119150000_catalogo_productos` quedó aplicada y la IA está activa en el
+> servicio de la API. Antes de actualizar se guardó una copia de la base en
+> `/root/finanza-20261119-antes-compras-ia.dump`.
 | Cosa | Estado |
 | --- | --- |
 | Código en GitHub | ✅ ya está en `https://github.com/JUNIORPRUEVA/finanzasjyy` (rama `master`) |
