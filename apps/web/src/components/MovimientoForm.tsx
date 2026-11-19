@@ -530,7 +530,7 @@ export function MovimientoForm({ kind, initialEntityId }: MovimientoFormProps) {
           panel lleno, siempre está a la vista sin tener que desplazar. El
           degradado (en vez de una línea) hace que no parezca un corte cuando el
           formulario es corto. */}
-      <div className="sticky bottom-0 -mx-4 -mb-3 bg-gradient-to-t from-bg-elevated via-bg-elevated/95 to-transparent px-4 pb-3 pt-4">
+      <div className="sticky bottom-0 -mx-2 -mb-3 bg-gradient-to-t from-bg-elevated via-bg-elevated/95 to-transparent px-2 pb-3 pt-4">
         {/* LA FIRMA, antes de guardar: quien registra sabe que su nombre queda en
             el movimiento (y quien revisa después también lo vera). */}
         {user?.name ? (

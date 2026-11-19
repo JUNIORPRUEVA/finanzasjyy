@@ -43,6 +43,7 @@ const AttachmentsPage = lazy(() =>
 );
 const EntitiesPage = lazy(() => import('./pages/Entities').then((module) => ({ default: module.EntitiesPage })));
 const ShoppingPage = lazy(() => import('./pages/Shopping').then((module) => ({ default: module.ShoppingPage })));
+const CatalogPage = lazy(() => import('./pages/Catalog').then((module) => ({ default: module.CatalogPage })));
 const ShoppingDetailPage = lazy(() =>
   import('./pages/ShoppingDetail').then((module) => ({ default: module.ShoppingDetailPage })),
 );
@@ -123,6 +124,7 @@ export default function App() {
           <Route path="/adjuntos" element={<AttachmentsPage />} />
           <Route path="/unidades" element={<EntitiesPage />} />
           <Route path="/compras" element={<ShoppingPage />} />
+          <Route path="/compras/catalogo" element={<CatalogPage />} />
           <Route path="/compras/:id" element={<ShoppingDetailPage />} />
           <Route path="/auditoria" element={<AuditPage />} />
           <Route path="/personas" element={<PeoplePage />} />

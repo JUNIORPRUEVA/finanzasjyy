@@ -223,11 +223,92 @@ export class RegisterShoppingExpenseDto {
   method?: string;
 }
 
+/**
+ * LECTURA DE UNA FACTURA CON IA
+ * -----------------------------
+ * Se envía el archivo en base64 y la unidad a la que pertenece la compra.
+ * NO crea nada: devuelve las líneas para que el usuario las revise y confirme.
+ */
+export class ScanInvoiceDto {
+  @IsString()
+  @IsUUID(undefined, { message: 'La unidad financiera no es válida' })
+  entityId!: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  filename?: string;
+
+  @IsString()
+  @IsIn(['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'application/pdf'], {
+    message: 'Formato no admitido: use JPG, PNG, WebP o PDF',
+  })
+  mimeType!: string;
+
+  /** Contenido del archivo en base64 (con o sin prefijo data:). */
+  @IsString()
+  @Length(16, 16_000_000, { message: 'El archivo no llegó completo' })
+  contentBase64!: string;
+}
+
+/**
+ * CONSEJOS A PARTIR DEL HISTORIAL
+ * -------------------------------
+ * Se puede pedir para una unidad concreta; si no se indica, se usan todas las
+ * que el usuario puede ver.
+ */
+export class ShoppingAdviceDto {
+  @IsOptional()
+  @IsString()
+  entityId?: string;
+}
+
+/**
+ * ALIMENTAR EL CATÁLOGO DE PRODUCTOS
+ * ----------------------------------
+ * Lo llama la pantalla al aplicar una factura leída (o al importar precios).
+ * Sólo guarda nombres y precios: no crea listas ni mueve dinero.
+ */
+export class IngestCatalogDto {
+  @IsString()
+  @IsUUID(undefined, { message: 'La unidad financiera no es válida' })
+  entityId!: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(80)
+  supplier?: string | null;
+
+  @IsArray()
+  @ArrayMaxSize(300)
+  @ValidateNested({ each: true })
+  @Type(() => CatalogLineDto)
+  lines!: CatalogLineDto[];
+}
+
+export class CatalogLineDto {
+  @IsString()
+  @Length(1, 120)
+  name!: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(16)
+  unit?: string | null;
+
+  @IsOptional()
+  @IsMoneyString({ message: 'El precio por unidad' })
+  unitPrice?: string | null;
+
+  @IsOptional()
+  @Matches(QUANTITY_PATTERN, { message: 'La cantidad debe ser un número (máximo 3 decimales)' })
+  quantity?: string | null;
+}
+
 export class ShoppingListQuery extends PaginationQuery {
   @IsOptional()
   @IsString()
   entityId?: string;
-
   @IsOptional()
   @IsIn(SHOPPING_STATUSES as unknown as string[])
   status?: ShoppingStatus;

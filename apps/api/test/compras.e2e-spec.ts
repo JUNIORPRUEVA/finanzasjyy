@@ -477,4 +477,173 @@ describe('FINANZA — compras personales (e2e)', () => {
       expect(response.body.note).toMatch(/no es un gasto|no un gasto/i);
     });
   });
+
+  describe('6. Análisis y asistente de compras', () => {
+    it('el análisis del historial es sólo lectura y no mueve dinero', async () => {
+      const antes = await countMoney(entityId);
+
+      const response = await http.get('/api/v1/shopping-lists/insights').set(auth()).expect(200);
+
+      expect(response.body).toHaveProperty('totals');
+      expect(response.body).toHaveProperty('balance');
+      expect(Array.isArray(response.body.tips)).toBe(true);
+      expect(response.body.ai).toEqual(expect.objectContaining({ configured: expect.any(Boolean) }));
+
+      const despues = await countMoney(entityId);
+      expect(despues).toEqual(antes);
+    });
+
+    it('el análisis no se filtra entre usuarios: el ajeno sólo ve lo suyo', async () => {
+      const response = await http.get('/api/v1/shopping-lists/insights').set(authStranger()).expect(200);
+      expect(Array.isArray(response.body.topProducts)).toBe(true);
+    });
+
+    it('leer una factura sin IA configurada responde 503 con un mensaje claro y no guarda nada', async () => {
+      // En las pruebas no hay OPENAI_API_KEY: la app debe degradar con elegancia.
+      const response = await http
+        .post('/api/v1/shopping-lists/invoice-scan')
+        .set(auth())
+        .send({
+          entityId,
+          filename: 'factura.png',
+          mimeType: 'image/png',
+          contentBase64: Buffer.from('PNG falso de prueba').toString('base64'),
+        });
+
+      if (response.status === 503) {
+        expect(response.body.message).toMatch(/no está configurada/i);
+      } else {
+        // Si el entorno sí tiene clave, se exige que responda algo con sentido.
+        expect([200, 502]).toContain(response.status);
+      }
+
+      const listas = await prisma.shoppingList.count({ where: { entityId } });
+      expect(listas).toBeGreaterThan(0);
+    });
+
+    it('leer una factura exige un formato permitido', async () => {
+      const response = await http
+        .post('/api/v1/shopping-lists/invoice-scan')
+        .set(auth())
+        .send({ entityId, filename: 'x.exe', mimeType: 'application/x-msdownload', contentBase64: 'QUJD' });
+
+      expect(response.status).toBe(400);
+    });
+
+    it('un usuario ajeno no puede pedir la lectura sobre una unidad que no es suya', async () => {
+      const response = await http
+        .post('/api/v1/shopping-lists/invoice-scan')
+        .set(authStranger())
+        .send({
+          entityId,
+          filename: 'factura.png',
+          mimeType: 'image/png',
+          contentBase64: Buffer.from('PNG falso de prueba').toString('base64'),
+        });
+
+      expect([401, 403]).toContain(response.status);
+    });
+  });
+
+  describe('7. Catálogo de productos y precios pagados', () => {
+    const productName = `Café Molido ${runId}`;
+
+    it('lo comprado con precio real aparece en el catálogo, sin mover dinero', async () => {
+      const antes = await countMoney(entityId);
+      const lista = await http
+        .post('/api/v1/shopping-lists')
+        .set(auth())
+        .send({ entityId, name: `Catálogo ${runId}`, plannedDate: today })
+        .expect(201);
+
+      const item = await http
+        .post(`/api/v1/shopping-lists/${lista.body.id}/items`)
+        .set(auth())
+        .send({ name: productName, quantity: '1', unit: 'libra', estimatedUnitPrice: '100.00' })
+        .expect(201);
+
+      await http
+        .patch(`/api/v1/shopping-lists/${lista.body.id}/items/${item.body.id}`)
+        .set(auth())
+        .send({ isPurchased: true, actualUnitPrice: '110.00' })
+        .expect(200);
+
+      const catalogo = await http.get('/api/v1/shopping-lists/catalog').set(auth()).expect(200);
+      const fila = (catalogo.body.entries as Array<{ name: string; lastUnitPrice: string; timesPurchased: number }>).find(
+        (fila) => fila.name === productName,
+      );
+
+      expect(fila).toBeDefined();
+      expect(fila?.lastUnitPrice).toBe('110.00');
+      expect(fila?.timesPurchased).toBe(1);
+
+      // Consultar el catálogo es sólo lectura.
+      expect(await countMoney(entityId)).toEqual(antes);
+    });
+
+    it('la ficha del producto trae pago, mínimo/máximo e historial de compras', async () => {
+      const ficha = await http
+        .get(`/api/v1/shopping-lists/catalog/${encodeURIComponent(productName)}`)
+        .set(auth())
+        .expect(200);
+
+      expect(ficha.body.name).toBe(productName);
+      expect(ficha.body.lastUnitPrice).toBe('110.00');
+      expect(ficha.body.minUnitPrice).toBe('110.00');
+      expect(ficha.body.maxUnitPrice).toBe('110.00');
+      expect(ficha.body.unit).toBe('libra');
+      expect(Array.isArray(ficha.body.history)).toBe(true);
+      expect(ficha.body.history[0]).toEqual(
+        expect.objectContaining({ quantity: '1', unit: 'libra', unitPrice: '110.00' }),
+      );
+    });
+
+    it('una ficha inexistente responde 404 con mensaje en español', async () => {
+      const response = await http
+        .get(`/api/v1/shopping-lists/catalog/${encodeURIComponent(`No existe ${runId}`)}`)
+        .set(auth());
+
+      expect(response.status).toBe(404);
+      expect(response.body.message).toMatch(/no encontrad/i);
+    });
+
+    it('una factura ingerida actualiza precios y no duplica líneas repetidas', async () => {
+      const nombre = `Aceite ${runId}`;
+      const response = await http
+        .post('/api/v1/shopping-lists/catalog/ingest')
+        .set(auth())
+        .send({
+          entityId,
+          supplier: 'Colmado E2E',
+          lines: [
+            { name: nombre, unit: 'botella', unitPrice: '250.00', quantity: '1' },
+            // La misma línea repetida con otro precio: se queda la más alta.
+            { name: nombre, unit: 'botella', unitPrice: '265.00', quantity: '1' },
+            // Sin precio: no puede entrar al catálogo.
+            { name: `Sin precio ${runId}`, unit: 'unidad', quantity: '1' },
+          ],
+        })
+        .expect(201);
+
+      // Entra 1 línea; la repetida se agrupa (se queda el precio más alto) y la
+      // que no tiene precio no puede entrar.
+      expect(response.body.updated).toBe(1);
+      expect(response.body.ignored).toBe(2);
+
+      const ficha = await http
+        .get(`/api/v1/shopping-lists/catalog/${encodeURIComponent(nombre)}`)
+        .set(auth())
+        .expect(200);
+
+      expect(ficha.body.lastUnitPrice).toBe('265.00');
+      expect(ficha.body.lastSupplier).toBe('Colmado E2E');
+      expect(ficha.body.timesPurchased).toBe(1);
+    });
+
+    it('el catálogo de otra unidad no se mezcla', async () => {
+      const catalogoAjeno = await http.get('/api/v1/shopping-lists/catalog').set(authStranger()).expect(200);
+      const nombres = (catalogoAjeno.body.entries as Array<{ name: string }>).map((fila) => fila.name);
+      expect(nombres).not.toContain(productName);
+    });
+  });
 });

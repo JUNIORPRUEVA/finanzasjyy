@@ -51,6 +51,10 @@ export function readStoredTheme(): ThemePreference | null {
 /**
  * Lo que este dispositivo tiene elegido.
  *
+ * El valor por defecto es **claro**: es la apariencia con la que FINANZA se
+ * entiende mejor a primera vista (fondos blancos, texto oscuro y cifras con
+ * contraste alto). Oscuro y «como el sistema» siguen disponibles en Ajustes.
+ *
  * Se distingue «nunca se eligió nada» (null) de «se eligió seguir al sistema»,
  * porque no es lo mismo: si el usuario NUNCA ha elegido en este teléfono, al
  * identificarse se adopta el tema de su cuenta; si ya eligió, su elección manda
@@ -59,7 +63,7 @@ export function readStoredTheme(): ThemePreference | null {
  * no debe pasar).
  */
 export function deviceThemePreference(): ThemePreference {
-  return readStoredTheme() ?? 'system';
+  return readStoredTheme() ?? 'light';
 }
 
 export function resolveTheme(preference: ThemePreference): ResolvedTheme {
@@ -67,7 +71,7 @@ export function resolveTheme(preference: ThemePreference): ResolvedTheme {
     return preference;
   }
   if (typeof window === 'undefined' || !window.matchMedia) {
-    return 'dark';
+    return 'light';
   }
   return window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
 }

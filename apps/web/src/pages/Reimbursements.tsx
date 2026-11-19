@@ -1,7 +1,19 @@
 import { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, ApiError } from '../lib/api';
-import { Button, Card, EmptyState, Field, MoneyInput, Notice, SectionTitle, Select, Spinner, Tabs } from '../components/ui';
+import {
+  Button,
+  Card,
+  EmptyState,
+  Field,
+  MoneyInput,
+  Notice,
+  PageIntro,
+  SectionTitle,
+  Select,
+  Spinner,
+  Tabs,
+} from '../components/ui';
 import { useAuth } from '../store/auth';
 import { formatMoney, todayBusinessDate } from '../lib/format';
 
@@ -197,17 +209,11 @@ export function ReimbursementsPage() {
   const pendientes = filas.filter((fila) => fila.status === 'OPEN' || fila.status === 'PARTIAL');
 
   return (
-    <div className="space-y-4">
-      <Card className="space-y-2">
-        <SectionTitle
-          title="Pagué algo del negocio con mi dinero"
-          hint="El gasto es del negocio; el dinero salió de su bolsillo"
-        />
-        <p className="text-xs leading-snug text-muted">
-          El gasto se apunta <strong>una sola vez</strong>, en el negocio. En sus finanzas no hay gasto: aparece el
-          dinero que el negocio le debe. Cuando se lo devuelvan, sólo se cierra esa deuda.
-        </p>
-      </Card>
+    <div className="space-y-3">
+      <PageIntro
+        title="Pagué algo del negocio con mi dinero"
+        purpose="El gasto es del negocio y salió de su bolsillo. Se apunta una vez: lo que queda es lo que le deben."
+      />
 
       <Tabs
         tabs={[

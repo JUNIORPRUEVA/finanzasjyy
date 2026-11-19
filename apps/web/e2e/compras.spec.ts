@@ -1,5 +1,9 @@
+import path from 'node:path';
 import { expect, test, type Page } from '@playwright/test';
 import { ensureAuthenticated, ensureTestAccount } from './helpers';
+
+/** Carpeta de capturas, igual que en `screenshots.spec.ts`. */
+const CAPTURAS = path.join(process.cwd(), '..', '..', 'docs', 'capturas');
 
 /**
  * COMPRAS PERSONALES — RECORRIDO COMPLETO
@@ -77,7 +81,7 @@ test.describe('compras personales', () => {
     // Hay total pagado... pero el gasto SIGUE SIN REGISTRAR: el botón para
     // registrarlo está ahí, esperando una decisión del usuario. Nada mueve dinero
     // hasta que él lo decide.
-    await expect(page.getByRole('button', { name: /Registrar gasto en FINANZA/ })).toBeVisible();
+    await expect(page.getByRole('button', { name: /Finalizar compra con factura/ })).toBeVisible();
 
     // Y en Movimientos no hay ningún movimiento con ese importe.
     expect(
@@ -98,7 +102,7 @@ test.describe('compras personales', () => {
     await page.getByRole('button', { name: /Producto único E2E/ }).first().click();
     await expect(page.getByText(/1 de 1 productos comprados/)).toBeVisible();
 
-    await page.getByRole('button', { name: /Registrar gasto en FINANZA/ }).click();
+    await page.getByRole('button', { name: /Registrar el gasto sin factura/i }).click();
     const sheet = page.getByRole('dialog', { name: 'Registrar el gasto en FINANZA' });
     await expect(sheet).toBeVisible();
 
@@ -120,6 +124,7 @@ test.describe('compras personales', () => {
       timeout: 25_000,
     });
     await expect(page.getByRole('button', { name: /Registrar gasto en FINANZA/ })).toBeHidden();
+    await expect(page.getByRole('button', { name: /Finalizar compra con factura/ })).toBeHidden();
 
     // El movimiento existe en Movimientos, UNA vez. Se busca por la descripción
     // que FINANZA pone al gasto («Compra: <nombre de la lista>»), que es única de
@@ -169,8 +174,8 @@ test.describe('compras personales', () => {
     await expect(page.getByRole('heading', { name: listName })).toBeVisible({ timeout: 20_000 });
 
     await expect(page.getByText('Lista vacía')).toBeVisible();
-    await expect(page.getByText('Terminar la compra')).toBeVisible();
-    await expect(page.getByText(/Registrar el gasto es lo único que mueve dinero/i)).toBeVisible();
+    await expect(page.getByText('Finalizar la compra')).toBeVisible();
+    await expect(page.getByText(/Saque una foto de la factura/i)).toBeVisible();
   });
 
   test('la lista se puede preparar sin conexión y se envía sola al recuperarla', async ({ page, context }) => {
@@ -210,5 +215,206 @@ test.describe('compras personales', () => {
     await page.getByRole('link', { name: new RegExp(listName) }).first().click();
     await expect(page.getByRole('heading', { name: listName })).toBeVisible();
     await addItem(page, 'Producto tras reconectar', '1', '99.99');
+  });
+
+  test('el lector de facturas con IA y las sugerencias están a mano y no rompen nada', async ({ page }) => {
+    test.setTimeout(180_000);
+    await ensureAuthenticated(page);
+    await ensureTestAccount(page);
+
+    const listName = await createList(page, 'Factura E2E');
+
+    // Se deja historial real: dos productos ya comprados con su precio.
+    await addItem(page, 'Pollo E2E factura', '2', '150');
+    await addItem(page, 'Arroz E2E factura', '1', '90');
+    for (const item of ['Pollo E2E factura', 'Arroz E2E factura']) {
+      await page.getByRole('button', { name: new RegExp(item) }).first().click();
+      await page.waitForTimeout(500);
+    }
+    await expect(page.getByText(/2 de 2 productos comprados/)).toBeVisible();
+
+    // Con historial, Compras muestra la tarjeta de sugerencias.
+    await page.goto('/compras');
+    const tarjeta = page.getByRole('button', { name: /Sugerencias de compra/i });
+    await expect(tarjeta).toBeVisible({ timeout: 25_000 });
+    await tarjeta.click();
+
+    const sugerencias = page.getByRole('dialog', { name: 'Sugerencias de compra' });
+    await expect(sugerencias).toBeVisible();
+    // El análisis por reglas siempre está (no depende de la IA).
+    await expect(sugerencias.getByText(/Qué mejorar/i)).toBeVisible();
+    await expect(sugerencias.getByText(/Compras registradas/i)).toBeVisible();
+    await expect(sugerencias.getByRole('button', { name: 'Cerrar', exact: true })).toBeVisible();
+    // Evidencia visual del análisis (se regenera en cada ejecución de las pruebas).
+    await sugerencias.screenshot({ path: path.join(CAPTURAS, 'compras-sugerencias.png') });
+    await sugerencias.getByRole('button', { name: 'Cerrar', exact: true }).click();
+
+    // El catálogo recoge los productos comprados con su precio real.
+    await page.getByRole('link', { name: /Catálogo/i }).first().click();
+    await expect(page.getByRole('heading', { name: 'Catálogo de productos' })).toBeVisible({ timeout: 20_000 });
+    await page.getByLabel('Buscar en el catálogo').fill('Pollo E2E');
+    await expect(page.getByText(/Pollo E2E factura/i).first()).toBeVisible({ timeout: 20_000 });
+    await page.screenshot({ path: path.join(CAPTURAS, 'compras-catalogo.png') });
+
+    // El lector de facturas vive donde se añaden productos, así que se vuelve a
+    // la lista (el catálogo es otra pantalla).
+    await page.goto('/compras');
+    await page.getByRole('link', { name: new RegExp(listName) }).first().click();
+    await expect(page.getByRole('heading', { name: listName })).toBeVisible();
+    await page.getByRole('button', { name: 'Añadir producto a la lista' }).click();
+    await page.getByRole('button', { name: /Leer una factura con IA/i }).click();
+
+    const hoja = page.getByRole('dialog', { name: 'Leer una factura con IA' });
+    await expect(hoja).toBeVisible();
+    await expect(hoja.getByText(/La IA escribirá los productos/i)).toBeVisible();
+
+    // Se sube una imagen (PNG de 1×1 válido). En la suite no hay OPENAI_API_KEY,
+    // así que la respuesta esperada es el aviso de que la IA no está activada.
+    const png = Buffer.from(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFAAH/q842iQAAAABJRU5ErkJggg==',
+      'base64',
+    );
+    await hoja.locator('input[type="file"]').setInputFiles({ name: 'factura.png', mimeType: 'image/png', buffer: png });
+
+    await expect(hoja.getByText(/no está activada en este servidor|No se pudo leer la factura/i)).toBeVisible({
+      timeout: 30_000,
+    });
+    await hoja.screenshot({ path: path.join(CAPTURAS, 'compras-factura.png') });
+
+    // Leer una factura no añade ni un producto por su cuenta.
+    await page.getByRole('button', { name: 'Cerrar', exact: true }).click();
+    await expect(page.getByText(/2 de 2 productos comprados/)).toBeVisible();
+  });
+
+  test('finalizar con factura deja el gasto listo y el catálogo aprende los precios', async ({ page }) => {
+    test.setTimeout(180_000);
+    await ensureAuthenticated(page);
+    await ensureTestAccount(page);
+
+    const listName = await createList(page, 'Cierre con factura E2E');
+
+    await page.route('**/api/v1/shopping-lists/invoice-scan', (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          model: 'modelo-de-prueba',
+          invoice: {
+            supplier: 'Colmado Finalizar',
+            date: '2026-11-19',
+            total: '300.00',
+            taxAmount: null,
+            currency: 'DOP',
+            warnings: [],
+            lines: [
+              { name: 'Arroz finalizar E2E', quantity: '2', unit: 'unidad', unitPrice: '100', total: '200', suggestedCategory: 'Alimentación' },
+              { name: 'Habichuelas finalizar E2E', quantity: '1', unit: 'lb', unitPrice: '100', total: '100', suggestedCategory: 'Alimentación' },
+            ],
+          },
+        }),
+      }),
+    );
+
+    await page.getByRole('button', { name: /Finalizar compra con factura/ }).click();
+    const hoja = page.getByRole('dialog', { name: 'Finalizar compra' });
+    await expect(hoja).toBeVisible();
+
+    const png = Buffer.from(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFAAH/q842iQAAAABJRU5ErkJggg==',
+      'base64',
+    );
+    await hoja.locator('input[type="file"]').setInputFiles({ name: 'factura.png', mimeType: 'image/png', buffer: png });
+    await expect(hoja.getByText('Colmado Finalizar')).toBeVisible({ timeout: 20_000 });
+    await hoja.screenshot({ path: path.join(CAPTURAS, 'compras-finalizar.png') });
+
+    await hoja.getByRole('button', { name: /Guardar y registrar el gasto/i }).click();
+
+    // Se abre el pago con el importe de la factura ya puesto: el gasto aún NO está
+    // registrado, lo confirma el usuario eligiendo la cuenta.
+    const pago = page.getByRole('dialog', { name: 'Registrar el gasto en FINANZA' });
+    await expect(pago).toBeVisible({ timeout: 20_000 });
+    await expect(pago.getByLabel('Importe pagado')).toHaveValue(/300/);
+    await pago.getByRole('button', { name: 'Cancelar' }).click();
+
+    // Los productos están en la lista, comprados y con su precio.
+    await expect(page.getByText('Arroz finalizar E2E').first()).toBeVisible();
+    await expect(page.getByRole('heading', { name: listName })).toBeVisible();
+
+    // Y el catálogo ha aprendido el precio de la factura.
+    await page.goto('/compras/catalogo');
+    const catalogo = page.getByRole('heading', { name: 'Catálogo de productos' });
+    await expect(catalogo).toBeVisible({ timeout: 20_000 });
+    await page.getByLabel('Buscar en el catálogo').fill('Arroz finalizar');
+    await expect(page.getByText(/Arroz finalizar E2E/i).first()).toBeVisible({ timeout: 20_000 });
+
+    // La ficha del producto muestra el historial y el precio pagado.
+    await page.getByText(/Arroz finalizar E2E/i).first().click();
+    await expect(page.getByText('Último precio')).toBeVisible({ timeout: 20_000 });
+    await page.screenshot({ path: path.join(CAPTURAS, 'compras-catalogo-ficha.png') });
+  });
+
+  test('una factura leída se revisa, se corrige y se vuelca en la lista', async ({ page }) => {
+    test.setTimeout(180_000);
+    await ensureAuthenticated(page);
+    await ensureTestAccount(page);
+
+    const listName = await createList(page, 'Factura revisada E2E');
+
+    // Se simula la respuesta de la IA: así se prueba la pantalla de revisión sin
+    // depender de una clave ni de la red. El contenido es el mismo contrato real.
+    await page.route('**/api/v1/shopping-lists/invoice-scan', (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          model: 'modelo-de-prueba',
+          note: 'Nada se ha guardado.',
+          invoice: {
+            supplier: 'Supermercado de prueba',
+            date: '2026-11-18',
+            total: '380.00',
+            taxAmount: null,
+            currency: 'DOP',
+            warnings: [],
+            lines: [
+              { name: 'Arroz 5 lb', quantity: '2', unit: 'unidad', unitPrice: '100', total: '200', suggestedCategory: 'Alimentación' },
+              { name: 'Pechuga de pollo', quantity: '1', unit: 'lb', unitPrice: '180', total: '180', suggestedCategory: 'Alimentación' },
+            ],
+          },
+        }),
+      }),
+    );
+
+    await page.getByRole('button', { name: 'Añadir producto a la lista' }).click();
+    await page.getByRole('button', { name: /Leer una factura con IA/i }).click();
+    const hoja = page.getByRole('dialog', { name: 'Leer una factura con IA' });
+
+    const png = Buffer.from(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFAAH/q842iQAAAABJRU5ErkJggg==',
+      'base64',
+    );
+    await hoja.locator('input[type="file"]').setInputFiles({ name: 'factura.png', mimeType: 'image/png', buffer: png });
+
+    // Se muestran las líneas del proveedor y de la fecha, y los productos.
+    await expect(hoja.getByText('Supermercado de prueba')).toBeVisible({ timeout: 20_000 });
+    await expect(hoja.getByLabel('Producto 1')).toHaveValue('Arroz 5 lb');
+    await expect(hoja.getByLabel('Producto 2')).toHaveValue('Pechuga de pollo');
+    await expect(hoja.getByText(/2 de 2 productos seleccionados/i)).toBeVisible();
+
+    // El usuario corrige un precio antes de guardar: la IA no decide por él.
+    await hoja.getByLabel('Precio 1').fill('120');
+
+    await hoja.screenshot({ path: path.join(CAPTURAS, 'compras-factura-lineas.png') });
+
+    await hoja.getByRole('button', { name: /Añadir 2 producto/i }).click();
+
+    // Los productos entran en la lista ya comprados y con su precio real:
+    // 2 × 120 + 1 × 180 = 420.
+    await expect(page.getByText('Arroz 5 lb').first()).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByText('Pechuga de pollo').first()).toBeVisible();
+    await expect(page.getByText(/2 de 2 productos comprados/)).toBeVisible();
+
+    // Y el gasto NO se ha movido: sigue pendiente de que el usuario lo registre.
+    await expect(page.getByRole('button', { name: /Finalizar compra con factura/ })).toBeVisible();
   });
 });

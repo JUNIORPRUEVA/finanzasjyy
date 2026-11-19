@@ -54,6 +54,10 @@ services:
       JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:?define JWT_ACCESS_SECRET en .env}
       JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:?define JWT_REFRESH_SECRET en .env}
       TZ: America/Santo_Domingo
+      # Asistente de compras (opcional). Vacío = sin IA; el resto funciona igual.
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o-mini}
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-}
     ports:
       - "127.0.0.1:${FINANZA_API_PORT:-3010}:3010"
 

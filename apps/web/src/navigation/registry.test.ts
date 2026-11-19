@@ -12,9 +12,9 @@ import { ALL_NAV_ENTRIES, BOTTOM_NAV, DRAWER_ENTRIES, visibleDrawerEntries } fro
  */
 
 describe('registro de navegación', () => {
-  it('la barra inferior tiene exactamente los cinco destinos acordados, en orden', () => {
-    expect(BOTTOM_NAV.map((entry) => entry.label)).toEqual(['Inicio', 'Movimientos', 'Añadir', 'Control', 'Compras']);
-    expect(BOTTOM_NAV).toHaveLength(5);
+  it('la barra inferior tiene exactamente los tres destinos acordados, en orden', () => {
+    expect(BOTTOM_NAV.map((entry) => entry.label)).toEqual(['Panel', 'Añadir', 'Movimientos']);
+    expect(BOTTOM_NAV).toHaveLength(3);
   });
 
   it('«Más» no existe como destino (sus funciones viven en el menú lateral)', () => {
@@ -59,6 +59,14 @@ describe('registro de navegación', () => {
     expect(anonymous).not.toContain('auditoria');
     // Las opciones abiertas a cualquiera siguen ahí.
     expect(anonymous).toContain('cuentas');
+  });
+
+  it('Control y Compras están en el menú lateral, no en la barra inferior', () => {
+    const drawer = visibleDrawerEntries('OWNER').flatMap((section) => section.entries.map((entry) => entry.id));
+    expect(drawer).toContain('control');
+    expect(drawer).toContain('compras');
+    expect(BOTTOM_NAV.map((entry) => entry.id)).not.toContain('control');
+    expect(BOTTOM_NAV.map((entry) => entry.id)).not.toContain('compras');
   });
 
   it('el menú se agrupa por para qué sirve y dentro de cada grupo respeta el orden', () => {

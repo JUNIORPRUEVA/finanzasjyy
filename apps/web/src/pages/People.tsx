@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, ApiError } from '../lib/api';
-import { Badge, Button, Card, EmptyState, Field, ListScreen, Notice, Panel, Select, Spinner } from '../components/ui';
+import { Badge, Button, Card, EmptyState, Fab, Field, ListScreen, Notice, Panel, Select, Spinner } from '../components/ui';
 import { IconAlert, IconUsers } from '../components/icons';
 import { formatDateTime } from '../lib/format';
 
@@ -169,20 +169,14 @@ export function PeoplePage() {
 
   return (
     <ListScreen
+      title="Personas con acceso"
+      purpose="Quién puede entrar y de quién es cada acción."
       toolbar={
         <>
-          <div className="flex items-center justify-between gap-2">
-            <div className="min-w-0">
-              <h1 className="text-lg font-semibold tracking-tight text-ink">Personas con acceso</h1>
-              <p className="text-xs text-muted">
-                {personas.filter((persona) => persona.isActive).length} con acceso ·{' '}
-                {personas.filter((persona) => !persona.isActive).length} sin acceso
-              </p>
-            </div>
-            <Button size="sm" onClick={() => setCreando(true)}>
-              Añadir persona
-            </Button>
-          </div>
+          <p className="text-xs text-faint">
+            {personas.filter((persona) => persona.isActive).length} con acceso ·{' '}
+            {personas.filter((persona) => !persona.isActive).length} sin acceso
+          </p>
           <p className="text-xs leading-snug text-muted">
             Todos pueden entrar y registrar sin restricciones. Lo que sí queda siempre es <strong>su firma</strong>: el
             movimiento, la lista de compras y el cierre guardan quién lo hizo.
@@ -207,7 +201,7 @@ export function PeoplePage() {
               <div className="flex items-start gap-3">
                 <span
                   aria-hidden="true"
-                  className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-sm font-semibold ${
+                  className={`flex h-10 w-10 shrink-0 items-center justify-center text-sm font-semibold ${
                     persona.isActive ? 'bg-brand-soft text-brand' : 'bg-surface-3 text-faint'
                   }`}
                 >
@@ -352,6 +346,8 @@ export function PeoplePage() {
           </div>
         </div>
       </Panel>
+
+      {!creando && cambiandoClave === null ? <Fab label="Añadir persona" onClick={() => setCreando(true)} /> : null}
     </ListScreen>
   );
 }

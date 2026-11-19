@@ -116,11 +116,12 @@ test.describe('estructura jurídica', () => {
     const nuevaPersonal = `Personal cierre ${runId}`;
 
     await page.goto('/unidades');
-    // Se crean las dos unidades con el formulario de la propia pantalla.
+    // Se crean las dos unidades con el botón flotante, que abre el formulario.
     for (const [nombre, tipo] of [
       [nuevoNegocio, 'Negocio'],
       [nuevaPersonal, 'Finanzas personales'],
     ] as const) {
+      await page.getByRole('button', { name: 'Nueva unidad' }).click();
       await page.getByLabel('Nombre', { exact: true }).fill(nombre);
       await page.getByLabel('Tipo', { exact: true }).selectOption({ label: tipo });
       await page.getByRole('button', { name: /Crear unidad financiera/i }).click();

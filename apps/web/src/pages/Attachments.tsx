@@ -1,7 +1,19 @@
 import { useMemo, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, ApiError } from '../lib/api';
-import { Badge, Card, ConfirmDialog, EmptyState, Notice, SectionTitle, Select, Spinner } from '../components/ui';
+import {
+  Badge,
+  Card,
+  ConfirmDialog,
+  EmptyState,
+  Fab,
+  Notice,
+  PageIntro,
+  SectionTitle,
+  Select,
+  Sheet,
+  Spinner,
+} from '../components/ui';
 import { useAuth } from '../store/auth';
 import { formatDateTime } from '../lib/format';
 
@@ -55,6 +67,8 @@ export function AttachmentsPage() {
 
   const [entityId, setEntityId] = useState(entities[0]?.id ?? '');
   const [busy, setBusy] = useState(false);
+  // La hoja de alta se abre desde el botón flotante: la lista queda libre.
+  const [abriendo, setAbriendo] = useState(false);
   const [message, setMessage] = useState<{ tone: 'positive' | 'warning' | 'negative'; text: string } | null>(null);
   // Se pregunta con el diálogo propio de la aplicación (el del navegador es
   // bloqueante, no se puede leer cómodo en un teléfono y no se ve el archivo).
@@ -96,6 +110,7 @@ export function AttachmentsPage() {
           : `Guardado «${file.name}». Queda vinculado a la unidad financiera elegida.`,
       });
       await queryClient.invalidateQueries();
+      setAbriendo(false);
     } catch (caught) {
       setMessage({ tone: 'negative', text: caught instanceof ApiError ? caught.message : 'No se pudo subir el archivo.' });
     } finally {
@@ -140,36 +155,10 @@ export function AttachmentsPage() {
   const entityName = (id: string) => entities.find((entity) => entity.id === id)?.name ?? 'unidad';
 
   return (
-    <div className="space-y-4">
-      {message ? <Notice tone={message.tone}>{message.text}</Notice> : null}
+    <div className="space-y-3">
+      <PageIntro title="Documentos" purpose="Facturas y comprobantes guardados junto a sus movimientos." />
 
-      <Card className="space-y-3">
-        <SectionTitle title="Adjuntar un comprobante" hint="Facturas, fotos de recibos, estados de cuenta, documentos" />
-        <Select
-          label="Unidad financiera"
-          value={entityId}
-          onChange={setEntityId}
-          options={entities.map((entity) => ({ value: entity.id, label: entity.name }))}
-        />
-        <input
-          ref={inputRef}
-          type="file"
-          accept="image/*,application/pdf"
-          capture="environment"
-          onChange={(event) => {
-            const file = event.target.files?.[0];
-            if (file) {
-              void upload(file);
-            }
-          }}
-          className="w-full rounded-lg border border-border-soft bg-surface-2 px-3 py-2 text-sm text-ink"
-        />
-        <p className="text-xs text-faint">
-          Imágenes o PDF, hasta {MAX_MB} MB. En el móvil se abre la cámara directamente. Los archivos no se guardan en
-          ninguna carpeta pública: se descargan sólo desde aquí y sólo con permiso sobre la unidad.
-        </p>
-        {busy ? <Spinner label="Guardando el archivo…" /> : null}
-      </Card>
+      {message && !abriendo ? <Notice tone={message.tone}>{message.text}</Notice> : null}
 
       <Card>
         <SectionTitle title="Mis documentos" hint={`${attachments.length} archivo(s)`} />
@@ -206,10 +195,6 @@ export function AttachmentsPage() {
         </div>
       </Card>
 
-      <p className="pb-4 text-center text-xs text-faint">
-        Nada se borra de verdad: al desvincular, el archivo se conserva para poder auditar meses después.
-      </p>
-
       <ConfirmDialog
         open={pendingRemoval !== null}
         title="¿Desvincular el documento?"
@@ -233,6 +218,50 @@ export function AttachmentsPage() {
           }
         }}
       />
+
+      {/* Alta del comprobante: hoja inferior que abre el botón flotante. */}
+      <Sheet open={abriendo} onClose={() => setAbriendo(false)} title="Adjuntar un comprobante">
+        <div className="space-y-3 pb-3">
+          {message ? <Notice tone={message.tone}>{message.text}</Notice> : null}
+          <Select
+            label="Unidad financiera"
+            value={entityId}
+            onChange={setEntityId}
+            options={entities.map((entity) => ({ value: entity.id, label: entity.name }))}
+          />
+          {/* El selector nativo («Choose File / No file chosen») sale en inglés y
+              rompe el estilo: va oculto dentro de una etiqueta con el aspecto de un
+              botón, así hay UN solo control y se llama como el botón. */}
+          <label
+            className={`flex h-11 w-full items-center justify-center border border-border-soft bg-surface-2 px-3 text-sm font-medium text-ink transition ${
+              busy ? 'pointer-events-none opacity-50' : 'cursor-pointer hover:bg-surface-3'
+            }`}
+          >
+            Elegir foto o PDF
+            <input
+              ref={inputRef}
+              type="file"
+              accept="image/*,application/pdf"
+              capture="environment"
+              disabled={busy}
+              onChange={(event) => {
+                const file = event.target.files?.[0];
+                if (file) {
+                  void upload(file);
+                }
+              }}
+              className="sr-only"
+            />
+          </label>
+          <p className="text-xs text-faint">
+            Imagen o PDF, hasta {MAX_MB} MB. En el móvil se abre la cámara. No quedan en ninguna carpeta pública: se
+            descargan sólo con permiso sobre la unidad.
+          </p>
+          {busy ? <Spinner label="Guardando el archivo…" /> : null}
+        </div>
+      </Sheet>
+
+      {!abriendo ? <Fab label="Adjuntar" onClick={() => setAbriendo(true)} /> : null}
     </div>
   );
 }

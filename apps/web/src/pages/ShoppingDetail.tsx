@@ -9,6 +9,7 @@ import {
   Card,
   ConfirmDialog,
   EmptyState,
+  Fab,
   Field,
   ListScreen,
   Money,
@@ -23,7 +24,7 @@ import {
 } from '../components/ui';
 import { toast } from '../components/Toast';
 import { BotonNuevaCategoria, NuevaCategoriaSheet } from '../components/NuevaCategoriaSheet';
-import { IconArrowDown, IconCheck, IconChevronLeft, IconClose, IconFile, IconPlus, IconSearch, IconShare } from '../components/icons';
+import { IconCheck, IconChevronLeft, IconClose, IconFile, IconSearch, IconShare } from '../components/icons';
 import {
   flushShoppingQueue,
   isServerList,
@@ -37,6 +38,19 @@ import { formatMoney, todayBusinessDate } from '../lib/format';
 import { groupItems, fold, listToPlainText, nutritionAdvice } from '../lib/shopping-assistant';
 import { PLANTILLAS, productosNuevos, type Plantilla } from '../lib/shopping-templates';
 import { repartirCompra, textoDeParte, type ParteCompra } from '../lib/shopping-split';
+import { normalizeProductName } from '../lib/product-name';
+
+/** Una línea leída de la factura, editable antes de guardarla. */
+interface LineaFactura {
+  name: string;
+  quantity: string;
+  unit: string | null;
+  unitPrice: string;
+  include: boolean;
+}
+
+/** Tamaño máximo del archivo de la factura (el servidor aplica el mismo). */
+const FACTURA_MAX_MB = 8;
 
 /**
  * DETALLE DE UNA LISTA DE COMPRAS
@@ -69,6 +83,26 @@ export function ShoppingDetailPage() {
   // Añadir vive en su propio diágolo, que abre el botón flotante: en la
   // pantalla sólo queda la lupa y la lista, que es lo que se mira en la tienda.
   const [addOpen, setAddOpen] = useState(false);
+  // Último precio conocido del producto que se está escribiendo (catálogo).
+  const [sugerenciaPrecio, setSugerenciaPrecio] = useState<{ name: string; price: string } | null>(null);
+
+  // LECTOR DE FACTURAS CON IA
+  // La IA sólo PROPONE las líneas: aquí no se guarda nada hasta que el usuario
+  // revisa y pulsa «Añadir a la lista». Después, el gasto se registra como
+  // siempre, con su cuenta y su asiento.
+  const [facturaOpen, setFacturaOpen] = useState(false);
+  const [facturaCargando, setFacturaCargando] = useState(false);
+  const [facturaGuardando, setFacturaGuardando] = useState(false);
+  const [facturaError, setFacturaError] = useState<string | null>(null);
+  const [facturaAvisos, setFacturaAvisos] = useState<string[]>([]);
+  const [facturaLineas, setFacturaLineas] = useState<LineaFactura[]>([]);
+  const [facturaResumen, setFacturaResumen] = useState<{ supplier: string | null; date: string | null; total: string | null } | null>(
+    null,
+  );
+  // Flujo de finalizar: factura → productos → catálogo → registrar gasto.
+  const [finalizando, setFinalizando] = useState(false);
+  const [facturaArchivo, setFacturaArchivo] = useState<File | null>(null);
+  const [guardarFacturaEnDocumentos, setGuardarFacturaEnDocumentos] = useState(true);
 
   const [editing, setEditing] = useState<RemoteShoppingItem | null>(null);
   const [editName, setEditName] = useState('');
@@ -419,6 +453,217 @@ export function ShoppingDetailPage() {
     }
   };
 
+  const abrirLectorFactura = () => {
+    setFacturaError(null);
+    setFacturaAvisos([]);
+    setFacturaLineas([]);
+    setFacturaResumen(null);
+    setFacturaArchivo(null);
+    setAddOpen(false);
+    setFacturaOpen(true);
+  };
+
+  /** «Finalizar compra»: primero la factura (si la hay) y después el gasto. */
+  const finalizarCompra = () => {
+    setFinalizando(true);
+    abrirLectorFactura();
+  };
+
+  /**
+   * Mientras se escribe el nombre de un producto, se busca en el catálogo su
+   * último precio. Es lo que permite decidir «cómo comprar» sin salir de la
+   * lista: saber cuánto se pagó la última vez.
+   */
+  useEffect(() => {
+    const termino = addName.trim();
+    if (!addOpen || !list || termino.length < 3 || !navigator.onLine) {
+      setSugerenciaPrecio(null);
+      return;
+    }
+
+    let cancelado = false;
+    const timer = window.setTimeout(() => {
+      void (async () => {
+        try {
+          const params = new URLSearchParams({ entityId: list.entityId, search: termino });
+          const data = await api.get<{
+            entries: Array<{ name: string; normalizedName: string; lastUnitPrice: string | null }>;
+          }>(`/shopping-lists/catalog?${params.toString()}`);
+          const clave = normalizeProductName(termino);
+          const match = (data.entries ?? []).find((row) => row.normalizedName === clave);
+          if (!cancelado) {
+            setSugerenciaPrecio(match && match.lastUnitPrice ? { name: match.name, price: match.lastUnitPrice } : null);
+          }
+        } catch {
+          if (!cancelado) {
+            setSugerenciaPrecio(null);
+          }
+        }
+      })();
+    }, 350);
+
+    return () => {
+      cancelado = true;
+      window.clearTimeout(timer);
+    };
+  }, [addName, addOpen, list]);
+
+  /**
+   * Envía la foto o el PDF al servidor, que la lee con IA. Aquí no se guarda
+   * nada: las líneas se muestran para revisarlas. Si la IA no está configurada,
+   * el mensaje lo dice y se puede seguir añadiendo productos a mano.
+   */
+  const leerFactura = async (file: File) => {
+    if (!list) {
+      return;
+    }
+    setFacturaError(null);
+    setFacturaAvisos([]);
+    setFacturaLineas([]);
+    setFacturaResumen(null);
+
+    if (file.size > FACTURA_MAX_MB * 1024 * 1024) {
+      setFacturaError(`El archivo pesa demasiado. El máximo es ${FACTURA_MAX_MB} MB.`);
+      return;
+    }
+
+    setFacturaCargando(true);
+    try {
+      setFacturaArchivo(file);
+      const contentBase64 = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result));
+        reader.onerror = () => reject(new Error('No se pudo leer el archivo'));
+        reader.readAsDataURL(file);
+      });
+
+      const result = await api.post<{
+        invoice: {
+          supplier: string | null;
+          date: string | null;
+          total: string | null;
+          warnings: string[];
+          lines: Array<{ name: string; quantity: string; unit: string | null; unitPrice: string | null; total: string | null }>;
+        };
+      }>('/shopping-lists/invoice-scan', {
+        entityId: list.entityId,
+        filename: file.name,
+        mimeType: file.type || 'image/jpeg',
+        contentBase64,
+      });
+
+      setFacturaLineas(
+        result.invoice.lines.map((line) => ({
+          name: line.name,
+          quantity: line.quantity || '1',
+          unit: line.unit,
+          unitPrice: line.unitPrice ?? line.total ?? '',
+          include: true,
+        })),
+      );
+      setFacturaResumen({ supplier: result.invoice.supplier, date: result.invoice.date, total: result.invoice.total });
+      setFacturaAvisos(result.invoice.warnings ?? []);
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 503) {
+        setFacturaError(
+          'La lectura de facturas con IA no está activada en este servidor. Puede añadir los productos a mano mientras tanto.',
+        );
+      } else {
+        setFacturaError(
+          error instanceof ApiError ? error.message : 'No se pudo leer la factura. Inténtelo con una foto más clara.',
+        );
+      }
+    } finally {
+      setFacturaCargando(false);
+    }
+  };
+
+  /** Vuelca a la lista las líneas revisadas, ya como compradas y con su precio. */
+  const guardarFactura = async () => {
+    if (!list) {
+      return;
+    }
+    const elegidas = facturaLineas.filter((line) => line.include && line.name.trim().length > 0);
+    if (elegidas.length === 0) {
+      setFacturaError('Marque al menos un producto para añadirlo.');
+      return;
+    }
+
+    setFacturaGuardando(true);
+    setFacturaError(null);
+    try {
+      for (const line of elegidas) {
+        const price = line.unitPrice.trim();
+        await api.post(`/shopping-lists/${list.id}/items`, {
+          name: line.name.trim(),
+          quantity: line.quantity || '1',
+          unit: line.unit,
+          estimatedUnitPrice: price === '' ? null : price,
+          actualUnitPrice: price === '' ? null : price,
+          isPurchased: true,
+        });
+      }
+
+      const totalSeleccionado = elegidas
+        .reduce((acc, line) => acc + (Number(line.quantity) || 0) * (Number(line.unitPrice) || 0), 0)
+        .toFixed(2);
+
+      // El catálogo aprende los precios de esta factura (no mueve dinero).
+      try {
+        await api.post('/shopping-lists/catalog/ingest', {
+          entityId: list.entityId,
+          supplier: facturaResumen?.supplier ?? null,
+          lines: elegidas.map((line) => ({
+            name: line.name.trim(),
+            unit: line.unit,
+            unitPrice: line.unitPrice.trim() === '' ? null : line.unitPrice.trim(),
+            quantity: line.quantity || '1',
+          })),
+        });
+      } catch {
+        // Si el catálogo falla, la compra sigue: es una ayuda, no un requisito.
+      }
+
+      // La factura puede quedarse guardada como documento del gasto.
+      if (guardarFacturaEnDocumentos && facturaArchivo) {
+        try {
+          const contentBase64 = await new Promise<string>((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(String(reader.result));
+            reader.onerror = () => reject(new Error('No se pudo leer el archivo'));
+            reader.readAsDataURL(facturaArchivo);
+          });
+          await api.post('/attachments', {
+            entityId: list.entityId,
+            filename: facturaArchivo.name || 'factura',
+            mimeType: facturaArchivo.type || 'image/jpeg',
+            contentBase64,
+          });
+        } catch {
+          // Se avisa abajo, pero no se pierde la compra ya guardada.
+          setFacturaAvisos((prev) => [...prev, 'La compra se guardó, pero la factura no se pudo archivar en Documentos.']);
+        }
+      }
+
+      await refresh();
+      setFacturaOpen(false);
+      toast.success(
+        `${elegidas.length} productos añadidos`,
+        finalizando ? 'Ahora registre el gasto con la cuenta de donde salió el dinero.' : 'Revise la lista y registre el gasto cuando quiera.',
+      );
+
+      if (finalizando) {
+        setPayAmount(totalSeleccionado === '0.00' ? '' : totalSeleccionado);
+        setPaying(true);
+        setFinalizando(false);
+      }
+    } catch (error) {
+      setFacturaError(error instanceof ApiError ? error.message : 'No se pudieron añadir los productos.');
+    } finally {
+      setFacturaGuardando(false);
+    }
+  };
+
   const togglePurchased = async (item: RemoteShoppingItem) => {
     if (!list || registered) {
       return;
@@ -597,7 +842,7 @@ export function ShoppingDetailPage() {
             (PDF y compartir). Antes había dos cabeceras apiladas (la de la app y
             la de la lista) y la lista perdía media pantalla.
           */}
-          <div className="-mx-4 border-b border-border-soft bg-bg/95 px-2 pb-1.5 pt-[calc(var(--safe-top)+0.3rem)] backdrop-blur-md">
+          <div className="-mx-2 border-b border-border-soft bg-bg/95 px-2 pb-1.5 pt-[calc(var(--safe-top)+0.3rem)] backdrop-blur-md">
             {buscandoItem ? (
               <div className="flex items-center gap-1.5">
                 <button
@@ -624,7 +869,7 @@ export function ShoppingDetailPage() {
                     placeholder="Buscar producto en la lista…"
                     autoComplete="off"
                     enterKeyHint="search"
-                    className="h-10 w-full rounded-full border border-border-soft bg-surface-2 pl-9 pr-9 text-sm text-ink outline-none transition placeholder:text-faint focus:border-brand"
+                    className="h-10 w-full border border-border-soft bg-surface-2 pl-9 pr-9 text-sm text-ink outline-none transition placeholder:text-faint focus:border-brand"
                   />
                   {buscarItem ? (
                     <button
@@ -727,7 +972,7 @@ export function ShoppingDetailPage() {
                     <button
                       type="button"
                       onClick={() => setRepartirOpen(true)}
-                      className="rounded-full border border-border-soft px-2.5 py-0.5 text-[0.7rem] text-muted transition hover:text-ink"
+                      className="border border-border-soft px-2.5 py-0.5 text-[0.7rem] text-muted transition hover:text-ink"
                     >
                       Repartir
                     </button>
@@ -736,7 +981,7 @@ export function ShoppingDetailPage() {
                     type="button"
                     onClick={() => setPorPasillo((valor) => !valor)}
                     aria-pressed={porPasillo}
-                    className={`rounded-full border px-2.5 py-0.5 text-[0.7rem] ${
+                    className={`border px-2.5 py-0.5 text-[0.7rem] ${
                       porPasillo ? 'border-brand/60 bg-brand/15 text-brand' : 'border-border-soft text-muted'
                     }`}
                   >
@@ -881,8 +1126,8 @@ export function ShoppingDetailPage() {
       {/* Acciones de la lista */}
       <Card className="space-y-3">
         <SectionTitle
-          title="Terminar la compra"
-          hint="Registrar el gasto es lo único que mueve dinero: se hace contra el servidor, con su asiento contable."
+          title="Finalizar la compra"
+          hint="Saque una foto de la factura y la app escribe los productos; después se registra el gasto con su asiento."
         />
         {registered ? (
           <Link to="/movimientos">
@@ -891,9 +1136,19 @@ export function ShoppingDetailPage() {
             </Button>
           </Link>
         ) : (
-          <Button fullWidth onClick={() => setPaying(true)} disabled={fromCache}>
-            <IconArrowDown size={18} /> Registrar gasto en FINANZA
-          </Button>
+          <div className="space-y-2">
+            <Button fullWidth size="lg" onClick={finalizarCompra} disabled={fromCache}>
+              <IconFile size={18} /> Finalizar compra con factura
+            </Button>
+            <button
+              type="button"
+              onClick={() => setPaying(true)}
+              disabled={fromCache}
+              className="w-full text-center text-xs font-medium text-brand underline decoration-dotted underline-offset-2 disabled:opacity-50"
+            >
+              Registrar el gasto sin factura
+            </button>
+          </div>
         )}
 
         {!registered && fromCache ? (
@@ -902,6 +1157,13 @@ export function ShoppingDetailPage() {
             conexión, este botón se activará solo.
           </p>
         ) : null}
+
+        <Link
+          to="/compras/catalogo"
+          className="block border-t border-border-soft pt-2 text-center text-xs font-medium text-brand underline decoration-dotted underline-offset-2"
+        >
+          Ver el catálogo de productos y sus precios
+        </Link>
 
         <div className="flex flex-wrap gap-2 border-t border-border-soft pt-3">
           {list.status === 'DRAFT' ? (
@@ -1054,9 +1316,6 @@ export function ShoppingDetailPage() {
         onConfirm={() => void deleteItem()}
       />
 
-      {/* Espacio al final para que el botón flotante no tape el último producto. */}
-      <div className="h-20" aria-hidden="true" />
-
       {/* BOTÓN FLOTANTE PARA AÑADIR (estilo AppSheet)
           ------------------------------------------
           La pantalla se queda con la lista y la lupa; añadir producto —con su
@@ -1064,15 +1323,7 @@ export function ShoppingDetailPage() {
           formulario en una hoja. Así la lista ocupa casi toda la pantalla, que
           es lo que se mira en la tienda. */}
       {!registered ? (
-        <button
-          type="button"
-          onClick={() => setAddOpen(true)}
-          aria-label="Añadir producto a la lista"
-          className="fixed bottom-[calc(var(--safe-bottom)+1.25rem)] right-4 z-30 flex h-14 items-center gap-1.5 rounded-full bg-brand pl-4 pr-5 text-sm font-semibold text-white shadow-elevated transition active:scale-95"
-        >
-          <IconPlus size={22} />
-          Añadir
-        </button>
+        <Fab label="Añadir" ariaLabel="Añadir producto a la lista" onClick={() => setAddOpen(true)} sobreBarra={false} />
       ) : null}
 
       {/* Añadir a la lista: todo en el mismo sitio (nombre, cantidad y precio). */}
@@ -1084,6 +1335,15 @@ export function ShoppingDetailPage() {
             void addItem();
           }}
         >
+          {/* Atajo al lector de facturas: si ya compró, no hay que teclear 20 líneas. */}
+          <button
+            type="button"
+            onClick={abrirLectorFactura}
+            className="flex w-full items-center justify-center gap-2 border border-brand/40 bg-brand/5 px-3 py-2.5 text-sm font-semibold text-brand transition hover:bg-brand/10"
+          >
+            <IconFile size={18} />
+            Leer una factura con IA
+          </button>
           <Field
             label="¿Qué necesita?"
             value={addName}
@@ -1106,6 +1366,18 @@ export function ShoppingDetailPage() {
               />
             </div>
           </div>
+          {sugerenciaPrecio ? (
+            <button
+              type="button"
+              onClick={() => setAddPrice(sugerenciaPrecio.price)}
+              className="flex w-full items-center justify-between gap-2 border border-border-soft bg-surface-2 px-2.5 py-2 text-left text-xs text-muted transition hover:border-brand/40"
+            >
+              <span className="min-w-0 truncate">
+                Ya lo compró: <strong className="text-ink">{sugerenciaPrecio.name}</strong>
+              </span>
+              <span className="shrink-0 font-semibold text-brand">{sugerenciaPrecio.price} · usar</span>
+            </button>
+          ) : null}
           <button
             type="button"
             onClick={() => setPlantillasOpen(true)}
@@ -1117,6 +1389,210 @@ export function ShoppingDetailPage() {
             {adding ? 'Añadiendo…' : 'Añadir a la lista'}
           </Button>
         </form>
+      </Sheet>
+
+      {/* LEER UNA FACTURA CON IA
+          ----------------------
+          La IA lee la foto o el PDF y PROPONE las líneas con sus precios. Nada se
+          guarda sin que el usuario lo revise: así un dato mal leído no se
+          convierte en un gasto equivocado. */}
+      <Sheet
+        open={facturaOpen}
+        onClose={() => {
+          setFacturaOpen(false);
+          setFinalizando(false);
+        }}
+        title={finalizando ? 'Finalizar compra' : 'Leer una factura con IA'}
+      >
+        <div className="space-y-3 pb-3">
+          {facturaLineas.length === 0 ? (
+            <>
+              <p className="text-xs leading-snug text-muted">
+                {finalizando
+                  ? 'Último paso: haga una foto de la factura (o suba el PDF). La IA escribe los productos con su precio, usted los revisa y el gasto se registra con la cuenta de donde salió el dinero.'
+                  : 'Haga una foto de la factura (o suba el PDF) y la IA escribirá los productos, las cantidades y los precios. Después podrá corregir lo que haga falta antes de guardar.'}
+              </p>
+              <label
+                className={`flex h-12 w-full cursor-pointer items-center justify-center gap-2 bg-brand px-4 text-sm font-semibold text-white transition active:scale-[0.99] ${
+                  facturaCargando ? 'pointer-events-none opacity-60' : ''
+                }`}
+              >
+                <IconFile size={18} />
+                {facturaCargando ? 'Leyendo la factura…' : 'Elegir foto o PDF'}
+                <input
+                  type="file"
+                  accept="image/*,application/pdf"
+                  capture="environment"
+                  disabled={facturaCargando}
+                  className="sr-only"
+                  onChange={(event) => {
+                    const file = event.target.files?.[0];
+                    event.target.value = '';
+                    if (file) {
+                      void leerFactura(file);
+                    }
+                  }}
+                />
+              </label>
+              {facturaCargando ? <Skeleton className="h-16 w-full" /> : null}
+              {facturaError ? <Notice tone="warning">{facturaError}</Notice> : null}
+              {finalizando ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setFacturaOpen(false);
+                    setFinalizando(false);
+                    setPaying(true);
+                  }}
+                  className="w-full text-center text-xs font-medium text-brand underline decoration-dotted underline-offset-2"
+                >
+                  Continuar sin factura
+                </button>
+              ) : null}
+              <p className="text-[0.7rem] leading-snug text-faint">
+                La imagen se envía al proveedor de IA sólo para leerla. No se guarda en ninguna carpeta pública.
+              </p>
+            </>
+          ) : (
+            <>
+              <div className="border border-border-soft bg-surface-2 p-2 text-xs text-muted">
+                {facturaResumen?.supplier ? <span className="font-semibold text-ink">{facturaResumen.supplier}</span> : null}
+                {facturaResumen?.date ? ` · ${facturaResumen.date}` : ''}
+                {facturaResumen?.total ? ` · total ${facturaResumen.total}` : ''}
+                <span className="mt-1 block text-[0.7rem] text-faint">
+                  {facturaLineas.filter((line) => line.include).length} de {facturaLineas.length} productos seleccionados
+                </span>
+              </div>
+
+              {facturaAvisos.length > 0 ? (
+                <Notice tone="warning" title="Revise esto antes de guardar">
+                  <ul className="list-disc space-y-1 pl-4">
+                    {facturaAvisos.slice(0, 4).map((aviso) => (
+                      <li key={aviso}>{aviso}</li>
+                    ))}
+                  </ul>
+                </Notice>
+              ) : null}
+
+              <div className="space-y-2">
+                {facturaLineas.map((line, index) => (
+                  <div key={`${line.name}-${index}`} className="border border-border-soft p-2">
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        checked={line.include}
+                        onChange={(event) => {
+                          const next = [...facturaLineas];
+                          next[index] = { ...line, include: event.target.checked };
+                          setFacturaLineas(next);
+                        }}
+                        aria-label={`Incluir ${line.name}`}
+                        className="h-5 w-5 shrink-0 accent-[var(--color-brand)]"
+                      />
+                      <input
+                        value={line.name}
+                        onChange={(event) => {
+                          const next = [...facturaLineas];
+                          next[index] = { ...line, name: event.target.value };
+                          setFacturaLineas(next);
+                        }}
+                        aria-label={`Producto ${index + 1}`}
+                        className="min-w-0 flex-1 border border-border-soft bg-surface-2 px-2 py-1.5 text-sm text-ink outline-none focus:border-brand"
+                      />
+                    </div>
+                    <div className="mt-1.5 flex items-center gap-2 pl-7">
+                      <div className="w-20 shrink-0">
+                        <label className="block text-[0.65rem] uppercase tracking-wide text-faint">
+                          Cantidad
+                          <input
+                            value={line.quantity}
+                            inputMode="decimal"
+                            aria-label={`Cantidad ${index + 1}`}
+                            onChange={(event) => {
+                              const next = [...facturaLineas];
+                              next[index] = { ...line, quantity: event.target.value };
+                              setFacturaLineas(next);
+                            }}
+                            className="mt-0.5 w-full border border-border-soft bg-surface-2 px-2 py-1 text-sm text-ink outline-none focus:border-brand"
+                          />
+                        </label>
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <label className="block text-[0.65rem] uppercase tracking-wide text-faint">
+                          Precio por unidad
+                          <input
+                            value={line.unitPrice}
+                            inputMode="decimal"
+                            aria-label={`Precio ${index + 1}`}
+                            placeholder="sin precio"
+                            onChange={(event) => {
+                              const next = [...facturaLineas];
+                              next[index] = { ...line, unitPrice: event.target.value };
+                              setFacturaLineas(next);
+                            }}
+                            className="mt-0.5 w-full border border-border-soft bg-surface-2 px-2 py-1 text-sm text-ink outline-none focus:border-brand"
+                          />
+                        </label>
+                        {line.quantity !== '' && line.unitPrice !== '' && Number(line.quantity) > 0 && Number(line.unitPrice) > 0 ? (
+                          <p className="mt-0.5 text-[0.68rem] text-faint">
+                            = {(Number(line.quantity) * Number(line.unitPrice)).toFixed(2)}
+                          </p>
+                        ) : null}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {facturaError ? <Notice tone="warning">{facturaError}</Notice> : null}
+
+              {facturaArchivo ? (
+                <label className="flex items-start gap-2 text-xs text-muted">
+                  <input
+                    type="checkbox"
+                    checked={guardarFacturaEnDocumentos}
+                    onChange={(event) => setGuardarFacturaEnDocumentos(event.target.checked)}
+                    className="mt-0.5 h-4 w-4 accent-[var(--color-brand)]"
+                  />
+                  <span>Guardar la factura en Documentos, junto al gasto.</span>
+                </label>
+              ) : null}
+
+              {/* Lo que de verdad va a entrar en la lista. Se compara con el total
+                  impreso: si no cuadra, el usuario lo ve antes de guardar. */}
+              <div className="flex items-baseline justify-between gap-3 border-t border-border-soft pt-2 text-sm">
+                <span className="text-muted">Total seleccionado</span>
+                <span className="font-semibold text-ink">
+                  {facturaLineas
+                    .filter((line) => line.include)
+                    .reduce((acc, line) => acc + (Number(line.quantity) || 0) * (Number(line.unitPrice) || 0), 0)
+                    .toFixed(2)}
+                </span>
+              </div>
+
+              <div className="flex flex-col gap-2">
+                <Button fullWidth size="lg" disabled={facturaGuardando} onClick={() => void guardarFactura()}>
+                  {facturaGuardando
+                    ? 'Añadiendo…'
+                    : finalizando
+                      ? `Guardar y registrar el gasto (${facturaLineas.filter((line) => line.include).length})`
+                      : `Añadir ${facturaLineas.filter((line) => line.include).length} producto(s) a la lista`}
+                </Button>
+                <Button
+                  variant="ghost"
+                  onClick={() => {
+                    setFacturaLineas([]);
+                    setFacturaResumen(null);
+                    setFacturaAvisos([]);
+                    setFacturaError(null);
+                  }}
+                >
+                  Leer otra factura
+                </Button>
+              </div>
+            </>
+          )}
+        </div>
       </Sheet>
 
       {/* REPARTIR LA COMPRA ENTRE DOS
@@ -1329,7 +1805,7 @@ function FilaProducto({
         disabled={registered}
         onClick={onToggle}
         aria-label={item.isPurchased ? `Desmarcar ${item.name}` : `Marcar ${item.name} como comprado`}
-        className={`mt-0.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-full border transition ${
+        className={`mt-0.5 flex h-11 w-11 shrink-0 items-center justify-center border transition ${
           item.isPurchased
             ? 'border-positive bg-positive/15 text-positive'
             : 'border-border-strong text-faint hover:text-ink'

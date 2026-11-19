@@ -145,7 +145,7 @@ test.describe('nada se pierde', () => {
     await expect(page.getByLabel('¿Cuánto salió?')).toBeVisible({ timeout: 15_000 });
     // Se vuelve al panel SIN recargar el documento (navegación interna): así la
     // pantalla de registro ya está descargada en este mismo documento.
-    await page.getByRole('link', { name: 'Inicio', exact: true }).click();
+    await page.getByRole('link', { name: 'Panel', exact: true }).click();
     await expect(page.getByText(/¿Dónde está mi dinero\?/i)).toBeVisible();
 
     // 1) Se queda sin datos móviles.
@@ -165,6 +165,9 @@ test.describe('nada se pierde', () => {
     // mencione «sin confirmar» (el aviso de cabecera también lo dice).
     await expect(page.getByText(/Guardado en este dispositivo SIN CONFIRMAR/i)).toBeVisible({ timeout: 45_000 });
     // El indicador de la cabecera dice cuántas operaciones quedan sin confirmar.
+    // Registrar es pantalla completa (trae su propia barra), así que el indicador
+    // se comprueba al volver al panel: es donde vive el estado de la aplicación.
+    await page.getByRole('link', { name: 'Volver al inicio' }).click();
     await expect(page.getByRole('button', { name: /1 operación\(es\) sin confirmar/i })).toBeVisible({
       timeout: 20_000,
     });

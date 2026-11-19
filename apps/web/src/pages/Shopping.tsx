@@ -14,6 +14,7 @@ import {
   Card,
   ConfirmDialog,
   EmptyState,
+  Fab,
   Field,
   ListScreen,
   Money,
@@ -21,9 +22,10 @@ import {
   ProgressBar,
   Sheet,
   Skeleton,
+  Spinner,
 } from '../components/ui';
 import { toast } from '../components/Toast';
-import { IconChevronLeft, IconChevronRight, IconClose, IconPlus, IconSearch } from '../components/icons';
+import { IconBag, IconChart, IconChevronLeft, IconChevronRight, IconClose, IconSearch } from '../components/icons';
 import {
   createListOffline,
   flushShoppingQueue,
@@ -32,6 +34,7 @@ import {
 } from '../lib/shopping-offline';
 import { countShoppingPending, getLocalShoppingLists, removeLocalShoppingList } from '../lib/db';
 import { todayBusinessDate } from '../lib/format';
+import { formatMoney } from '../lib/format';
 
 /**
  * COMPRAS PERSONALES — LISTAS
@@ -46,6 +49,54 @@ import { todayBusinessDate } from '../lib/format';
 
 type Filtro = 'ABIERTAS' | 'FINALIZADAS' | 'TODAS';
 
+/** Análisis del historial que calcula el servidor (sin IA). */
+interface Analisis {
+  totals: { purchases: number; spent: number; averageTicket: number | null; since: string | null; until: string | null };
+  tips: string[];
+  topProducts: Array<{ name: string; times: number; lastPrice: number | null; changePct: number | null }>;
+  priceIncreases: Array<{ name: string; from: number; to: number; changePct: number }>;
+  balance: {
+    groups: Array<{ group: string; label: string; products: number; share: number }>;
+    ultraProcessedShare: number;
+    score: number;
+  };
+  ai: { configured: boolean; model: string | null };
+}
+
+/** Tarjeta compacta: una línea con el gasto y el acceso al detalle. */
+function SugerenciasCard({
+  insights,
+  currency,
+  onAbrir,
+}: {
+  insights: Analisis | null;
+  currency: string;
+  onAbrir: () => void;
+}) {
+  if (!insights || insights.totals.purchases === 0) {
+    return null;
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={onAbrir}
+      className="flex w-full items-center gap-2 border border-border-soft bg-surface p-2.5 text-left transition hover:border-brand/40"
+    >
+      <span className="flex h-9 w-9 shrink-0 items-center justify-center bg-brand/10 text-brand">
+        <IconChart size={18} />
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block text-sm font-semibold text-ink">Sugerencias de compra</span>
+        <span className="block truncate text-[0.7rem] text-muted">
+          {insights.totals.purchases} compra(s) · {formatMoney(String(insights.totals.spent), currency)} en total
+        </span>
+      </span>
+      <IconChevronRight size={18} className="shrink-0 text-faint" />
+    </button>
+  );
+}
+
 export function ShoppingPage() {
   const { entities, preferences } = useAuth();
   const navigate = useNavigate();
@@ -54,7 +105,6 @@ export function ShoppingPage() {
 
   const [lists, setLists] = useState<RemoteShoppingList[]>([]);
   const [loading, setLoading] = useState(true);
-  const [fromCache, setFromCache] = useState(false);
   const [filtro, setFiltro] = useState<Filtro>('ABIERTAS');
   const [busqueda, setBusqueda] = useState('');
   const [buscando, setBuscando] = useState(false);
@@ -63,6 +113,12 @@ export function ShoppingPage() {
   const [modoTienda, setModoTienda] = useState(() => modoTiendaActivo());
 
   const [creating, setCreating] = useState(false);
+  // Sugerencias calculadas con el historial real de compras.
+  const [insights, setInsights] = useState<Analisis | null>(null);
+  const [sugerenciasOpen, setSugerenciasOpen] = useState(false);
+  const [consejoIA, setConsejoIA] = useState<{ title: string; tips: string[]; suggestedList: Array<{ name: string; reason: string }> } | null>(null);
+  const [consejoCargando, setConsejoCargando] = useState(false);
+  const [consejoError, setConsejoError] = useState<string | null>(null);
   const [newName, setNewName] = useState('');
   const [newEntityId, setNewEntityId] = useState(entityId || entities[0]?.id || '');
   const [newDate, setNewDate] = useState(todayBusinessDate(preferences?.timezone));
@@ -78,7 +134,6 @@ export function ShoppingPage() {
     setLoading(true);
     const result = await loadShoppingLists({ entityId, search: busqueda });
     setLists(result.lists);
-    setFromCache(result.fromCache);
     setPending(await countShoppingPending());
     setLoading(false);
   };
@@ -87,6 +142,26 @@ export function ShoppingPage() {
     void refresh();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [entityId, busqueda]);
+
+  // El análisis no bloquea la pantalla: si falla, Compras sigue funcionando.
+  useEffect(() => {
+    let cancelado = false;
+    void (async () => {
+      try {
+        const data = await api.get<Analisis>(`/shopping-lists/insights${entityId ? `?entityId=${entityId}` : ''}`);
+        if (!cancelado) {
+          setInsights(data);
+        }
+      } catch {
+        if (!cancelado) {
+          setInsights(null);
+        }
+      }
+    })();
+    return () => {
+      cancelado = true;
+    };
+  }, [entityId, lists.length]);
 
   // Reintento automático de los envíos pendientes cuando vuelve la conexión.
   useEffect(() => {
@@ -184,19 +259,6 @@ export function ShoppingPage() {
     }
   };
 
-  const duplicate = async (list: RemoteShoppingList) => {
-    setBusyId(list.id);
-    try {
-      await api.post(`/shopping-lists/${list.id}/duplicate`, {});
-      toast.success('Lista duplicada como borrador.');
-      await refresh();
-    } catch (error) {
-      toast.error('No se pudo duplicar', error instanceof ApiError ? error.message : 'Requiere conexión.');
-    } finally {
-      setBusyId(null);
-    }
-  };
-
   const archive = async (list: RemoteShoppingList) => {
     setBusyId(list.id);
     try {
@@ -241,6 +303,29 @@ export function ShoppingPage() {
     })();
   }, [lists, pending]);
 
+  const pedirConsejoIA = async () => {
+    setConsejoCargando(true);
+    setConsejoError(null);
+    try {
+      const data = await api.post<{
+        title: string;
+        tips: string[];
+        suggestedList: Array<{ name: string; reason: string }>;
+      }>('/shopping-lists/advice', entityId ? { entityId } : {});
+      setConsejoIA(data);
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 503) {
+        setConsejoError('Los consejos con IA no están activados en este servidor.');
+      } else {
+        setConsejoError(
+          error instanceof ApiError ? error.message : 'No se pudo pedir el consejo. Inténtelo de nuevo en un momento.',
+        );
+      }
+    } finally {
+      setConsejoCargando(false);
+    }
+  };
+
   return (
     <ListScreen
       toolbar={
@@ -251,11 +336,10 @@ export function ShoppingPage() {
             Volver a la izquierda, el nombre de la pantalla y la lupa. Al pulsar
             la lupa, la barra ENTERA se convierte en el buscador: no se apila un
             campo debajo del título, se sustituye. Se sale con la flecha o con ✕.
-            Va de borde a borde (-mx-4) para que parezca la barra de la app y no
-            una tarjeta más.
+            Va de borde a borde (-mx-2, igual que el margen de la columna) para
+            que parezca la barra de la app y no una tarjeta más.
           */}
-          <div className="-mx-4 border-b border-border-soft bg-bg/95 px-2 pb-1.5 pt-[calc(var(--safe-top)+0.3rem)] backdrop-blur-md">
-          {buscando ? (
+          <div className="-mx-2 border-b border-border-soft bg-bg/95 px-2 pb-1.5 pt-[calc(var(--safe-top)+0.3rem)] backdrop-blur-md">          {buscando ? (
             <div className="flex items-center gap-1.5">
               <button
                 type="button"
@@ -278,7 +362,7 @@ export function ShoppingPage() {
                   placeholder="Buscar lista o producto…"
                   autoComplete="off"
                   enterKeyHint="search"
-                  className="h-10 w-full rounded-full border border-border-soft bg-surface-2 pl-9 pr-9 text-sm text-ink outline-none transition placeholder:text-faint focus:border-brand"
+                  className="h-10 w-full border border-border-soft bg-surface-2 pl-9 pr-9 text-sm text-ink outline-none transition placeholder:text-faint focus:border-brand"
                 />
                 {busqueda ? (
                   <button
@@ -314,13 +398,14 @@ export function ShoppingPage() {
           )}
           </div>
 
-          {fromCache ? (
-            <Notice tone="warning" title="Mostrando lo guardado en este dispositivo">
-              No hay conexión con el servidor. Puede consultar y preparar sus listas; los cambios quedarán
-              <strong> pendientes de enviar</strong>.
-            </Notice>
+          {!buscando ? (
+            <p className="px-1 pt-1 text-[0.72rem] leading-snug text-muted">
+              Listas de lo que va a comprar. Marcar un producto no es un gasto: al terminar, el gasto se registra aparte.
+            </p>
           ) : null}
 
+          {/* El aviso de «sin conexión» ya lo da la barra superior de la app: aquí
+              sólo se muestra lo que se puede ACCIONAR (envíos pendientes). */}
           {pending > 0 ? (
             <Notice tone="info">
               {pending} lista(s) con cambios <strong>pendientes de enviar</strong>. Se enviarán solas cuando haya conexión.
@@ -341,7 +426,7 @@ export function ShoppingPage() {
                 type="button"
                 onClick={() => setFiltro(opcion.value)}
                 aria-pressed={filtro === opcion.value}
-                className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${
+                className={`px-3 py-1.5 text-xs font-semibold transition ${
                   filtro === opcion.value
                     ? 'bg-brand text-white shadow-card'
                     : 'bg-surface-2 text-muted hover:text-ink'
@@ -358,14 +443,22 @@ export function ShoppingPage() {
               onClick={() => void alternarModoTienda()}
               aria-pressed={modoTienda}
               title="Trabajar sin esperar al servidor (la compra se guarda en el teléfono)"
-              className={`ml-auto rounded-full px-3 py-1.5 text-xs font-semibold transition ${
-                modoTienda
-                  ? 'bg-warning/20 text-ink ring-1 ring-warning/50'
-                  : 'text-muted ring-1 ring-border-soft hover:text-ink'
+              className={`ml-auto px-2.5 py-1.5 text-xs font-semibold transition ${
+                modoTienda ? 'bg-brand/10 text-brand' : 'text-muted hover:text-ink'
               }`}
             >
-              {modoTienda ? 'Modo tienda: sí' : 'Modo tienda'}
+              {modoTienda ? 'Modo tienda' : 'Modo tienda'}
             </button>
+
+            {/* Catálogo de productos con su último precio: lo que se compra y cuánto cuesta. */}
+            <Link
+              to="/compras/catalogo"
+              title="Productos con su último precio"
+              className="flex items-center gap-1 px-2 py-1.5 text-xs font-semibold text-muted transition hover:text-ink"
+            >
+              <IconBag size={16} />
+              Catálogo
+            </Link>
           </div>
         </>
       }
@@ -376,7 +469,11 @@ export function ShoppingPage() {
           <Skeleton className="h-24" />
           <Skeleton className="h-24" />
         </div>
-      ) : filtered.length === 0 ? (
+      ) : (
+        <>
+          <SugerenciasCard insights={insights} currency={currency} onAbrir={() => setSugerenciasOpen(true)} />
+
+          {filtered.length === 0 ? (
         <EmptyState
           title={busqueda ? 'Ninguna lista coincide' : 'Todavía no hay listas de compras'}
           hint={
@@ -386,7 +483,7 @@ export function ShoppingPage() {
           }
           action={<Button onClick={() => setCreating(true)}>Crear la primera lista</Button>}
         />
-      ) : (
+          ) : (
         <div className="space-y-3">
           {filtered.map((list) => {
             const total = Number(list.counts.items);
@@ -425,53 +522,52 @@ export function ShoppingPage() {
                   </div>
 
                   <ProgressBar percent={percent} tone={percent >= 100 ? 'positive' : 'neutral'} />
-
-                  <div className="flex items-baseline justify-between gap-2 text-[0.7rem]">
-                    <span className="text-faint">
-                      Estimado{' '}
-                      <span className="font-semibold tabular-nums text-ink">
-                        <Money value={list.totals.estimated} currency={currency} />
-                      </span>
-                    </span>
-                    <span className="text-faint">
-                      Pagado{' '}
-                      <span className="font-semibold tabular-nums text-ink">
-                        <Money
-                          value={list.totals.actual}
-                          currency={currency}
-                          tone={list.totals.actual === '0.00' ? 'neutral' : 'negative'}
-                        />
-                      </span>
-                    </span>
-                    <span className="text-faint">
-                      Falta{' '}
-                      <span className="font-semibold tabular-nums text-ink">
-                        <Money value={list.totals.pending} currency={currency} />
-                      </span>
-                    </span>
-                  </div>
                 </Link>
 
-                <div className="flex flex-wrap items-center gap-1 border-t border-border-soft pt-2">
-                  <Button variant="ghost" size="sm" disabled={busyId === list.id || isLocal} onClick={() => void duplicate(list)}>
-                    Duplicar
-                  </Button>
-                  {list.status !== 'ARCHIVED' ? (
-                    <Button variant="ghost" size="sm" disabled={busyId === list.id || isLocal} onClick={() => void archive(list)}>
-                      Archivar
-                    </Button>
-                  ) : null}
-                  {!list.expense.registered ? (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      disabled={busyId === list.id || isLocal}
-                      onClick={() => setToDelete(list)}
-                      className="ml-auto text-negative"
-                    >
-                      Borrar
-                    </Button>
-                  ) : null}
+                {/* Una sola línea de cifras y las acciones como texto: antes había
+                    tres bloques con etiquetas y tres botones con caja en cada tarjeta. */}
+                <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 border-t border-border-soft pt-2 text-[0.7rem] text-muted">
+                  <span className="min-w-0 truncate">
+                    Estimado{' '}
+                    <span className="font-semibold tabular-nums text-ink">
+                      <Money value={list.totals.estimated} currency={currency} />
+                    </span>
+                    {Number(list.totals.actual) > 0 ? (
+                      <>
+                        {' · '}Pagado{' '}
+                        <span className="font-semibold tabular-nums text-ink">
+                          <Money value={list.totals.actual} currency={currency} />
+                        </span>
+                      </>
+                    ) : null}
+                    {' · '}Falta{' '}
+                    <span className="font-semibold tabular-nums text-ink">
+                      <Money value={list.totals.pending} currency={currency} />
+                    </span>
+                  </span>
+
+                  <span className="flex shrink-0 items-center gap-3">
+                    {list.status !== 'ARCHIVED' ? (
+                      <button
+                        type="button"
+                        disabled={busyId === list.id || isLocal}
+                        onClick={() => void archive(list)}
+                        className="text-muted underline decoration-dotted underline-offset-2 transition hover:text-ink disabled:opacity-50"
+                      >
+                        Archivar
+                      </button>
+                    ) : null}
+                    {!list.expense.registered ? (
+                      <button
+                        type="button"
+                        disabled={busyId === list.id || isLocal}
+                        onClick={() => setToDelete(list)}
+                        className="text-negative underline decoration-dotted underline-offset-2 transition hover:opacity-80 disabled:opacity-50"
+                      >
+                        Borrar
+                      </button>
+                    ) : null}
+                  </span>
                 </div>
 
                 {list.expense.registered ? (
@@ -484,22 +580,14 @@ export function ShoppingPage() {
           })}
         </div>
       )}
-
-      {/* Espacio al final para que el botón flotante no tape la última tarjeta. */}
-      <div className="h-20" aria-hidden="true" />
+        </>
+      )}
 
       {/* BOTÓN FLOTANTE PARA CREAR (estilo AppSheet)
           ------------------------------------------
           Antes vivía en la barra de arriba, compitiendo con el título. Flotando
           abajo a la derecha está siempre a mano del pulgar y no ocupa la barra. */}
-      <button
-        type="button"
-        onClick={() => setCreating(true)}
-        className="fixed bottom-[calc(var(--safe-bottom)+1.25rem)] right-4 z-30 flex h-14 items-center gap-1.5 rounded-full bg-brand pl-4 pr-5 text-sm font-semibold text-white shadow-elevated transition active:scale-95"
-      >
-        <IconPlus size={22} />
-        Nueva
-      </button>
+      <Fab label="Nueva" onClick={() => setCreating(true)} sobreBarra={false} />
 
       {/* Nueva lista */}
       <Sheet open={creating} onClose={() => setCreating(false)} title="Nueva lista de compras">
@@ -554,6 +642,118 @@ export function ShoppingPage() {
               {saving ? 'Creando…' : 'Crear lista'}
             </Button>
           </div>
+        </div>
+      </Sheet>
+
+      {/* SUGERENCIAS: análisis del historial y consejos.
+          Los datos salen del servidor con reglas propias (no hace falta IA). La
+          IA, si está configurada, añade una redacción más natural y una lista
+          concreta; si falla, los consejos por reglas siguen ahí. */}
+      <Sheet open={sugerenciasOpen} onClose={() => setSugerenciasOpen(false)} title="Sugerencias de compra">
+        <div className="space-y-3 pb-3">
+          {insights ? (
+            <>
+              <div className="divide-y divide-border-soft border border-border-soft text-sm">
+                <div className="flex items-baseline justify-between gap-3 p-2">
+                  <span className="text-muted">Compras registradas</span>
+                  <span className="font-semibold text-ink">{insights.totals.purchases}</span>
+                </div>
+                <div className="flex items-baseline justify-between gap-3 p-2">
+                  <span className="text-muted">Gastado en total</span>
+                  <Money value={String(insights.totals.spent)} currency={currency} />
+                </div>
+                <div className="flex items-baseline justify-between gap-3 p-2">
+                  <span className="text-muted">Ticket medio</span>
+                  <span className="font-semibold text-ink">
+                    {insights.totals.averageTicket === null ? '—' : <Money value={String(insights.totals.averageTicket)} currency={currency} />}
+                  </span>
+                </div>
+                <div className="flex items-baseline justify-between gap-3 p-2">
+                  <span className="text-muted">Equilibrio de la compra</span>
+                  <span className="font-semibold text-ink">{insights.balance.score}/100</span>
+                </div>
+              </div>
+
+              {insights.balance.groups.length > 0 ? (
+                <div className="flex flex-wrap gap-1.5">
+                  {insights.balance.groups
+                    .filter((row) => row.share > 0)
+                    .map((row) => (
+                      <Badge key={row.group} tone={row.group === 'procesados' ? 'warning' : 'neutral'}>
+                        {row.label} {row.share}%
+                      </Badge>
+                    ))}
+                </div>
+              ) : null}
+
+              {insights.priceIncreases.length > 0 ? (
+                <div>
+                  <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted">Precios que subieron</p>
+                  <ul className="space-y-1 text-sm text-ink">
+                    {insights.priceIncreases.map((row) => (
+                      <li key={row.name} className="flex items-baseline justify-between gap-2">
+                        <span className="truncate">{row.name}</span>
+                        <span className="shrink-0 text-negative">
+                          {Number(row.from).toFixed(2)} → {Number(row.to).toFixed(2)} (+{Math.round(row.changePct)}%)
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+
+              <div>
+                <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted">Qué mejorar</p>
+                <ul className="list-disc space-y-1 pl-4 text-sm leading-snug text-ink">
+                  {insights.tips.map((tip) => (
+                    <li key={tip}>{tip}</li>
+                  ))}
+                </ul>
+              </div>
+
+              {insights.ai.configured ? (
+                <div className="space-y-2 border-t border-border-soft pt-3">
+                  {consejoIA ? (
+                    <>
+                      <p className="text-sm font-semibold text-ink">{consejoIA.title}</p>
+                      <ul className="list-disc space-y-1 pl-4 text-sm leading-snug text-ink">
+                        {consejoIA.tips.map((tip) => (
+                          <li key={tip}>{tip}</li>
+                        ))}
+                      </ul>
+                      {consejoIA.suggestedList.length > 0 ? (
+                        <div>
+                          <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted">Para la próxima lista</p>
+                          <ul className="space-y-1 text-sm text-ink">
+                            {consejoIA.suggestedList.map((row) => (
+                              <li key={row.name}>
+                                <span className="font-medium">{row.name}</span>
+                                {row.reason ? <span className="text-muted"> — {row.reason}</span> : null}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      ) : null}
+                    </>
+                  ) : null}
+                  {consejoError ? <Notice tone="warning">{consejoError}</Notice> : null}
+                  <Button variant="secondary" fullWidth disabled={consejoCargando} onClick={() => void pedirConsejoIA()}>
+                    {consejoCargando ? 'Pensando…' : consejoIA ? 'Volver a pedir consejo a la IA' : 'Pedir consejo a la IA'}
+                  </Button>
+                  <p className="text-[0.7rem] leading-snug text-faint">
+                    Se envían sólo los datos de sus compras (productos, precios y grupos). No se envía nada más.
+                  </p>
+                </div>
+              ) : (
+                <p className="border-t border-border-soft pt-3 text-[0.7rem] leading-snug text-faint">
+                  Estos consejos se calculan en el servidor con sus propias compras. Los consejos redactados con IA no
+                  están activados en este servidor.
+                </p>
+              )}
+            </>
+          ) : (
+            <Spinner label="Leyendo sus compras…" />
+          )}
         </div>
       </Sheet>
 

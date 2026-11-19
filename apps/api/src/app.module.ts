@@ -5,6 +5,7 @@ import { ScheduleModule } from '@nestjs/schedule';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 
 import { AccountsModule } from './accounts/accounts.module.js';
+import { AiModule } from './ai/ai.module.js';
 import { AttachmentsModule } from './attachments/attachments.module.js';
 import { AuditModule } from './audit/audit.module.js';
 import { AuthModule } from './auth/auth.module.js';
@@ -62,6 +63,8 @@ import { TransfersModule } from './transfers/transfers.module.js';
     SecurityModule,
     AuditModule,
 
+    // Asistente de compras (lectura de facturas y consejos con IA).
+    AiModule,
     AuthModule,
     HealthModule,
     EntitiesModule,

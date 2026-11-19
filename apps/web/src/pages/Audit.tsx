@@ -140,13 +140,12 @@ export function AuditPage() {
 
   return (
     <ListScreen
+      title="Auditoría"
+      purpose="Quién hizo qué y cuándo. Solo lectura."
       toolbar={
         <>
           <div className="flex items-center justify-between gap-2">
-            <div className="min-w-0">
-              <h1 className="text-lg font-semibold tracking-tight text-ink">Auditoría</h1>
-              <p className="text-xs text-muted">{query.data.meta.total} registro(s)</p>
-            </div>
+            <p className="text-xs text-faint">{query.data.meta.total} registro(s)</p>
             <DateRangeFilter
               value={{ from, to }}
               onChange={(rango) => {

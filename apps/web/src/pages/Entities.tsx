@@ -1,8 +1,9 @@
 import { useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, ApiError } from '../lib/api';
-import { Badge, Button, Card, EmptyState, Field, Notice, SectionTitle, Select, Spinner } from '../components/ui';
+import { Badge, Button, Card, EmptyState, Fab, Field, Notice, PageIntro, SectionTitle, Select, Sheet, Spinner } from '../components/ui';
 import { useAuth } from '../store/auth';
+import { IconChevronDown } from '../components/icons';
 
 /**
  * UNIDADES FINANCIERAS
@@ -119,49 +120,62 @@ function FilaEstructura({
     .map((fila) => ({ value: fila.id, label: fila.name }));
 
   const confirmada = Boolean(personaActual);
+  // Una unidad confirmada se queda en una línea; se abre sólo si hay que
+  // cambiarla. Las que faltan por confirmar se abren solas: son la tarea.
+  const [abierto, setAbierto] = useState(!confirmada);
 
   return (
-    <section aria-label={unidad.name} className="rounded-lg border border-border-soft p-2">
-      <div className="flex items-start justify-between gap-2">
+    <section aria-label={unidad.name} className="rounded-lg border border-border-soft">
+      <button
+        type="button"
+        onClick={() => setAbierto((valor) => !valor)}
+        aria-expanded={abierto}
+        className="flex w-full items-center justify-between gap-2 p-2 text-left"
+      >
         <div className="min-w-0">
           <p className="truncate text-sm font-medium text-ink">{unidad.name}</p>
           <p className="truncate text-xs text-faint">
-            {unidad.code} · {TYPES.find((fila) => fila.value === unidad.type)?.label ?? unidad.type}
+            {personaActual ? personaActual.name : 'Sin persona jurídica asignada'}
           </p>
         </div>
-        <Badge tone={confirmada ? 'positive' : 'warning'}>{confirmada ? 'confirmada' : 'sin confirmar'}</Badge>
-      </div>
+        <div className="flex shrink-0 items-center gap-1.5">
+          <Badge tone={confirmada ? 'positive' : 'warning'}>{confirmada ? 'confirmada' : 'sin confirmar'}</Badge>
+          <IconChevronDown size={16} className={abierto ? 'rotate-180 text-muted' : 'text-muted'} />
+        </div>
+      </button>
 
-      <div className="mt-2 space-y-2">
-        <Select
-          label="Persona jurídica"
-          value={legalEntityId}
-          onChange={setLegalEntityId}
-          options={opcionesPersona}
-          placeholder="— Sin confirmar —"
-        />
-        <Select
-          label="Depende de (opcional)"
-          value={parentEntityId}
-          onChange={setParentEntityId}
-          options={opcionesPadre}
-          placeholder="— No depende de otra —"
-        />
-        <Button
-          size="sm"
-          variant="secondary"
-          disabled={guardando}
-          onClick={() =>
-            onGuardar({
-              id: unidad.id,
-              legalEntityId: legalEntityId === '' ? null : legalEntityId,
-              parentEntityId: parentEntityId === '' ? null : parentEntityId,
-            })
-          }
-        >
-          {guardando ? 'Guardando…' : 'Guardar'}
-        </Button>
-      </div>
+      {abierto ? (
+        <div className="space-y-2 border-t border-border-soft p-2">
+          <Select
+            label="Persona jurídica"
+            value={legalEntityId}
+            onChange={setLegalEntityId}
+            options={opcionesPersona}
+            placeholder="— Sin confirmar —"
+          />
+          <Select
+            label="Depende de (opcional)"
+            value={parentEntityId}
+            onChange={setParentEntityId}
+            options={opcionesPadre}
+            placeholder="— No depende de otra —"
+          />
+          <Button
+            size="sm"
+            variant="secondary"
+            disabled={guardando}
+            onClick={() =>
+              onGuardar({
+                id: unidad.id,
+                legalEntityId: legalEntityId === '' ? null : legalEntityId,
+                parentEntityId: parentEntityId === '' ? null : parentEntityId,
+              })
+            }
+          >
+            {guardando ? 'Guardando…' : 'Guardar'}
+          </Button>
+        </div>
+      ) : null}
     </section>
   );
 }
@@ -232,6 +246,9 @@ export function EntitiesPage() {
 
   const [nombrePersona, setNombrePersona] = useState('');
   const [tipoPersona, setTipoPersona] = useState<'COMPANY' | 'INDIVIDUAL'>('COMPANY');
+  // Las altas viven en hojas que abren el botón flotante y un botón de la tarjeta.
+  const [creandoPersona, setCreandoPersona] = useState(false);
+  const [creandoUnidad, setCreandoUnidad] = useState(false);
 
   const crearPersona = async () => {
     setMessage(null);
@@ -240,6 +257,7 @@ export function EntitiesPage() {
       setNombrePersona('');
       setMessage({ tone: 'positive', text: 'Persona jurídica creada.' });
       await queryClient.invalidateQueries({ queryKey: ['estructura-juridica'] });
+      setCreandoPersona(false);
     } catch (error) {
       setMessage({
         tone: 'negative',
@@ -273,6 +291,7 @@ export function EntitiesPage() {
       setDescription('');
       await reload();
       await queryClient.invalidateQueries();
+      setCreandoUnidad(false);
     } catch (caught) {
       setMessage({ tone: 'negative', text: caught instanceof ApiError ? caught.message : 'No se pudo crear la unidad.' });
     } finally {
@@ -296,8 +315,13 @@ export function EntitiesPage() {
   const statusById = new Map((statusQuery.data?.entities ?? []).map((row) => [row.id, row]));
 
   return (
-    <div className="space-y-4">
-      {message ? <Notice tone={message.tone}>{message.text}</Notice> : null}
+    <div className="space-y-3">
+      <PageIntro
+        title="Unidades financieras"
+        purpose="Sus negocios y sus finanzas personales, cada uno con sus propias cuentas."
+      />
+
+      {message && !creandoUnidad && !creandoPersona ? <Notice tone={message.tone}>{message.text}</Notice> : null}
 
       {/* ESTRUCTURA JURÍDICA: de quién es cada unidad. De esto depende que un
           traspaso sea un movimiento interno o una operación que hay que
@@ -306,6 +330,11 @@ export function EntitiesPage() {
         <SectionTitle
           title="Personas jurídicas"
           hint="Quién es el dueño legal de cada unidad"
+          right={
+            <Button variant="secondary" size="sm" onClick={() => setCreandoPersona(true)}>
+              Añadir
+            </Button>
+          }
         />
         <p className="text-xs leading-snug text-muted">
           Una unidad sin confirmar <strong>no se asigna sola</strong>: hasta que usted lo diga, la aplicación no permite
@@ -348,28 +377,6 @@ export function EntitiesPage() {
                   guardando={guardandoEstructura === unidad.id}
                 />
               ))}
-            </div>
-
-            <div className="space-y-2 border-t border-border-soft pt-3">
-              <p className="text-xs font-medium uppercase tracking-wide text-muted">Nueva persona jurídica</p>
-              <Field
-                label="Nombre de la persona jurídica"
-                value={nombrePersona}
-                onChange={setNombrePersona}
-                placeholder="Ej.: Otra S.R.L."
-              />
-              <Select
-                label="Tipo de persona jurídica"
-                value={tipoPersona}
-                onChange={(valor) => setTipoPersona(valor as 'COMPANY' | 'INDIVIDUAL')}
-                options={[
-                  { value: 'COMPANY', label: 'Sociedad' },
-                  { value: 'INDIVIDUAL', label: 'Persona física' },
-                ]}
-              />
-              <Button size="sm" disabled={nombrePersona.trim().length < 2} onClick={() => void crearPersona()}>
-                Crear
-              </Button>
             </div>
           </>
         ) : null}
@@ -442,32 +449,55 @@ export function EntitiesPage() {
         </div>
       </Card>
 
-      <Card className="space-y-3">
-        <SectionTitle
-          title="Nueva fuente de ingresos"
-          hint="Un negocio nuevo, alquileres, servicios, inversiones o trabajo independiente"
-        />
-        <Field label="Nombre" value={name} onChange={setName} hint="Por ejemplo: Alquiler del local 2, Servicios de diseño" />
-        <Field
-          label="Código (opcional)"
-          value={code}
-          onChange={setCode}
-          hint="Se usa para identificarla en informes. Si lo deja vacío, se genera del nombre."
-        />
-        <Select label="Tipo" value={type} onChange={setType} options={TYPES} />
-        <Field label="Descripción (opcional)" value={description} onChange={setDescription} />
-        <Notice tone="neutral" title="Independencia garantizada">
-          Una unidad nueva <strong>no comparte</strong> cuentas, movimientos ni presupuestos con las demás: no se mezclan
-          operaciones ni permisos. Lo que sí puede hacer es verlas juntas en el informe consolidado.
-        </Notice>
-        <Button disabled={busy || name.trim().length < 2} onClick={() => void create()}>
-          {busy ? 'Creando…' : 'Crear unidad financiera'}
-        </Button>
-      </Card>
+      {/* Alta de unidad: hoja inferior que abre el botón flotante. */}
+      <Sheet open={creandoUnidad} onClose={() => setCreandoUnidad(false)} title="Nueva unidad financiera">
+        <div className="space-y-3 pb-3">
+          {message ? <Notice tone={message.tone}>{message.text}</Notice> : null}
+          <Field label="Nombre" value={name} onChange={setName} hint="Por ejemplo: Alquiler del local 2, Servicios de diseño" />
+          <Field
+            label="Código (opcional)"
+            value={code}
+            onChange={setCode}
+            hint="Se usa para identificarla en informes. Si lo deja vacío, se genera del nombre."
+          />
+          <Select label="Tipo" value={type} onChange={setType} options={TYPES} />
+          <Field label="Descripción (opcional)" value={description} onChange={setDescription} />
+          <p className="text-xs leading-snug text-muted">
+            Una unidad nueva <strong>no comparte</strong> cuentas, movimientos ni presupuestos con las demás. Después de
+            crearla, dé de alta sus cuentas con el dinero que tenga hoy.
+          </p>
+          <Button className="w-full" disabled={busy || name.trim().length < 2} onClick={() => void create()}>
+            {busy ? 'Creando…' : 'Crear unidad financiera'}
+          </Button>
+        </div>
+      </Sheet>
 
-      <p className="pb-4 text-center text-xs text-faint">
-        Después de crearla, dé de alta sus cuentas en «Cuentas y bancos» con el dinero que tenga hoy.
-      </p>
+      {/* Alta de persona jurídica: hoja inferior. */}
+      <Sheet open={creandoPersona} onClose={() => setCreandoPersona(false)} title="Nueva persona jurídica">
+        <div className="space-y-3 pb-3">
+          {message ? <Notice tone={message.tone}>{message.text}</Notice> : null}
+          <Field
+            label="Nombre de la persona jurídica"
+            value={nombrePersona}
+            onChange={setNombrePersona}
+            placeholder="Ej.: Otra S.R.L."
+          />
+          <Select
+            label="Tipo de persona jurídica"
+            value={tipoPersona}
+            onChange={(valor) => setTipoPersona(valor as 'COMPANY' | 'INDIVIDUAL')}
+            options={[
+              { value: 'COMPANY', label: 'Sociedad' },
+              { value: 'INDIVIDUAL', label: 'Persona física' },
+            ]}
+          />
+          <Button className="w-full" disabled={nombrePersona.trim().length < 2} onClick={() => void crearPersona()}>
+            Crear persona jurídica
+          </Button>
+        </div>
+      </Sheet>
+
+      {!creandoUnidad && !creandoPersona ? <Fab label="Nueva unidad" onClick={() => setCreandoUnidad(true)} /> : null}
     </div>
   );
 }

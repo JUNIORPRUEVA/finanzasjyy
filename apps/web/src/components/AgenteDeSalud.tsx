@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Badge, Button, Card, Notice, SectionTitle } from './ui';
-import { IconAlert, IconCheck, IconRefresh } from './icons';
+import { IconAlert, IconRefresh } from './icons';
 import { queueHealth, repairAndResend, reportProblemToAdmin, syncPendingOperations, type QueueHealth } from '../lib/sync';
 import { ApiError } from '../lib/api';
 
@@ -115,23 +115,14 @@ export function AgenteDeSalud() {
     return null;
   }
 
-  // Todo correcto: una línea discreta, sin ruido.
+  // Todo correcto: NO se pinta nada.
+  //
+  // Antes salía una tarjeta entera para decir «Datos al día», justo debajo de
+  // un encabezado que ya dice «Al día»: la misma información dos veces y una
+  // tarjeta que empujaba las cifras hacia abajo. Si algo va mal, sí aparece el
+  // aviso completo (abajo); el detalle sigue disponible en «Salud de los datos».
   if (salud.total === 0 && salud.isOnline) {
-    return (
-      <Card>
-        <div className="flex items-center gap-2">
-          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-positive/12 text-positive">
-            <IconCheck size={18} />
-          </span>
-          <div className="min-w-0">
-            <p className="text-sm font-medium text-ink">Datos al día</p>
-            <p className="text-xs leading-snug text-muted">
-              Todo lo que ha registrado en este dispositivo está confirmado por el servidor.
-            </p>
-          </div>
-        </div>
-      </Card>
-    );
+    return null;
   }
 
   const hayAtascado = salud.stuck > 0;

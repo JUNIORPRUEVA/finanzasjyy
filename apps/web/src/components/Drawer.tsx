@@ -1,10 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { visibleDrawerEntries, type NavGroupId } from '../navigation/registry';
-import { IconArrowDown, IconChevronDown, IconClose } from './icons';
+import { DRAWER_FOOTER_IDS, visibleDrawerEntries, type NavEntry } from '../navigation/registry';
+import { IconArrowDown, IconChart, IconChevronDown, IconClose } from './icons';
 import { Sheet } from './ui';
 import type { InstalacionApp } from '../lib/install';
-import { buscarActualizacion, versionActual } from '../lib/pwa';
 
 /**
  * MENÚ LATERAL (DRAWER)
@@ -47,38 +46,26 @@ export function Drawer({ open, onClose, role, userName, entityName, onLogout, re
   const location = useLocation();
   const sections = visibleDrawerEntries(role);
 
+  // Ajustes y Cerrar sesión no van en la lista que se desplaza: se quedan fijos
+  // al pie para que siempre estén a la vista.
+  const footerIds = new Set(DRAWER_FOOTER_IDS);
+  const navSections = sections
+    .map((section) => ({ ...section, entries: section.entries.filter((entry) => !footerIds.has(entry.id)) }))
+    .filter((section) => section.entries.length > 0);
+  const footerEntries = sections
+    .flatMap((section) => section.entries)
+    .filter((entry) => footerIds.has(entry.id));
+  // El pie es UNA línea: Configuración a la izquierda y el botón de salir a la
+  // derecha, sin texto. Dos filas para dos cosas era más de lo necesario.
+  const configEntry = footerEntries.find((entry) => entry.id === 'ajustes');
+  const logoutEntry = footerEntries.find((entry) => entry.action === 'logout');
+
   /** Gesto para cerrar: deslizar el propio menú hacia la izquierda. */
   const gestoCierre = useRef<{ x: number; y: number } | null>(null);
 
-  // Estado del botón «Instalar» y de la comprobación de versión.
+  // Estado del botón «Instalar» y del desplegable de Análisis.
   const [pedirInstrucciones, setPedirInstrucciones] = useState(false);
-  const [estadoVersion, setEstadoVersion] = useState<'inicial' | 'buscando' | 'aldia'>('inicial');
-  const version = versionActual();
-
-  const comprobarVersion = async () => {
-    setEstadoVersion('buscando');
-    const resultado = await buscarActualizacion();
-    // Si se aplicó, la página se está recargando: no hace falta cambiar el texto.
-    if (resultado === 'al-dia') {
-      setEstadoVersion('aldia');
-      // Vuelve al texto normal a los pocos segundos.
-      window.setTimeout(() => setEstadoVersion('inicial'), 4000);
-    }
-  };
-
-  /**
-   * Submenús plegables, UNO abierto a la vez.
-   *
-   * El menú tiene más de veinte opciones: mostrarlas todas de golpe convertía
-   * esto en una lista interminable en la que no se encontraba nada. Ahora se ve
-   * de un vistazo para qué hay tres bloques (gestión, análisis, configuración),
-   * y se abre sólo el que interesa.
-   *
-   * Arranca con «Gestión financiera» abierta (es lo que se usa a diario) y las
-   * demás cerradas. Si abres una, la otra se cierra: así el menú nunca crece más
-   * de lo que cabe en la pantalla.
-   */
-  const [openGroup, setOpenGroup] = useState<NavGroupId | null>('gestion');
+  const [analisisAbierto, setAnalisisAbierto] = useState(false);
 
   // Escape cierra; el foco entra en el menú y se encierra dentro (dialog modal).
   useEffect(() => {
@@ -147,6 +134,66 @@ export function Drawer({ open, onClose, role, userName, entityName, onLogout, re
     return null;
   }
 
+  /**
+   * Marca la opción que corresponde a la pantalla actual.
+   * Sin esto, el menú era una lista ciega: no se sabía dónde estaba uno.
+   */
+  const isActiveEntry = (to: string) => {
+    const path = to.split('?')[0];
+    if (path === '/') {
+      return location.pathname === '/';
+    }
+    return location.pathname === path || location.pathname.startsWith(`${path}/`);
+  };
+
+  /** Una fila del menú: icono, nombre y, si es la pantalla actual, resaltado. */
+  const renderEntry = (entry: NavEntry) => {
+    const Icon = entry.icon;
+    const active = entry.to ? isActiveEntry(entry.to) : false;
+
+    if (entry.action === 'logout') {
+      return (
+        <li key={entry.id}>
+          <button
+            type="button"
+            onClick={() => {
+              onClose();
+              onLogout();
+            }}
+            className="flex min-h-[2.75rem] w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-negative transition hover:bg-negative/10"
+          >
+            <span className="shrink-0">
+              <Icon size={19} />
+            </span>
+            <span className="truncate text-[0.9rem] font-medium">{entry.label}</span>
+          </button>
+        </li>
+      );
+    }
+
+    return (
+      <li key={entry.id}>
+        <Link
+          to={entry.to ?? '/'}
+          aria-current={active ? 'page' : undefined}
+          className={`flex min-h-[3rem] items-center gap-3 rounded-xl px-2.5 py-1.5 transition ${
+            active ? 'bg-brand-soft font-semibold text-brand' : 'text-ink hover:bg-surface-2 active:bg-surface-3'
+          }`}
+        >
+          <span
+            className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl transition ${
+              active ? 'bg-brand text-white' : 'bg-brand-soft text-brand'
+            }`}
+          >
+            <Icon size={21} />
+          </span>
+          <span className="min-w-0 flex-1 truncate text-[0.95rem]">{entry.label}</span>
+          {active ? <span aria-hidden="true" className="h-1.5 w-1.5 shrink-0 rounded-full bg-brand" /> : null}
+        </Link>
+      </li>
+    );
+  };
+
   return (
     <div className="fixed inset-0 z-[70]" role="dialog" aria-modal="true" aria-label="Menú de FINANZA">
       {/* Fondo: se puede tocar para cerrar y no deja tocar nada de detrás. Va con
@@ -184,10 +231,11 @@ export function Drawer({ open, onClose, role, userName, entityName, onLogout, re
         className="absolute inset-y-0 left-0 flex w-[86%] max-w-[20rem] animate-rise flex-col bg-bg-elevated shadow-elevated outline-none"
         style={{ paddingLeft: 'var(--safe-left)' }}
       >
-        {/* Cabecera del menú */}
-        <div className="flex items-start justify-between gap-2 border-b border-border-soft px-4 pb-3 pt-[calc(var(--safe-top)+0.75rem)]">
+        {/* Cabecera mínima: quién está dentro y en qué unidad. Sin la marca
+            «FINANZA»: la marca ya está en el encabezado de la aplicación y aquí
+            sólo era una línea de ruido. */}
+        <div className="flex items-start justify-between gap-2 border-b border-border-soft px-4 pb-3 pt-[calc(var(--safe-top)+0.6rem)]">
           <div className="min-w-0">
-            <p className="text-[0.7rem] font-medium uppercase tracking-wider text-faint">FINANZA</p>
             <p className="truncate text-sm font-semibold text-ink">{userName ?? 'Su cuenta'}</p>
             {entityName ? <p className="truncate text-xs text-muted">{entityName}</p> : null}
           </div>
@@ -195,102 +243,67 @@ export function Drawer({ open, onClose, role, userName, entityName, onLogout, re
             type="button"
             onClick={onClose}
             aria-label="Cerrar el menú"
-            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-muted transition hover:bg-surface-2 hover:text-ink"
+            className="flex h-11 w-11 shrink-0 items-center justify-center text-muted transition hover:bg-surface-2 hover:text-ink"
           >
             <IconClose size={20} />
           </button>
         </div>
 
-        {/* Contenido con desplazamiento propio */}
-        <nav className="flex-1 overflow-y-auto overscroll-contain px-2 py-3">
-          {sections.map((section) => {
-            const isSession = !section.group.collapsible;
-            const isOpen = isSession || openGroup === section.group.id;
-            const panelId = `menu-panel-${section.group.id}`;
+        {/*
+          CONTENIDO: una sola lista, en orden y sin adornos.
 
-            return (
-              <div key={section.group.id} className="mb-2">
-                {isSession ? (
-                  <p className="px-3 pb-1 pt-2 text-[0.68rem] font-semibold uppercase tracking-wider text-faint">
-                    {section.group.label}
-                  </p>
-                ) : (
+          Antes cada grupo era un acordeón con título, frase explicativa, número
+          de opciones y flecha; dentro, cada opción llevaba otra frase. Tantas
+          capas hacían que el menú se viera «regado» y costara encontrar nada.
+          Ahora: secciones fijas con su título, una fila por opción y la pantalla
+          actual resaltada. Nada se pliega y nada se explica dos veces.
+        */}
+        <nav className="flex-1 overflow-y-auto overscroll-contain px-2 pb-2 pt-1">
+          {navSections.map((section) => {
+            // «Análisis»: un único botón que se despliega. Sus pantallas se usan
+            // de vez en cuando y no tienen que ocupar sitio siempre.
+            if (section.group.collapsible) {
+              const panelId = `menu-group-${section.group.id}`;
+              return (
+                <div key={section.group.id} className="mt-2">
                   <button
                     type="button"
-                    aria-expanded={isOpen}
+                    aria-expanded={analisisAbierto}
                     aria-controls={panelId}
-                    onClick={() => setOpenGroup(isOpen ? null : section.group.id)}
-                    className="flex w-full items-center justify-between gap-2 rounded-xl px-3 py-2.5 text-left transition hover:bg-surface-2"
+                    onClick={() => setAnalisisAbierto((abierto) => !abierto)}
+                    className="flex min-h-[3rem] w-full items-center gap-3 rounded-xl px-2.5 py-1.5 text-left text-ink transition hover:bg-surface-2"
                   >
-                    <span className="min-w-0">
-                      <span className="block truncate text-sm font-semibold text-ink">{section.group.label}</span>
-                      <span className="mt-0.5 block truncate text-xs text-muted">{section.group.hint}</span>
+                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-brand-soft text-brand">
+                      <IconChart size={21} />
                     </span>
-                    <span className="flex shrink-0 items-center gap-1.5 text-faint">
-                      <span className="text-[0.7rem]">{section.entries.length}</span>
-                      <span className={`transition-transform ${isOpen ? 'rotate-180' : ''}`} aria-hidden="true">
-                        <IconChevronDown size={18} />
-                      </span>
+                    <span className="min-w-0 flex-1 truncate text-[0.95rem] font-medium">
+                      {section.group.label}
                     </span>
+                    <IconChevronDown
+                      size={18}
+                      className={`shrink-0 text-faint transition-transform ${analisisAbierto ? 'rotate-180' : ''}`}
+                    />
                   </button>
-                )}
-
-                <div id={panelId} hidden={!isOpen}>
-                  <ul>
-                    {section.entries.map((entry) => {
-                      const Icon = entry.icon;
-                      const content = (
-                        <>
-                          <span className="mt-0.5 shrink-0 text-muted">
-                            <Icon size={19} />
-                          </span>
-                          <span className="min-w-0">
-                            <span className="block truncate text-sm font-medium text-ink">{entry.label}</span>
-                            {entry.hint ? (
-                              <span className="mt-0.5 block truncate text-xs text-muted">{entry.hint}</span>
-                            ) : null}
-                          </span>
-                        </>
-                      );
-
-                      if (entry.action === 'logout') {
-                        return (
-                          <li key={entry.id}>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                onClose();
-                                onLogout();
-                              }}
-                              className="flex w-full items-start gap-3 rounded-xl px-3 py-2.5 text-left transition hover:bg-surface-2"
-                            >
-                              {content}
-                            </button>
-                          </li>
-                        );
-                      }
-
-                      return (
-                        <li key={entry.id}>
-                          <Link
-                            to={entry.to ?? '/'}
-                            className="ml-2 flex items-start gap-3 rounded-xl border-l border-border-soft py-2.5 pl-3 pr-2 transition hover:bg-surface-2 active:bg-surface-3"
-                          >
-                            {content}
-                          </Link>
-                        </li>
-                      );
-                    })}
+                  <ul id={panelId} hidden={!analisisAbierto} className="space-y-px">
+                    {section.entries.map(renderEntry)}
                   </ul>
                 </div>
+              );
+            }
+
+            return (
+              <div key={section.group.id} className="mt-2 first:mt-0">
+                <p className="px-3 pb-1 text-[0.66rem] font-semibold uppercase tracking-[0.09em] text-faint">
+                  {section.group.label}
+                </p>
+                <ul className="space-y-px">{section.entries.map(renderEntry)}</ul>
               </div>
             );
           })}
-        </nav>
 
-        {/* Instalar en el teléfono: discreto y sólo si de verdad se puede. */}
-        {instalacion && !instalacion.instalada && (instalacion.disponible || instalacion.requiereInstrucciones) ? (
-          <div className="px-3 pb-2 pt-1">
+          {/* Instalar: misma fila que las demás, para que al desplazar no se vea
+              una tarjeta a medias. Es una acción de una sola vez. */}
+          {instalacion && !instalacion.instalada && (instalacion.disponible || instalacion.requiereInstrucciones) ? (
             <button
               type="button"
               onClick={() => {
@@ -304,36 +317,65 @@ export function Drawer({ open, onClose, role, userName, entityName, onLogout, re
                   }
                 })();
               }}
-              className="flex w-full items-center gap-2.5 rounded-xl border border-brand/40 bg-brand/10 px-3 py-2.5 text-left transition active:scale-[0.99]"
+              className="flex min-h-[3rem] w-full items-center gap-3 rounded-xl px-2.5 py-1.5 text-left text-ink transition hover:bg-surface-2"
             >
-              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand/20 text-brand">
-                <IconArrowDown size={18} />
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-brand-soft text-brand">
+                <IconArrowDown size={21} />
               </span>
-              <span className="min-w-0">
-                <span className="block text-sm font-semibold text-ink">Instalar FINANZA</span>
-                <span className="block text-[0.7rem] leading-snug text-muted">
-                  Ábrala sin el navegador. Es la forma de que las actualizaciones se apliquen solas.
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-[0.95rem] font-medium">Instalar FINANZA</span>
+                <span className="block truncate text-[0.68rem] text-muted">
+                  Sin el navegador, con actualizaciones solas
                 </span>
               </span>
             </button>
-          </div>
-        ) : null}
+          ) : null}
+        </nav>
 
-        {/* Versión que está ejecutando ESTE dispositivo (para comparar con la del servidor). */}
-        <div className="flex items-center justify-between gap-2 px-4 pb-1 text-[0.66rem] text-faint">
-          <span className="tabular-nums">
-            v{version.version} · {version.compilada}
-          </span>
-          <button
-            type="button"
-            onClick={() => void comprobarVersion()}
-            className="underline decoration-dotted underline-offset-2"
-          >
-            {estadoVersion === 'buscando' ? 'Buscando…' : estadoVersion === 'aldia' ? 'Ya está al día' : 'Buscar actualización'}
-          </button>
+        {/* Pie fijo en UNA línea: Configuración y el botón de salir. */}
+        <div className="border-t border-border-soft px-2 py-1.5">
+          <div className="flex items-center gap-1">
+            {configEntry ? (
+              <Link
+                to={configEntry.to ?? '/ajustes'}
+                aria-current={configEntry.to && isActiveEntry(configEntry.to) ? 'page' : undefined}
+                className={`flex min-h-[2.75rem] flex-1 items-center gap-3 rounded-lg px-3 py-2 transition ${
+                  configEntry.to && isActiveEntry(configEntry.to)
+                    ? 'bg-brand-soft font-semibold text-brand'
+                    : 'text-ink hover:bg-surface-2'
+                }`}
+              >
+                <span
+                  className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${
+                    configEntry.to && isActiveEntry(configEntry.to) ? 'bg-brand text-white' : 'bg-brand-soft text-brand'
+                  }`}
+                >
+                  <configEntry.icon size={21} />
+                </span>
+                <span className="truncate text-[0.95rem]">{configEntry.label}</span>
+              </Link>
+            ) : null}
+            {logoutEntry ? (
+              <button
+                type="button"
+                aria-label={logoutEntry.label}
+                title={logoutEntry.label}
+                onClick={() => {
+                  onClose();
+                  onLogout();
+                }}
+                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-negative/10 text-negative transition hover:bg-negative/20"
+              >
+                <logoutEntry.icon size={21} />
+              </button>
+            ) : null}
+          </div>
         </div>
 
-        <p className="border-t border-border-soft px-4 py-3 text-[0.68rem] leading-snug text-faint">
+        {/* Aviso del cierre de sesión: es la duda que tiene cualquiera antes de
+            pulsar ese botón, y va justo debajo de la lista para que se lea en
+            contexto. */}
+        <p className="px-4 pb-2 text-[0.68rem] leading-snug text-faint">
           Al cerrar sesión, los movimientos que estén sin confirmar se conservan en este dispositivo.
         </p>
 

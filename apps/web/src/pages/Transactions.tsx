@@ -3,7 +3,6 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, ApiError } from '../lib/api';
 import { Badge, Button, Card, DateRangeFilter, EmptyState, Field, ListScreen, Money, Notice, SearchBox, SectionTitle, Spinner } from '../components/ui';
-import { IconWallet } from '../components/icons';
 import { formatBusinessDate, txnKindLabel, txnKindTone, todayBusinessDate } from '../lib/format';
 
 interface TransactionRow {
@@ -91,6 +90,8 @@ export function TransactionsPage() {
 
   return (
     <ListScreen
+      title="Movimientos"
+      purpose="Todo lo que entra y sale, con su comprobante y a qué unidad afecta."
       toolbar={
         <>
           {/* Una sola línea: buscar y, al lado, el calendario para el rango de
@@ -136,7 +137,7 @@ export function TransactionsPage() {
                   setPage(1);
                 }}
                 aria-pressed={kindFilter === option.value}
-                className={`shrink-0 rounded-full border px-3 py-1 text-xs ${
+                className={`shrink-0 border px-3 py-1 text-xs ${
                   kindFilter === option.value
                     ? 'border-brand/60 bg-brand/15 text-brand'
                     : 'border-border-soft text-muted'
@@ -147,16 +148,14 @@ export function TransactionsPage() {
             ))}
           </div>
 
-          {/* Puerta de entrada a la custodia: el dinero de una empresa que está en
-              una cuenta personal no se aclara registrando un ingreso (eso lo
-              contaría dos veces), así que se avisa y se lleva a su pantalla. */}
-          <Link
-            to="/custodia"
-            className="inline-flex touch-target items-center gap-2 rounded-xl border border-brand/40 bg-brand/10 px-3 py-2 text-xs font-semibold text-brand transition hover:bg-brand/20"
-          >
-            <IconWallet size={16} />
-            <span>¿Dinero de una empresa en su cuenta personal? Abrir «Fondos en custodia»</span>
-          </Link>
+          {/* Al filtrar por custodia aparece el enlace a su pantalla: antes había
+              una franja fija arriba que se llevaba media pantalla en todas las
+              visitas. Aquí sólo está cuando se está mirando custodia. */}
+          {kindFilter === 'CUSTODY_IN,CUSTODY_OUT' ? (
+            <Link to="/custodia" className="inline-flex items-center gap-1 text-xs text-brand underline">
+              Ver fondos en custodia
+            </Link>
+          ) : null}
         </>
       }
       footer={
@@ -202,10 +201,7 @@ export function TransactionsPage() {
 
       {listQuery.data && listQuery.data.data.length > 0 ? (
         <Card>
-          <SectionTitle
-            title={`${listQuery.data.meta.total} movimiento(s)`}
-            hint="Los importes y saldos vienen del libro contable del servidor"
-          />
+          <SectionTitle title={`${listQuery.data.meta.total} movimiento(s)`} />
           <div className="divide-y divide-border-soft">
             {listQuery.data.data.map((row) => (
               <div key={row.id} className="py-2">
@@ -230,7 +226,6 @@ export function TransactionsPage() {
                       {row.status === 'VOIDED' ? <Badge tone="critical">anulado</Badge> : null}
                       {row.syncStatus !== 'CONFIRMED' ? <Badge tone="warning">sin confirmar</Badge> : null}
                       {row.recordedOffline ? <Badge tone="neutral">registrado sin conexión</Badge> : null}
-                      {!row.affectsProfitAndLoss ? <Badge tone="neutral">no afecta al resultado</Badge> : null}
                     </div>
                   </div>
                   <Money value={row.amount} currency={row.currency} tone={txnKindTone(row.kind)} />
@@ -250,6 +245,10 @@ export function TransactionsPage() {
                       <div>
                         <dt>Referencia</dt>
                         <dd className="text-ink">{row.reference ?? '—'}</dd>
+                      </div>
+                      <div>
+                        <dt>Afecta al resultado</dt>
+                        <dd className="text-ink">{row.affectsProfitAndLoss ? 'Sí' : 'No'}</dd>
                       </div>
                     </dl>
 

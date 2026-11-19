@@ -4,6 +4,9 @@ import type { ShoppingListStatus } from '../generated/prisma/enums.js';
 import type { AuthenticatedUser } from '../common/http.decorators.js';
 import type { RequestMetaInfo } from '../common/request-meta.js';
 import { ConflictError, NotFoundError, ValidationError } from '../common/errors.js';
+import { AiService } from '../ai/ai.service.js';
+import { buildInsights, type InsightLine } from './shopping-insights.js';
+import { mergeCatalogEntry, normalizeProductName, usableCatalogLines, type CatalogState } from './catalog.js';
 import { paginate, toSkipTake } from '../common/pagination.js';
 import { AuditService } from '../audit/audit.service.js';
 import { PrismaService } from '../prisma/prisma.service.js';
@@ -50,6 +53,7 @@ export class ShoppingService {
     private readonly access: AccessService,
     private readonly audit: AuditService,
     private readonly transactions: TransactionsService,
+    private readonly ai: AiService,
   ) {}
 
   /**
@@ -311,6 +315,9 @@ export class ShoppingService {
           ? null
           : validateMoney(item.actualUnitPrice, { field: 'precio real', allowZero: true }),
       isPurchased: item.isPurchased === true,
+      // Si el producto entra ya comprado (por ejemplo, desde una factura), se
+      // guarda CUÁNDO se compró: es lo que permite comparar precios después.
+      purchasedAt: item.isPurchased === true ? new Date() : null,
       categoryId: item.categoryId ?? null,
       notes: item.notes ?? null,
       sortOrder: item.sortOrder ?? index,
@@ -539,6 +546,8 @@ export class ShoppingService {
     const [prepared] = this.prepareItems([dto]);
     const item = await this.prisma.shoppingListItem.create({ data: { ...prepared, listId } });
     await this.refreshEstimatedTotal(listId, user, meta, 'shopping.item.added', item.id);
+    // Si entra con precio real, el catálogo aprende cuánto cuesta ese producto.
+    await this.learnProduct(item, null);
     return this.presentItem(item);
   }
 
@@ -587,6 +596,8 @@ export class ShoppingService {
     });
 
     await this.refreshEstimatedTotal(listId, user, meta, 'shopping.item.updated', itemId);
+    // Un precio real corregido también mejora el catálogo.
+    await this.learnProduct(updated, null);
     return this.presentItem(updated);
   }
 
@@ -774,6 +785,330 @@ export class ShoppingService {
       estimatedTotal: estimatedTotal.toFixed(2),
       lists: rows.slice(0, 5),
       note: 'Lo estimado es una intención, no un gasto: el gasto sólo existe cuando se registra en FINANZA.',
+    };
+  }
+
+  // -------------------------------------------------------------------------
+  // Análisis, lectura de facturas y consejos
+  // -------------------------------------------------------------------------
+
+  /**
+   * Historial analizado: gasto, ticket medio, productos repetidos, variación de
+   * precios y equilibrio por grupos de alimentos. Todo con reglas propias, sin
+   * enviar nada fuera del servidor.
+   */
+  async insights(user: AuthenticatedUser, entityId?: string) {
+    const entityIds = await this.scopeEntityIds(user, entityId);
+
+    const lists = await this.prisma.shoppingList.findMany({
+      where: {
+        entityId: { in: entityIds },
+        items: { some: { isPurchased: true } },
+      },
+      include: { items: { where: { isPurchased: true } } },
+      orderBy: [{ completedAt: 'desc' }, { updatedAt: 'desc' }],
+      take: 200,
+    });
+
+    const lines: InsightLine[] = [];
+    for (const list of lists) {
+      for (const item of list.items) {
+        const quantity = Number(dec(item.quantity));
+        const unitPrice = item.actualUnitPrice === null ? null : Number(dec(item.actualUnitPrice));
+        const date = item.purchasedAt ?? list.completedAt ?? list.updatedAt;
+        lines.push({
+          name: item.name,
+          quantity,
+          unit: item.unit,
+          unitPrice,
+          total: unitPrice === null ? null : this.num(quantity * unitPrice),
+          purchasedAt: date.toISOString().slice(0, 10),
+          listId: list.id,
+        });
+      }
+    }
+
+    return {
+      ...buildInsights(lines, new Date()),
+      ai: { configured: this.ai.isConfigured(), model: this.ai.modelName() },
+    };
+  }
+
+  /**
+   * Lee una factura con IA y devuelve las líneas para que el usuario las revise.
+   * NO crea la lista ni registra el gasto: eso lo decide la persona.
+   *
+   * Se comprueba el permiso de escritura sobre la unidad porque la factura va a
+   * terminar en una lista de esa unidad.
+   */
+  async scanInvoice(
+    user: AuthenticatedUser,
+    dto: { entityId: string; filename?: string; mimeType: string; contentBase64: string },
+  ) {
+    await this.access.assertCanWrite(user.userId, dto.entityId);
+
+    const { invoice, model } = await this.ai.readInvoice({
+      filename: dto.filename ?? 'factura',
+      mimeType: dto.mimeType,
+      contentBase64: dto.contentBase64,
+    });
+
+    return {
+      invoice,
+      model,
+      note: 'Nada se ha guardado. Revise las líneas, corrija lo que haga falta y confirme.',
+    };
+  }
+
+  /**
+   * Consejos redactados por la IA a partir del análisis real. Si la IA no está
+   * configurada o falla, la pantalla conserva los consejos por reglas.
+   */
+  async advice(user: AuthenticatedUser, entityId?: string) {
+    const analysis = await this.insights(user, entityId);
+
+    const { advice, model } = await this.ai.suggestAdvice({
+      totals: analysis.totals,
+      topProducts: analysis.topProducts.slice(0, 10),
+      priceIncreases: analysis.priceIncreases,
+      balance: analysis.balance,
+      tips: analysis.tips,
+    });
+
+    return { ...advice, model, source: 'IA' as const };
+  }
+
+  // -------------------------------------------------------------------------
+  // Catálogo de productos
+  // -------------------------------------------------------------------------
+
+  /**
+   * Guarda en el catálogo un producto con precio real. Se llama al añadir o
+   * corregir un producto; nunca por el simple hecho de abrir una lista.
+   * Si algo falla aquí NO se rompe la operación de la lista: el catálogo es una
+   * ayuda, no un documento contable.
+   */
+  private async learnProduct(
+    item: { listId: string; name: string; unit: string | null; quantity: unknown; actualUnitPrice: unknown },
+    supplier: string | null,
+  ): Promise<void> {
+    try {
+      const price = item.actualUnitPrice === null ? null : Number(dec(item.actualUnitPrice as never));
+      if (price === null || !Number.isFinite(price) || price <= 0) {
+        return;
+      }
+
+      const list = await this.prisma.shoppingList.findUnique({
+        where: { id: item.listId },
+        select: { entityId: true },
+      });
+      if (!list) {
+        return;
+      }
+
+      await this.upsertCatalogLine(list.entityId, {
+        name: item.name,
+        unit: item.unit,
+        unitPrice: price,
+        quantity: Number(dec(item.quantity as never)),
+        supplier,
+      });
+    } catch {
+      // Silencioso a propósito: el catálogo nunca debe impedir registrar la compra.
+    }
+  }
+
+  /** Alta o actualización de una ficha del catálogo (una sola por unidad y nombre). */
+  private async upsertCatalogLine(
+    entityId: string,
+    line: { name: string; unit: string | null; unitPrice: number; quantity: number | null; supplier?: string | null },
+  ): Promise<boolean> {
+    const key = normalizeProductName(line.name);
+    if (key.length < 2 || line.unitPrice <= 0) {
+      return false;
+    }
+
+    const existing = await this.prisma.productCatalogEntry.findUnique({
+      where: { entityId_normalizedName: { entityId, normalizedName: key } },
+    });
+
+    const previous: CatalogState | null = existing
+      ? {
+          name: existing.name,
+          unit: existing.unit,
+          lastUnitPrice: existing.lastUnitPrice === null ? 0 : Number(dec(existing.lastUnitPrice)),
+          minUnitPrice: existing.minUnitPrice === null ? 0 : Number(dec(existing.minUnitPrice)),
+          maxUnitPrice: existing.maxUnitPrice === null ? 0 : Number(dec(existing.maxUnitPrice)),
+          lastQuantity: existing.lastQuantity === null ? null : Number(dec(existing.lastQuantity)),
+          lastSupplier: existing.lastSupplier,
+          timesPurchased: existing.timesPurchased,
+        }
+      : null;
+
+    const next = mergeCatalogEntry(previous, line);
+
+    await this.prisma.productCatalogEntry.upsert({
+      where: { entityId_normalizedName: { entityId, normalizedName: key } },
+      create: {
+        entityId,
+        normalizedName: key,
+        name: next.name,
+        unit: next.unit,
+        lastUnitPrice: dec(next.lastUnitPrice),
+        minUnitPrice: dec(next.minUnitPrice),
+        maxUnitPrice: dec(next.maxUnitPrice),
+        lastQuantity: next.lastQuantity === null ? null : dec(next.lastQuantity),
+        lastSupplier: next.lastSupplier,
+        timesPurchased: next.timesPurchased,
+        lastSeenAt: new Date(),
+      },
+      update: {
+        name: next.name,
+        unit: next.unit,
+        lastUnitPrice: dec(next.lastUnitPrice),
+        minUnitPrice: dec(next.minUnitPrice),
+        maxUnitPrice: dec(next.maxUnitPrice),
+        lastQuantity: next.lastQuantity === null ? null : dec(next.lastQuantity),
+        lastSupplier: next.lastSupplier,
+        timesPurchased: next.timesPurchased,
+        lastSeenAt: new Date(),
+      },
+    });
+
+    return true;
+  }
+
+  /**
+   * Alimenta el catálogo con las líneas de una factura. Se agrupan las líneas
+   * repetidas de la misma factura para no contar el mismo producto dos veces.
+   */
+  async ingestCatalog(
+    user: AuthenticatedUser,
+    dto: { entityId: string; supplier?: string | null; lines: Array<{ name: string; unit?: string | null; unitPrice?: string | null; quantity?: string | null }> },
+  ) {
+    await this.access.assertCanWrite(user.userId, dto.entityId);
+
+    const lines = usableCatalogLines(
+      dto.lines.map((line) => ({
+        name: line.name,
+        unit: line.unit ?? null,
+        unitPrice: line.unitPrice === undefined || line.unitPrice === null || line.unitPrice === '' ? null : Number(line.unitPrice),
+        quantity: line.quantity === undefined || line.quantity === null || line.quantity === '' ? null : Number(line.quantity),
+        supplier: dto.supplier ?? null,
+      })),
+    );
+
+    const byKey = new Map<string, (typeof lines)[number]>();
+    for (const line of lines) {
+      // Si el mismo producto aparece dos veces, se conserva la línea de mayor importe.
+      const current = byKey.get(line.key);
+      if (!current || line.unitPrice > current.unitPrice) {
+        byKey.set(line.key, line);
+      }
+    }
+
+    let updated = 0;
+    for (const line of byKey.values()) {
+      const ok = await this.upsertCatalogLine(dto.entityId, {
+        name: line.name,
+        unit: line.unit,
+        unitPrice: line.unitPrice,
+        quantity: line.quantity,
+        supplier: dto.supplier ?? null,
+      });
+      if (ok) {
+        updated += 1;
+      }
+    }
+
+    return { updated, ignored: dto.lines.length - updated };
+  }
+
+  /**
+   * Ficha de un producto con sus últimas compras: qué se pagó, cuándo y en qué
+   * lista. El historial sale de las líneas ya compradas con precio real.
+   */
+  async catalogDetail(user: AuthenticatedUser, normalizedName: string, entityId?: string) {
+    const entityIds = await this.scopeEntityIds(user, entityId);
+    const key = normalizeProductName(normalizedName);
+    const entry = await this.prisma.productCatalogEntry.findFirst({
+      where: { entityId: { in: entityIds }, normalizedName: key },
+    });
+    if (!entry) {
+      throw new NotFoundError('Producto del catálogo', normalizedName);
+    }
+
+    const items = await this.prisma.shoppingListItem.findMany({
+      where: {
+        list: { entityId: entry.entityId },
+        isPurchased: true,
+        actualUnitPrice: { not: null },
+      },
+      include: { list: { select: { id: true, name: true, completedAt: true, updatedAt: true } } },
+      orderBy: [{ purchasedAt: 'desc' }, { createdAt: 'desc' }],
+      take: 500,
+    });
+
+    const history = items
+      .filter((item) => normalizeProductName(item.name) === key)
+      .slice(0, 20)
+      .map((item) => ({
+        date: (item.purchasedAt ?? item.list.completedAt ?? item.updatedAt).toISOString().slice(0, 10),
+        listId: item.list.id,
+        listName: item.list.name,
+        quantity: this.formatQuantity(item.quantity),
+        unit: item.unit,
+        unitPrice: item.actualUnitPrice === null ? null : Number(dec(item.actualUnitPrice)).toFixed(2),
+      }));
+
+    return {
+      name: entry.name,
+      normalizedName: entry.normalizedName,
+      entityId: entry.entityId,
+      unit: entry.unit,
+      lastUnitPrice: entry.lastUnitPrice === null ? null : Number(dec(entry.lastUnitPrice)).toFixed(2),
+      minUnitPrice: entry.minUnitPrice === null ? null : Number(dec(entry.minUnitPrice)).toFixed(2),
+      maxUnitPrice: entry.maxUnitPrice === null ? null : Number(dec(entry.maxUnitPrice)).toFixed(2),
+      timesPurchased: entry.timesPurchased,
+      lastSupplier: entry.lastSupplier,
+      lastSeenAt: entry.lastSeenAt.toISOString().slice(0, 10),
+      history,
+    };
+  }
+
+  /** Catálogo para consultar precios y autocompletar. */
+  async catalog(user: AuthenticatedUser, entityId?: string, search?: string) {
+    const entityIds = await this.scopeEntityIds(user, entityId);
+    const term = (search ?? '').trim();
+    const rows = await this.prisma.productCatalogEntry.findMany({
+      where: {
+        entityId: { in: entityIds },
+        ...(term.length >= 2
+          ? {
+              OR: [
+                { name: { contains: term, mode: 'insensitive' } },
+                { normalizedName: { contains: normalizeProductName(term) } },
+              ],
+            }
+          : {}),
+      },
+      orderBy: [{ timesPurchased: 'desc' }, { lastSeenAt: 'desc' }],
+      take: 200,
+    });
+
+    return {
+      count: rows.length,
+      entries: rows.map((row) => ({
+        name: row.name,
+        normalizedName: row.normalizedName,
+        unit: row.unit,
+        lastUnitPrice: row.lastUnitPrice === null ? null : this.num(Number(dec(row.lastUnitPrice))).toFixed(2),
+        minUnitPrice: row.minUnitPrice === null ? null : this.num(Number(dec(row.minUnitPrice))).toFixed(2),
+        maxUnitPrice: row.maxUnitPrice === null ? null : this.num(Number(dec(row.maxUnitPrice))).toFixed(2),
+        timesPurchased: row.timesPurchased,
+        lastSupplier: row.lastSupplier,
+        lastSeenAt: row.lastSeenAt.toISOString().slice(0, 10),
+      })),
     };
   }
 }

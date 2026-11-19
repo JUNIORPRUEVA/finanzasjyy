@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { api, downloadFile } from '../lib/api';
-import { Badge, Button, Card, EmptyState, Notice, SectionTitle, Select, Spinner } from '../components/ui';
+import { Badge, Button, Card, EmptyState, Notice, PageIntro, SectionTitle, Select, Spinner } from '../components/ui';
 import { useAuth } from '../store/auth';
 import { formatBusinessDate, formatMoney } from '../lib/format';
 
@@ -102,7 +102,9 @@ export function ReportsPage() {
   };
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
+      <PageIntro title="Informes" purpose="Resultados por período y descarga en CSV." />
+
       <Card className="space-y-3">
         <Select label="Informe" value={type} onChange={setType} options={REPORT_OPTIONS} placeholder="— Seleccione —" />
         <div className="grid grid-cols-2 gap-3">
@@ -184,7 +186,7 @@ export function ReportsPage() {
           {reportQuery.data.rows.length === 0 ? (
             <EmptyState title="Este informe no tiene datos en el período" hint="Pruebe a cambiar las fechas." />
           ) : (
-            <div className="-mx-4 overflow-x-auto px-4">
+            <div className="-mx-2 overflow-x-auto px-2">
               <table className="min-w-full text-sm">
                 <thead>
                   <tr className="border-b border-border-soft text-left text-xs uppercase text-muted">

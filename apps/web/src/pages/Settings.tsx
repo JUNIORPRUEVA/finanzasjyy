@@ -1,12 +1,26 @@
-import { useEffect, useState } from 'react';
-import { useLocation, useSearchParams } from 'react-router-dom';
+import { useEffect, useState, type ComponentType, type ReactNode } from 'react';
+import { Link, useLocation, useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { IconAlert, IconBuilding, IconCheck, IconChevronRight, IconUsers } from '../components/icons';
 import { api, ApiError } from '../lib/api';
 import { useAuth } from '../store/auth';
 import type { SessionPreferences } from '../store/auth';
-import { Badge, Button, Card, EmptyState, Field, Notice, SectionTitle, Select, Spinner, Tabs } from '../components/ui';
+import {
+  Badge,
+  Button,
+  Card,
+  EmptyState,
+  Field,
+  Notice,
+  PasswordField,
+  SectionTitle,
+  Select,
+  Spinner,
+  Tabs,
+} from '../components/ui';
 import { formatDateTime } from '../lib/format';
-import { deviceThemePreference, setThemePreference, type ThemePreference } from '../lib/theme';
+import { buscarActualizacion, versionActual } from '../lib/pwa';
+import { deviceThemePreference, resolveTheme, setThemePreference, type ThemePreference } from '../lib/theme';
 
 interface Preferences {
   timezone: string;
@@ -42,7 +56,7 @@ interface PushStatus {
   subscriptions: Array<{ id: string; platform: string | null; isActive: boolean; failCount: number; lastSentAt: string | null }>;
 }
 
-type TabId = 'preferencias' | 'apariencia' | 'seguridad' | 'notificaciones';
+type TabId = 'preferencias' | 'apariencia' | 'seguridad' | 'notificaciones' | 'administracion';
 
 /**
  * Opciones de apariencia, con su explicación en lenguaje llano. Se aplican al
@@ -88,6 +102,20 @@ export function SettingsPage() {
   const [form, setForm] = useState<Preferences | null>(null);
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
+  // Versión de ESTE dispositivo y comprobación de actualización: antes estaba
+  // en el pie del menú lateral; ahora vive en Configuración, donde se busca.
+  const [estadoVersion, setEstadoVersion] = useState<'inicial' | 'buscando' | 'aldia'>('inicial');
+  const version = versionActual();
+
+  const comprobarVersion = async () => {
+    setEstadoVersion('buscando');
+    const resultado = await buscarActualizacion();
+    // Si se aplicó, la página se está recargando: no hace falta cambiar el texto.
+    if (resultado === 'al-dia') {
+      setEstadoVersion('aldia');
+      window.setTimeout(() => setEstadoVersion('inicial'), 4000);
+    }
+  };
 
   const preferencesQuery = useQuery<Preferences>({
     queryKey: ['preferences'],
@@ -254,6 +282,14 @@ export function SettingsPage() {
 
   return (
     <div className="space-y-4">
+      {/* La página se presenta: es la única puerta de configuración del menú. */}
+      <div>
+        <h1 className="text-xl font-semibold text-ink">Configuración</h1>
+        <p className="mt-0.5 text-xs leading-snug text-muted">
+          Todo lo que puede cambiar de FINANZA, en un solo sitio.
+        </p>
+      </div>
+
       {message ? <Notice tone={message.tone}>{message.text}</Notice> : null}
 
       <Tabs
@@ -262,6 +298,7 @@ export function SettingsPage() {
           { id: 'apariencia' as TabId, label: 'Apariencia' },
           { id: 'notificaciones' as TabId, label: 'Notificaciones' },
           { id: 'seguridad' as TabId, label: 'Seguridad' },
+          { id: 'administracion' as TabId, label: 'Administración' },
         ]}
         active={tab}
         onChange={(next) => {
@@ -272,249 +309,313 @@ export function SettingsPage() {
 
       {tab === 'preferencias' ? (
         <>
-          <Card className="space-y-3">
-            <SectionTitle title="Perfil" />
-            <p className="text-sm text-ink">
-              {user?.name} · {user?.email}
-            </p>
-            <p className="text-xs text-faint">Rol: {user?.role}</p>
-            <div>
-              <p className="mb-1 text-xs uppercase text-muted">Unidades financieras</p>
-              <div className="flex flex-wrap gap-2">
-                {entities.map((entity) => (
-                  <Badge key={entity.id} tone="neutral">
-                    {entity.name}
-                  </Badge>
-                ))}
+          <SettingsGroup title="Perfil">
+            <Row>
+              <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1.5 text-sm">
+                <dt className="text-muted">Nombre</dt>
+                <dd className="truncate text-right text-ink">{user?.name}</dd>
+                <dt className="text-muted">Correo</dt>
+                <dd className="truncate text-right text-ink">{user?.email}</dd>
+                <dt className="text-muted">Rol</dt>
+                <dd className="text-right text-ink">{user?.role}</dd>
+                <dt className="text-muted">Unidades</dt>
+                <dd className="break-words text-right text-ink">{entities.map((entity) => entity.name).join(' · ')}</dd>
+              </dl>
+            </Row>
+          </SettingsGroup>
+
+          <SettingsGroup title="Funcionamiento" hint="Se guarda en su cuenta y viaja con usted a otros dispositivos">
+            <Row>
+              <Select
+                compact
+                label="Zona horaria"
+                value={form.timezone}
+                onChange={(value) => setForm({ ...form, timezone: value })}
+                options={[
+                  { value: 'America/Santo_Domingo', label: 'America/Santo_Domingo' },
+                  { value: 'America/New_York', label: 'America/New_York' },
+                  { value: 'America/Mexico_City', label: 'America/Mexico_City' },
+                  { value: 'Europe/Madrid', label: 'Europe/Madrid' },
+                  { value: 'UTC', label: 'UTC' },
+                ]}
+              />
+            </Row>
+
+            {/* La moneda no se elige: FINANZA trabaja sólo en pesos dominicanos. */}
+            <Row className="flex items-center justify-between gap-3">
+              <span className="text-sm text-muted">Moneda</span>
+              <span className="text-sm font-medium text-ink">Peso dominicano (RD$)</span>
+            </Row>
+
+            <Row>
+              <div className="grid grid-cols-2 gap-2">
+                <Field
+                  compact
+                  label="Hora del cierre (0-23)"
+                  value={String(form.closingReminderHour)}
+                  onChange={(value) => setForm({ ...form, closingReminderHour: Number(value) || 0 })}
+                  type="number"
+                />
+                <Field
+                  compact
+                  label="Minuto (0-59)"
+                  value={String(form.closingReminderMinute)}
+                  onChange={(value) => setForm({ ...form, closingReminderMinute: Number(value) || 0 })}
+                  type="number"
+                />
               </div>
-            </div>
-          </Card>
-
-          <Card className="space-y-3">
-            <SectionTitle title="Cómo se comporta FINANZA" />
-            <Select
-              label="Zona horaria de negocio"
-              value={form.timezone}
-              onChange={(value) => setForm({ ...form, timezone: value })}
-              options={[
-                { value: 'America/Santo_Domingo', label: 'America/Santo_Domingo' },
-                { value: 'America/New_York', label: 'America/New_York' },
-                { value: 'America/Mexico_City', label: 'America/Mexico_City' },
-                { value: 'Europe/Madrid', label: 'Europe/Madrid' },
-                { value: 'UTC', label: 'UTC' },
-              ]}
-            />
-
-            {/* La moneda no se elige: FINANZA trabaja sólo en pesos dominicanos.
-                Tener un selector aquí sólo servía para acabar con cuentas en
-                dólares sin querer. */}
-            <div className="rounded-xl border border-border-soft bg-surface-2 px-3 py-2.5">
-              <p className="text-sm font-medium text-ink">Moneda</p>
-              <p className="mt-0.5 text-sm text-muted">Peso dominicano (RD$)</p>
-              <p className="mt-1 text-xs text-faint">
-                Todos los saldos, cuentas y movimientos se llevan en pesos dominicanos.
+              <p className="mt-1 text-[0.68rem] leading-snug text-faint">
+                Avisos escalonados: a esa hora, +1 h y +3 h si el cierre sigue pendiente.
               </p>
-            </div>
+            </Row>
 
-            <Field
-              label="Hora del recordatorio de cierre (0-23)"
-              value={String(form.closingReminderHour)}
-              onChange={(value) => setForm({ ...form, closingReminderHour: Number(value) || 0 })}
-              type="number"
-              hint="Los avisos escalonados se envían a esa hora, +1 h y +3 h si el cierre sigue pendiente."
-            />
+            <Row>
+              <Field
+                compact
+                label="Horas que puede trabajar sin conexión (1-168)"
+                value={String(form.offlineWindowHours)}
+                onChange={(value) => setForm({ ...form, offlineWindowHours: Number(value) || 24 })}
+                type="number"
+                hint="Después de ese tiempo se pide validar la sesión con conexión."
+              />
+            </Row>
 
-            <Field
-              label="Minuto del recordatorio (0-59)"
-              value={String(form.closingReminderMinute)}
-              onChange={(value) => setForm({ ...form, closingReminderMinute: Number(value) || 0 })}
-              type="number"
-            />
+            <Row>
+              <div className="grid grid-cols-2 gap-2">
+                <Field
+                  compact
+                  label="Aviso de presupuesto (%)"
+                  value={String(form.budgetWarnPct)}
+                  onChange={(value) => setForm({ ...form, budgetWarnPct: Number(value) || 80 })}
+                  type="number"
+                />
+                <Field
+                  compact
+                  label="Alerta de presupuesto (%)"
+                  value={String(form.budgetAlertPct)}
+                  onChange={(value) => setForm({ ...form, budgetAlertPct: Number(value) || 100 })}
+                  type="number"
+                />
+              </div>
+            </Row>
 
-            <Field
-              label="Horas que puede trabajar sin conexión (1-168)"
-              value={String(form.offlineWindowHours)}
-              onChange={(value) => setForm({ ...form, offlineWindowHours: Number(value) || 24 })}
-              type="number"
-              hint="Tras este tiempo sin conexión, la app bloquea nuevos registros hasta que vuelva a validar la sesión."
-            />
+            <Row>
+              <Button fullWidth disabled={saveMutation.isPending} onClick={() => saveMutation.mutate(form)}>
+                {saveMutation.isPending ? 'Guardando…' : 'Guardar cambios'}
+              </Button>
+            </Row>
+          </SettingsGroup>
 
-            <Field
-              label="Aviso de presupuesto al (%)"
-              value={String(form.budgetWarnPct)}
-              onChange={(value) => setForm({ ...form, budgetWarnPct: Number(value) || 80 })}
-              type="number"
-            />
-
-            <Field
-              label="Alerta de presupuesto al (%)"
-              value={String(form.budgetAlertPct)}
-              onChange={(value) => setForm({ ...form, budgetAlertPct: Number(value) || 100 })}
-              type="number"
-            />
-
-            <Button disabled={saveMutation.isPending} onClick={() => saveMutation.mutate(form)}>
-              {saveMutation.isPending ? 'Guardando…' : 'Guardar preferencias'}
-            </Button>
-          </Card>
+          {/* La versión y su actualización viven AQUÍ, no en el menú lateral. */}
+          <SettingsGroup title="Aplicación">
+            <Row className="flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-sm font-medium text-ink">Versión instalada</p>
+                <p className="tabular-nums text-[0.68rem] text-faint">
+                  v{version.version} · {version.compilada}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => void comprobarVersion()}
+                className="shrink-0 text-xs font-semibold text-brand underline decoration-dotted underline-offset-2"
+              >
+                {estadoVersion === 'buscando'
+                  ? 'Buscando…'
+                  : estadoVersion === 'aldia'
+                    ? 'Ya está al día'
+                    : 'Buscar actualización'}
+              </button>
+            </Row>
+          </SettingsGroup>
         </>
       ) : null}
 
       {tab === 'apariencia' ? (
         <>
-          <Card className="space-y-3">
-            <SectionTitle title="Tema" hint="Se aplica al instante, sin recargar la pantalla" />
-            <div className="space-y-2">
-              {THEME_OPTIONS.map((option) => {
-                const isActive = form.theme === option.id;
-                return (
-                  <button
-                    key={option.id}
-                    type="button"
-                    aria-pressed={isActive}
-                    onClick={() => {
-                      setForm({ ...form, theme: option.id });
-                      setThemePreference(option.id);
-                      saveMutation.mutate({ ...form, theme: option.id });
-                    }}
-                    className={`flex w-full items-start gap-3 rounded-xl border p-3 text-left transition ${
-                      isActive ? 'border-brand bg-brand-soft' : 'border-border-soft bg-surface hover:bg-surface-2'
-                    }`}
-                  >
-                    <span
-                      aria-hidden="true"
-                      className="mt-0.5 flex h-10 w-10 shrink-0 overflow-hidden rounded-lg border border-border-soft"
-                    >
-                      {option.swatch.map((color, index) => (
-                        <span key={color + index} className="h-full flex-1" style={{ backgroundColor: color }} />
-                      ))}
-                    </span>
-                    <span className="min-w-0 flex-1">
-                      <span className="flex items-center gap-2">
-                        <span className="text-sm font-semibold text-ink">{option.label}</span>
-                        {isActive ? <Badge tone="positive">En uso</Badge> : null}
-                      </span>
-                      <span className="mt-0.5 block text-xs leading-snug text-muted">{option.hint}</span>
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-            <p className="text-[0.7rem] leading-snug text-faint">
-              Su elección se guarda en la cuenta (viaja con usted a otros dispositivos que todavía no hayan elegido) y
-              también en este teléfono, para que la aplicación abra directamente con el tema elegido y sin destellos
-              blancos.
-            </p>
-            {deviceThemePreference() !== form.theme ? (
-              <Notice tone="warning">
-                <p>
-                  Este teléfono tiene guardado un tema distinto al de su cuenta. Se seguirá usando el de este teléfono,
-                  que es el que usted eligió aquí.
-                </p>
+          <SettingsGroup title="Tema" hint="Se aplica al instante, sin recargar la pantalla">
+            {THEME_OPTIONS.map((option) => {
+              // «En uso» refleja lo que se ve AHORA en este dispositivo, no lo
+              // que diga la cuenta: si el teléfono tiene claro y la cuenta
+              // oscuro, manda el teléfono.
+              const isActive = deviceThemePreference() === option.id;
+              return (
                 <button
+                  key={option.id}
                   type="button"
-                  className="mt-2 text-xs font-semibold text-brand underline"
+                  aria-pressed={isActive}
                   onClick={() => {
-                    setThemePreference(form.theme as ThemePreference);
-                    saveMutation.mutate(form);
+                    setForm({ ...form, theme: option.id });
+                    setThemePreference(option.id);
+                    saveMutation.mutate({ ...form, theme: option.id });
                   }}
+                  className={`flex w-full items-center gap-3 px-3 py-2.5 text-left transition ${
+                    isActive ? 'bg-brand-soft' : 'hover:bg-surface-2'
+                  }`}
                 >
-                  Usar el de mi cuenta
+                  <span
+                    aria-hidden="true"
+                    className="flex h-7 w-9 shrink-0 overflow-hidden rounded-md border border-border-soft"
+                  >
+                    {option.swatch.map((color, index) => (
+                      <span key={color + index} className="h-full flex-1" style={{ backgroundColor: color }} />
+                    ))}
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className={`block text-sm ${isActive ? 'font-semibold text-brand' : 'font-medium text-ink'}`}>
+                      {option.label}
+                    </span>
+                    <span className="mt-0.5 block text-[0.68rem] leading-snug text-muted">{option.hint}</span>
+                  </span>
+                  {isActive ? (
+                    <span className="flex shrink-0 items-center gap-1 text-brand">
+                      <IconCheck size={17} />
+                      {/* Visible sólo para lectores de pantalla: el visto ya lo dice. */}
+                      <span className="sr-only">En uso</span>
+                    </span>
+                  ) : null}
                 </button>
-              </Notice>
-            ) : null}
-          </Card>
+              );
+            })}
+          </SettingsGroup>
 
-          <Card className="space-y-2">
-            <SectionTitle title="Qué cambia y qué no" />
-            <ul className="space-y-1.5 text-xs leading-snug text-muted">
-              <li>
-                · Cambia el <strong>fondo, el texto y los bordes</strong>. La <strong>paleta de FINANZA no cambia</strong>:
-                verde para lo bueno, rojo para lo malo, igual en los dos temas.
-              </li>
-              <li>
-                · Los <strong>colores de las gráficas</strong> se ajustan para que sigan siendo legibles sobre fondo
-                oscuro o claro.
-              </li>
-              <li>· No cambia ningún dato ni ninguna cifra: es sólo cómo se ve.</li>
-            </ul>
-          </Card>
+          {resolveTheme(deviceThemePreference()) !== resolveTheme(form.theme as ThemePreference) ? (
+            <Notice tone="warning">
+              <p>
+                Este teléfono tiene guardado un tema distinto al de su cuenta. Se seguirá usando el de este teléfono,
+                que es el que usted eligió aquí.
+              </p>
+              <button
+                type="button"
+                className="mt-2 text-xs font-semibold text-brand underline"
+                onClick={() => {
+                  setThemePreference(form.theme as ThemePreference);
+                  saveMutation.mutate(form);
+                }}
+              >
+                Usar el de mi cuenta
+              </button>
+            </Notice>
+          ) : null}
+
+          <SettingsGroup title="Qué cambia con el tema">
+            <Row>
+              <ul className="space-y-1.5 text-xs leading-snug text-muted">
+                <li>
+                  · Cambia el <strong>fondo, el texto y los bordes</strong>. La <strong>paleta de FINANZA no cambia</strong>:
+                  verde para lo bueno, rojo para lo malo, igual en los dos temas.
+                </li>
+                <li>
+                  · Los <strong>colores de las gráficas</strong> se ajustan para que sigan siendo legibles sobre fondo
+                  oscuro o claro.
+                </li>
+                <li>· No cambia ningún dato ni ninguna cifra: es sólo cómo se ve.</li>
+              </ul>
+              <p className="mt-2 text-[0.68rem] leading-snug text-faint">
+                Su elección se guarda en la cuenta y también en este teléfono, para que la aplicación abra directamente
+                con el tema elegido y sin destellos blancos.
+              </p>
+            </Row>
+          </SettingsGroup>
         </>
       ) : null}
 
       {tab === 'notificaciones' ? (
-        <Card className="space-y-3">
-          <SectionTitle
+        <>
+          <SettingsGroup
             title="Notificaciones"
             hint="Los avisos críticos los genera el servidor: no dependen de que el navegador esté abierto"
-          />
+          >
+            <Row>
+              <Notice tone={pushQuery.data?.pushEnabledOnServer ? 'positive' : 'warning'}>
+                {pushQuery.data?.pushEnabledOnServer
+                  ? `El servidor puede enviar notificaciones push. Este dispositivo tiene ${pushQuery.data.activeCount} suscripción(es) activa(s).`
+                  : 'Faltan las claves VAPID en el servidor: las notificaciones push están DESACTIVADAS. Las alertas siguen apareciendo dentro de la aplicación, en «Control».'}
+              </Notice>
+            </Row>
 
-          <Notice tone={pushQuery.data?.pushEnabledOnServer ? 'positive' : 'warning'}>
-            {pushQuery.data?.pushEnabledOnServer
-              ? `El servidor puede enviar notificaciones push. Este dispositivo tiene ${pushQuery.data.activeCount} suscripción(es) activa(s).`
-              : 'Faltan las claves VAPID en el servidor: las notificaciones push están DESACTIVADAS. Las alertas siguen apareciendo dentro de la aplicación, en «Más → Tareas».'}
-          </Notice>
+            <Row className="flex flex-wrap gap-2">
+              <Button size="sm" disabled={subscribePushMutation.isPending} onClick={() => subscribePushMutation.mutate()}>
+                {subscribePushMutation.isPending ? 'Suscribiendo…' : 'Activar en este dispositivo'}
+              </Button>
+              <Button
+                size="sm"
+                variant="secondary"
+                disabled={testPushMutation.isPending}
+                onClick={() => testPushMutation.mutate()}
+              >
+                Enviar prueba
+              </Button>
+            </Row>
 
-          <div className="flex flex-wrap gap-2">
-            <Button disabled={subscribePushMutation.isPending} onClick={() => subscribePushMutation.mutate()}>
-              {subscribePushMutation.isPending ? 'Suscribiendo…' : 'Activar en este dispositivo'}
-            </Button>
-            <Button variant="secondary" disabled={testPushMutation.isPending} onClick={() => testPushMutation.mutate()}>
-              Enviar notificación de prueba
-            </Button>
-          </div>
+            {pushQuery.data && pushQuery.data.subscriptions.length > 0 ? (
+              <div className="divide-y divide-border-soft">
+                {pushQuery.data.subscriptions.map((subscription) => (
+                  <div key={subscription.id} className="flex items-center justify-between gap-2 px-3 py-2 text-xs text-muted">
+                    <span className="truncate">{subscription.platform ?? 'dispositivo'}</span>
+                    <span className="flex shrink-0 items-center gap-2">
+                      {subscription.isActive ? <Badge tone="positive">activa</Badge> : <Badge tone="neutral">inactiva</Badge>}
+                      {subscription.failCount > 0 ? <Badge tone="warning">{subscription.failCount} fallo(s)</Badge> : null}
+                      <span>{subscription.lastSentAt ? formatDateTime(subscription.lastSentAt) : 'nunca'}</span>
+                    </span>
+                  </div>
+                ))}
+              </div>
+            ) : null}
+          </SettingsGroup>
 
-          {pushQuery.data && pushQuery.data.subscriptions.length > 0 ? (
-            <div className="space-y-1">
-              {pushQuery.data.subscriptions.map((subscription) => (
-                <div key={subscription.id} className="flex items-center justify-between text-xs text-muted">
-                  <span>{subscription.platform ?? 'dispositivo'}</span>
-                  <span className="flex items-center gap-2">
-                    {subscription.isActive ? <Badge tone="positive">activa</Badge> : <Badge tone="neutral">inactiva</Badge>}
-                    {subscription.failCount > 0 ? <Badge tone="warning">{subscription.failCount} fallo(s)</Badge> : null}
-                    <span>{subscription.lastSentAt ? formatDateTime(subscription.lastSentAt) : 'nunca'}</span>
-                  </span>
-                </div>
-              ))}
-            </div>
-          ) : null}
-
-          <p className="text-xs text-faint">
+          <p className="px-1 text-[0.68rem] leading-snug text-faint">
             En iPhone, las notificaciones web requieren iOS 16.4 o superior <strong>y</strong> tener FINANZA instalada
-            en la pantalla de inicio. Si no se cumple, la app avisa igualmente dentro de su pantalla de tareas.
+            en la pantalla de inicio. Si no se cumple, la app avisa igualmente en «Control».
           </p>
-        </Card>
+        </>
       ) : null}
 
       {tab === 'seguridad' ? (
         <>
-          <Card className="space-y-3">
-            <SectionTitle title="Cambiar contraseña" hint="Se cerrarán las demás sesiones" />
-            <Field label="Contraseña actual" value={currentPassword} onChange={setCurrentPassword} type="password" />
-            <Field
-              label="Contraseña nueva"
-              value={newPassword}
-              onChange={setNewPassword}
-              type="password"
-              hint="Mínimo 10 caracteres, con letras y números."
-            />
-            <Button
-              disabled={currentPassword.length < 8 || newPassword.length < 10 || passwordMutation.isPending}
-              onClick={() => passwordMutation.mutate()}
-            >
-              {passwordMutation.isPending ? 'Cambiando…' : 'Cambiar contraseña'}
-            </Button>
-          </Card>
+          <SettingsGroup title="Cambiar contraseña" hint="Se cerrarán las demás sesiones">
+            <Row>
+              <PasswordField
+                compact
+                label="Contraseña actual"
+                value={currentPassword}
+                onChange={setCurrentPassword}
+                autoComplete="current-password"
+              />
+            </Row>
+            <Row>
+              <PasswordField
+                compact
+                label="Contraseña nueva"
+                value={newPassword}
+                onChange={setNewPassword}
+                autoComplete="new-password"
+                hint="Mínimo 10 caracteres, con letras y números."
+              />
+            </Row>
+            <Row>
+              <Button
+                size="sm"
+                disabled={currentPassword.length < 8 || newPassword.length < 10 || passwordMutation.isPending}
+                onClick={() => passwordMutation.mutate()}
+              >
+                {passwordMutation.isPending ? 'Cambiando…' : 'Cambiar contraseña'}
+              </Button>
+            </Row>
+          </SettingsGroup>
 
-          <Card>
-            <SectionTitle title="Sesiones y dispositivos" hint="Puede cerrar el acceso de cualquier dispositivo" />
-            {sessionsQuery.isLoading ? <Spinner /> : null}
-            <div className="space-y-2">
+          <SettingsGroup title="Sesiones y dispositivos" hint="Puede cerrar el acceso de cualquier dispositivo">
+            {sessionsQuery.isLoading ? (
+              <Row>
+                <Spinner />
+              </Row>
+            ) : null}
+            <div className="divide-y divide-border-soft">
               {sessionsQuery.data?.map((session) => (
-                <div key={session.id} className="flex items-start justify-between gap-2 rounded-lg border border-border-soft p-2">
+                <div key={session.id} className="flex items-start justify-between gap-2 px-3 py-2.5">
                   <div className="min-w-0">
                     <p className="truncate text-sm text-ink">{session.deviceId ?? 'Sesión sin dispositivo'}</p>
-                    <p className="truncate text-xs text-faint">
+                    <p className="truncate text-[0.68rem] text-faint">
                       Último uso: {session.lastUsedAt ? formatDateTime(session.lastUsedAt) : '—'} · IP {session.ip ?? '—'}
                     </p>
                   </div>
@@ -533,33 +634,114 @@ export function SettingsPage() {
                 </div>
               ))}
             </div>
-          </Card>
+          </SettingsGroup>
 
-          <Card>
-            <SectionTitle title="Sesión actual" />
-            <Button
-              variant="danger"
-              onClick={async () => {
-                await logout();
-                window.location.href = `${location.pathname}`;
-              }}
-            >
-              Cerrar sesión en este dispositivo
-            </Button>
-            <p className="mt-2 text-xs text-faint">
-              Los movimientos registrados sin conexión que aún no se han confirmado permanecen guardados en este
-              dispositivo hasta que vuelva a entrar.
-            </p>
-          </Card>
+          <SettingsGroup title="Sesión actual">
+            <Row>
+              <Button
+                size="sm"
+                variant="danger"
+                onClick={async () => {
+                  await logout();
+                  window.location.href = `${location.pathname}`;
+                }}
+              >
+                Cerrar sesión en este dispositivo
+              </Button>
+              <p className="mt-2 text-[0.68rem] leading-snug text-faint">
+                Los movimientos sin confirmar siguen guardados en este dispositivo hasta que vuelva a entrar.
+              </p>
+            </Row>
+          </SettingsGroup>
         </>
       ) : null}
 
-      {sessionPreferences ? (
-        <p className="pb-4 text-center text-xs text-faint">
-          Ventana sin conexión configurada: {sessionPreferences.offlineWindowHours} h
-        </p>
+      {/*
+        ADMINISTRACIÓN: todo lo que antes ocupaba su propia línea en el menú
+        lateral vive aquí. Se toca una vez (unidades, permisos) o sólo cuando
+        algo no ha llegado al servidor (salud de los datos); no es del día a día.
+      */}
+      {tab === 'administracion' ? (
+        <SettingsGroup title="Administración" hint="Se configura una vez; no hace falta para el día a día">
+          <AdminLink
+            to="/unidades"
+            title="Unidades financieras"
+            hint="Negocios y finanzas personales"
+            icon={IconBuilding}
+          />
+          {user?.role === 'OWNER' || user?.role === 'ADMIN' ? (
+            <AdminLink
+              to="/personas"
+              title="Personas con acceso"
+              hint="Quién entra y de quién es cada acción"
+              icon={IconUsers}
+            />
+          ) : null}
+          <AdminLink
+            to="/datos"
+            title="Salud de los datos"
+            hint="Qué falta por confirmar y cómo arreglarlo"
+            icon={IconAlert}
+          />
+        </SettingsGroup>
       ) : null}
     </div>
+  );
+}
+
+/**
+ * LISTA PLANA DE CONFIGURACIÓN
+ * ----------------------------
+ * Un solo borde y separadores finos: nada de tarjetas dentro de tarjetas. El
+ * título va fuera, pequeño, para que la vista se lea como una lista compacta.
+ */
+function SettingsGroup({ title, hint, children }: { title: string; hint?: string; children: ReactNode }) {
+  return (
+    <section className="space-y-1.5">
+      <div className="px-1">
+        <h2 className="text-[0.66rem] font-semibold uppercase tracking-[0.09em] text-faint">{title}</h2>
+        {hint ? <p className="mt-0.5 text-[0.68rem] leading-snug text-faint">{hint}</p> : null}
+      </div>
+      <div className="divide-y divide-border-soft overflow-hidden rounded-xl border border-border-soft bg-surface">
+        {children}
+      </div>
+    </section>
+  );
+}
+
+/** Fila de una lista de configuración: padding uniforme y contenido al grano. */
+function Row({ children, className = '' }: { children: ReactNode; className?: string }) {
+  return <div className={`px-3 py-2.5 ${className}`}>{children}</div>;
+}
+
+/**
+ * ACCESO A UNA PÁGINA DE ADMINISTRACIÓN
+ * --------------------------------------
+ * Una fila con nombre y una frase corta: lo mismo en las tres, sin ruido y con
+ * el mismo aspecto, para que la pestaña se lea de un vistazo.
+ */
+function AdminLink({
+  to,
+  title,
+  hint,
+  icon: Icon,
+}: {
+  to: string;
+  title: string;
+  hint: string;
+  icon: ComponentType<{ size?: number; className?: string }>;
+}) {
+  return (
+    <Link to={to} className="flex items-center gap-3 px-3 py-2.5 transition hover:bg-surface-2">
+      <span className="flex h-8 w-8 shrink-0 items-center justify-center bg-brand-soft text-brand">
+        <Icon size={17} />
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-sm font-medium text-ink">{title}</span>
+        <span className="block truncate text-[0.68rem] text-muted">{hint}</span>
+      </span>
+      <IconChevronRight size={17} className="shrink-0 text-faint" />
+    </Link>
   );
 }
 

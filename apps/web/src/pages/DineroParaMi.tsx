@@ -1,7 +1,18 @@
 import { useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, ApiError } from '../lib/api';
-import { Button, Card, EmptyState, Field, MoneyInput, Notice, SectionTitle, Select, Spinner } from '../components/ui';
+import {
+  Button,
+  Card,
+  EmptyState,
+  Field,
+  MoneyInput,
+  Notice,
+  PageIntro,
+  SectionTitle,
+  Select,
+  Spinner,
+} from '../components/ui';
 import { useAuth } from '../store/auth';
 import { formatMoney, todayBusinessDate } from '../lib/format';
 
@@ -199,17 +210,11 @@ export function DineroParaMiPage() {
   const sinCuentasPersonales = !cuentasQuery.isLoading && cuentasPersonales.length === 0;
 
   return (
-    <div className="space-y-4">
-      <Card className="space-y-2">
-        <SectionTitle
-          title="Dinero para mí"
-          hint="Sacar dinero de un negocio a su cuenta personal"
-        />
-        <p className="text-xs leading-snug text-muted">
-          El dinero sale de la cuenta del negocio y <strong>entra en la suya</strong>. No es un ingreso: no aumenta lo
-          que gana, sólo cambia de sitio. Díganos qué es para anotarlo bien.
-        </p>
-      </Card>
+    <div className="space-y-3">
+      <PageIntro
+        title="Dinero para mí"
+        purpose="Saca dinero del negocio a su cuenta personal. No es un ingreso: sólo cambia de sitio."
+      />
 
       {cuentasQuery.isLoading ? <Spinner label="Cargando cuentas…" /> : null}
 

@@ -1,6 +1,13 @@
 import { expect, test, type Page } from '@playwright/test';
 import path from 'node:path';
-import { collectConsoleErrors, ensureAuthenticated, expectNoHorizontalOverflow, menu, openMenu } from './helpers';
+import {
+  collectConsoleErrors,
+  ensureAuthenticated,
+  expectNoHorizontalOverflow,
+  masOperaciones,
+  navAddButton,
+  quickMenu,
+} from './helpers';
 
 /**
  * FONDOS EN CUSTODIA, EN EL NAVEGADOR DE VERDAD
@@ -10,7 +17,7 @@ import { collectConsoleErrors, ensureAuthenticated, expectNoHorizontalOverflow, 
  *
  *   1. Crear sus cuentas reales (BHD personal, Banreservas personal y el banco de
  *      FULLTECH) por la interfaz.
- *   2. Llegar a «Fondos en custodia» desde el menú lateral y desde Movimientos.
+ *   2. Llegar a «Fondos en custodia» desde el botón «+» y desde Movimientos.
  *   3. Declarar el dinero de FULLTECH que YA estaba en el BHD (apertura).
  *   4. Registrar un cobro NUEVO de FULLTECH que cayó en el Banreservas personal.
  *   5. Comprobar que el panel dice de quién es cada peso.
@@ -83,17 +90,23 @@ test('el propietario registra y liquida dinero de una empresa en sus cuentas per
   await asegurarCuenta(page, 'FINANZAS PERSONALES', 'Banreservas personal (custodia)', '20000');
   await asegurarCuenta(page, 'FULLTECH', 'Banco FULLTECH (custodia)', '0');
 
-  // ---- 1. Se llega desde el menú lateral -----------------------------------
+  // ---- 1. Se llega desde el botón «+» --------------------------------------
+  // Custodia ya NO se repite en el menú lateral: es una operación y vive en las
+  // acciones rápidas, junto a los demás movimientos de dinero.
   await page.goto('/');
-  await openMenu(page);
-  await menu(page).getByRole('link', { name: /Fondos en custodia/i }).click();
+  await navAddButton(page).click();
+  await masOperaciones(page);
+  await quickMenu(page).getByRole('button', { name: /Fondos en custodia/i }).click();
   await expect(page.getByRole('heading', { name: 'Fondos en custodia' })).toBeVisible({ timeout: 20_000 });
   await expectNoHorizontalOverflow(page, 'Fondos en custodia (resumen)');
 
   // ---- 2. Se llega también desde Movimientos -------------------------------
+  // Movimientos ya no lleva una franja fija de custodia: el enlace aparece al
+  // filtrar por custodia, que es justo cuando se está mirando ese dinero.
   await page.goto('/movimientos');
-  await expect(page.getByRole('link', { name: /Fondos en custodia/i })).toBeVisible({ timeout: 20_000 });
-  await page.getByRole('link', { name: /Fondos en custodia/i }).click();
+  await page.getByRole('button', { name: 'Custodia', exact: true }).click();
+  await expect(page.getByRole('link', { name: /Ver fondos en custodia/i })).toBeVisible({ timeout: 20_000 });
+  await page.getByRole('link', { name: /Ver fondos en custodia/i }).click();
   await expect(page.getByRole('heading', { name: 'Fondos en custodia' })).toBeVisible({ timeout: 20_000 });
 
   // ---- 3. Declarar el dinero que YA estaba depositado en el BHD ------------

@@ -1,7 +1,22 @@
 import { useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, ApiError, newOperationId } from '../lib/api';
-import { Badge, Button, Card, EmptyState, Field, MoneyInput, Notice, SectionTitle, Select, Spinner, Tabs } from '../components/ui';
+import {
+  Badge,
+  Button,
+  Card,
+  EmptyState,
+  Fab,
+  Field,
+  MoneyInput,
+  Notice,
+  PageIntro,
+  SectionTitle,
+  Select,
+  Sheet,
+  Spinner,
+  Tabs,
+} from '../components/ui';
 import { useAuth } from '../store/auth';
 import { formatBusinessDate, formatMoney, todayBusinessDate } from '../lib/format';
 
@@ -105,6 +120,8 @@ export function ObligationsPage() {
   const [tab, setTab] = useState<TabId>('recurring');
   const [message, setMessage] = useState<{ tone: 'positive' | 'warning' | 'negative'; text: string } | null>(null);
   const [busy, setBusy] = useState(false);
+  // La hoja de alta (compromiso o por cobrar/pagar) se abre desde el botón flotante.
+  const [creando, setCreando] = useState(false);
 
   const [activeId, setActiveId] = useState<string | null>(null);
   const [amount, setAmount] = useState('');
@@ -199,6 +216,7 @@ export function ObligationsPage() {
       setNewName('');
       setNewAmount('');
       await queryClient.invalidateQueries();
+      setCreando(false);
     } catch (caught) {
       setMessage({ tone: 'negative', text: caught instanceof ApiError ? caught.message : 'No se pudo registrar el compromiso.' });
     } finally {
@@ -227,6 +245,7 @@ export function ObligationsPage() {
       setNewDescription('');
       setNewOriginal('');
       await queryClient.invalidateQueries();
+      setCreando(false);
     } catch (caught) {
       setMessage({ tone: 'negative', text: caught instanceof ApiError ? caught.message : 'No se pudo registrar.' });
     } finally {
@@ -279,8 +298,13 @@ export function ObligationsPage() {
   );
 
   return (
-    <div className="space-y-4">
-      {message ? <Notice tone={message.tone}>{message.text}</Notice> : null}
+    <div className="space-y-3">
+      <PageIntro
+        title="Obligaciones"
+        purpose="Lo que le deben, lo que debe y lo que se repite cada mes. Nada cuenta hasta que el dinero se mueve."
+      />
+
+      {message && !creando ? <Notice tone={message.tone}>{message.text}</Notice> : null}
 
       <Tabs
         tabs={[
@@ -342,23 +366,6 @@ export function ObligationsPage() {
                 </div>
               ))}
             </div>
-          </Card>
-
-          <Card className="space-y-3">
-            <SectionTitle title="Añadir un compromiso" hint="Es una plantilla de aviso: no suma ningún gasto hasta que se pague" />
-            <Select label="Unidad" value={newEntityId} onChange={setNewEntityId} options={entityOptions} />
-            <Field label="Nombre" value={newName} onChange={setNewName} hint="Alquiler del local, Internet, Nómina, Netflix…" />
-            <MoneyInput label="Importe" value={newAmount} onChange={setNewAmount} />
-            <Select
-              label="Cada cuánto"
-              value={newFrequency}
-              onChange={setNewFrequency}
-              options={Object.entries(FREQUENCY_LABELS).map(([value, label]) => ({ value, label }))}
-            />
-            <Field label="Próximo vencimiento" value={newDueDate} onChange={setNewDueDate} type="date" />
-            <Button disabled={busy || newEntityId === '' || newName.trim().length < 2 || newAmount === ''} onClick={() => void createRecurring()}>
-              Registrar compromiso
-            </Button>
           </Card>
         </>
       ) : null}
@@ -423,26 +430,6 @@ export function ObligationsPage() {
               ) : null}
             </div>
           </Card>
-
-          <Card className="space-y-3">
-            <SectionTitle title={tab === 'receivables' ? 'Añadir lo que me deben' : 'Añadir lo que debo'} />
-            <Select label="Unidad" value={newEntityId} onChange={setNewEntityId} options={entityOptions} />
-            <Field
-              label="A quién y por qué"
-              value={newDescription}
-              onChange={setNewDescription}
-              hint={tab === 'receivables' ? 'Cliente y factura pendiente' : 'Proveedor y factura por pagar'}
-            />
-            <MoneyInput label="Importe" value={newOriginal} onChange={setNewOriginal} />
-            <Field label="Fecha de emisión" value={newIssueDate} onChange={setNewIssueDate} type="date" />
-            <Field label="Vence el (opcional)" value={newDueDateObligation} onChange={setNewDueDateObligation} type="date" />
-            <Button
-              disabled={busy || newEntityId === '' || newDescription.trim().length < 2 || newOriginal === ''}
-              onClick={() => void createObligation(tab)}
-            >
-              {busy ? 'Registrando…' : 'Registrar'}
-            </Button>
-          </Card>
         </>
       ) : null}
 
@@ -495,9 +482,74 @@ export function ObligationsPage() {
         </Card>
       ) : null}
 
-      <p className="pb-4 text-center text-xs text-faint">
-        Lo que le deben no es dinero disponible; lo que debe no es un gasto hasta que se paga.
-      </p>
+      {/* Alta de obligación: hoja inferior que abre el botón flotante. */}
+      <Sheet
+        open={creando}
+        onClose={() => setCreando(false)}
+        title={
+          tab === 'recurring'
+            ? 'Nuevo compromiso de cada mes'
+            : tab === 'receivables'
+              ? 'Añadir lo que me deben'
+              : 'Añadir lo que debo'
+        }
+      >
+        <div className="space-y-3 pb-3">
+          {message ? <Notice tone={message.tone}>{message.text}</Notice> : null}
+          {tab === 'recurring' ? (
+            <>
+              <Select label="Unidad" value={newEntityId} onChange={setNewEntityId} options={entityOptions} />
+              <Field label="Nombre" value={newName} onChange={setNewName} hint="Alquiler del local, Internet, Nómina, Netflix…" />
+              <MoneyInput label="Importe" value={newAmount} onChange={setNewAmount} />
+              <Select
+                label="Cada cuánto"
+                value={newFrequency}
+                onChange={setNewFrequency}
+                options={Object.entries(FREQUENCY_LABELS).map(([value, label]) => ({ value, label }))}
+              />
+              <Field label="Próximo vencimiento" value={newDueDate} onChange={setNewDueDate} type="date" />
+              <p className="text-xs text-faint">Es una plantilla de aviso: no suma ningún gasto hasta que se pague.</p>
+              <Button
+                className="w-full"
+                disabled={busy || newEntityId === '' || newName.trim().length < 2 || newAmount === ''}
+                onClick={() => void createRecurring()}
+              >
+                {busy ? 'Registrando…' : 'Registrar compromiso'}
+              </Button>
+            </>
+          ) : (
+            <>
+              <Select label="Unidad" value={newEntityId} onChange={setNewEntityId} options={entityOptions} />
+              <Field
+                label="Cuenta quién y por qué"
+                value={newDescription}
+                onChange={setNewDescription}
+                hint={tab === 'receivables' ? 'Cliente y factura pendiente' : 'Proveedor y factura por pagar'}
+              />
+              <MoneyInput label="Importe" value={newOriginal} onChange={setNewOriginal} />
+              <Field label="Fecha de emisión" value={newIssueDate} onChange={setNewIssueDate} type="date" />
+              <Field label="Vence el (opcional)" value={newDueDateObligation} onChange={setNewDueDateObligation} type="date" />
+              <p className="text-xs text-faint">
+                No cuenta como ingreso ni como gasto hasta que el dinero se mueva de verdad.
+              </p>
+              <Button
+                className="w-full"
+                disabled={busy || newEntityId === '' || newDescription.trim().length < 2 || newOriginal === ''}
+                onClick={() => void createObligation(tab === 'receivables' ? 'receivables' : 'payables')}
+              >
+                {busy ? 'Registrando…' : 'Registrar'}
+              </Button>
+            </>
+          )}
+        </div>
+      </Sheet>
+
+      {tab !== 'upcoming' && !creando ? (
+        <Fab
+          label={tab === 'recurring' ? 'Nuevo compromiso' : tab === 'receivables' ? 'Por cobrar' : 'Por pagar'}
+          onClick={() => setCreando(true)}
+        />
+      ) : null}
     </div>
   );
 }

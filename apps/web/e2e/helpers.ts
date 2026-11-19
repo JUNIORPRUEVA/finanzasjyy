@@ -89,10 +89,12 @@ export function sessionIndicator(page: Page) {
 }
 
 /**
- * Los cinco destinos de la barra inferior, en orden. Se declaran aquí para que
+ * Los tres destinos de la barra inferior, en orden. Se declaran aquí para que
  * las pruebas y la aplicación no puedan discrepar sin que alguien lo note.
+ * El botón central se anuncia por su acción («Añadir movimiento»), porque ya no
+ * lleva texto visible.
  */
-export const BOTTOM_NAV = ['Inicio', 'Movimientos', 'Añadir', 'Control', 'Compras'] as const;
+export const BOTTOM_NAV = ['Panel', 'Añadir movimiento', 'Movimientos'] as const;
 
 /** Abre el menú lateral y espera a que esté visible. */
 export async function openMenu(page: Page): Promise<void> {
@@ -244,6 +246,7 @@ export function collectConsoleErrors(page: Page): string[] {
 export const APP_ROUTES: Array<{ path: string; name: string }> = [
   { path: '/', name: 'Panel' },
   { path: '/compras', name: 'Compras' },
+  { path: '/compras/catalogo', name: 'Catálogo de productos' },
   { path: '/auditoria', name: 'Auditoría' },
   { path: '/movimientos', name: 'Movimientos' },
   { path: '/registrar', name: 'Registrar' },

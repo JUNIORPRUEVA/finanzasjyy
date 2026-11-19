@@ -41,7 +41,7 @@ export function QuickEntryPage() {
         <Link
           to="/"
           aria-label="Volver al inicio"
-          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-muted transition hover:bg-surface-2 hover:text-ink"
+          className="flex h-10 w-10 shrink-0 items-center justify-center text-muted transition hover:bg-surface-2 hover:text-ink"
         >
           <IconChevronLeft size={20} />
         </Link>

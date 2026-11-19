@@ -4,7 +4,19 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, ApiError, OfflineError } from '../lib/api';
 import { submitOrQueue } from '../lib/sync';
 import { useAuth } from '../store/auth';
-import { Badge, Button, Card, EmptyState, Money, MoneyInput, Notice, SectionTitle, Select, Spinner } from '../components/ui';
+import {
+  Badge,
+  Button,
+  Card,
+  EmptyState,
+  Money,
+  MoneyInput,
+  Notice,
+  PageIntro,
+  SectionTitle,
+  Select,
+  Spinner,
+} from '../components/ui';
 import { CLOSING_STATUS_LABELS, formatBusinessDate, todayBusinessDate } from '../lib/format';
 
 interface PrepareResponse {
@@ -268,7 +280,12 @@ export function ClosingPage() {
   const data = prepareQuery.data;
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
+      <PageIntro
+        title="Cierre del día"
+        purpose="Revise, cuente el efectivo y confirme: así el saldo queda cuadrado."
+      />
+
       {message ? <Notice tone={message.tone}>{message.text}</Notice> : null}
 
       <Card className="space-y-3">
@@ -369,7 +386,7 @@ export function ClosingPage() {
           </div>
         </div>
         <p className="mt-2 text-xs text-faint">
-          Fecha de negocio: {formatBusinessDate(data.businessDateIso)} (no cambia aunque el dispositivo tenga otra hora)
+          Fecha de negocio: {formatBusinessDate(data.businessDateIso)} · no depende de la hora del teléfono
         </p>
       </Card>
 

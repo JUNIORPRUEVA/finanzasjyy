@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { NavLink, Link, useLocation, useNavigate } from 'react-router-dom';
+import { NavLink, Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../lib/api';
 import { countPendingOperations, countShoppingPending } from '../lib/db';
@@ -12,6 +12,7 @@ import { useInstalacionApp } from '../lib/install';
 import { useDatosGuardados } from '../lib/read-cache';
 import { prepararCopiaSinConexion } from '../lib/prewarm';
 import { formatDateTime } from '../lib/format';
+import { PERIODOS_PANEL, normalizePeriodo, type PeriodoPanel } from '../lib/periods';
 import { Badge, ConfirmDialog, Panel, Sheet } from './ui';
 import { Drawer } from './Drawer';
 import { ToastHost, toast } from './Toast';
@@ -19,9 +20,11 @@ import {
   IconAlert,
   IconArrowDown,
   IconArrowUp,
+  IconBag,
   IconBuilding,
   IconCheck,
   IconChevronDown,
+  IconChevronLeft,
   IconChevronRight,
   IconDots,
   IconMenu,
@@ -43,9 +46,8 @@ import type { IconProps } from './icons';
  *    activa»: si estás dentro, la sesión está bien; ocupaba sitio sin ofrecer
  *    nada. Ahora sólo se avisa cuando algo va mal (sin conexión) o cuando hay
  *    trabajo pendiente de confirmar.
- *  · BARRA INFERIOR (cinco destinos): Inicio · Movimientos · Añadir · Control ·
- *    Compras. «Más» desapareció: sus funciones están ahora en el menú lateral,
- *    con nombre propio.
+ *  · BARRA INFERIOR (tres destinos): Panel · «+» · Movimientos. Control y
+ *    Compras viven ahora en el menú lateral.
  *  · MENÚ LATERAL: todo lo demás, agrupado por para qué sirve (ver
  *    `navigation/registry.ts`, la única fuente de verdad de la navegación).
  *
@@ -287,6 +289,16 @@ export function AppShell({ children }: { children: React.ReactNode }) {  const {
   const selectedEntityId = new URLSearchParams(location.search).get('entityId') ?? '';
   const activeEntity = entities.find((entity) => entity.id === selectedEntityId) ?? null;
 
+  // Filtro de período del panel. Vive en la dirección para que la cabecera y la
+  // pantalla lean el mismo valor y no puedan discrepar.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const periodoPanel = normalizePeriodo(searchParams.get('periodo'));
+  const setPeriodoPanel = (periodo: PeriodoPanel) => {
+    const next = new URLSearchParams(searchParams);
+    next.set('periodo', periodo);
+    setSearchParams(next, { replace: true });
+  };
+
   const tasksQuery = useQuery<PendingTasks>({
     queryKey: ['pending-tasks'],
     queryFn: () => api.get<PendingTasks>('/notifications/tasks'),
@@ -363,7 +375,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {  const {
       if (result.conflicts + result.rejected > 0) {
         toast.warning(
           `${result.conflicts + result.rejected} operación(es) necesitan su revisión.`,
-          'Ábralas en «Sincronización», dentro del menú.',
+          'Ábralas en «Salud de los datos», dentro del menú.',
         );
       }
     };
@@ -425,107 +437,210 @@ export function AppShell({ children }: { children: React.ReactNode }) {  const {
   };
 
   /**
+   * Lo ÚNICO que viaja entre pantallas es la unidad financiera elegida.
+   * Antes se arrastraba la dirección entera y un `?tab=administracion` de
+   * Configuración acababa pegado en Inicio, Movimientos o Compras: parámetros
+   * que no significan nada fuera de su pantalla.
+   */
+  const navSearch = selectedEntityId ? `?entityId=${encodeURIComponent(selectedEntityId)}` : '';
+
+  /**
    * COMPRAS SE QUEDA SIN BARRA INFERIOR
    * -----------------------------------
    * Comprar es una tarea aparte: se entra, se marca lo que se lleva en el
    * carrito y se sale. La barra de destinos distrae y, en el supermercado, se
    * pulsa sin querer. Para volver está la flecha de la lista y el menú lateral.
+   * El CATÁLOGO no es una tarea: es una pantalla de consulta, así que sí lleva
+   * la barra inferior y la barra superior normal.
    */
-  const enCompras = location.pathname === '/compras' || location.pathname.startsWith('/compras/');
+  const enCompras =
+    (location.pathname === '/compras' || location.pathname.startsWith('/compras/')) &&
+    location.pathname !== '/compras/catalogo';
+  const esPanel = location.pathname === '/';
+  // Pantallas que ya traen su propia barra con volver y título: no se les
+  // añade otra encima.
+  const conBarraPropia = enCompras || location.pathname === '/registrar';
+
+  /**
+   * Vuelve a la pantalla anterior; si se entró por enlace directo (la primera
+   * entrada del historial), va al panel. Se mira `location.key`, no
+   * `history.length`: una pestaña nueva ya trae una entrada y volvería fuera.
+   */
+  const volver = () => {
+    if (location.key !== 'default') {
+      navigate(-1);
+    } else {
+      navigate('/');
+    }
+  };
+
+  /** Indicador de estado, con los colores que corresponden sobre azul o normal. */
+  const renderStatus = (onBlue: boolean) => (
+    <button
+      type="button"
+      onClick={() => void reload()}
+      aria-label={statusLabel}
+      className={`flex h-10 shrink-0 items-center gap-1.5 px-2.5 text-xs font-medium transition ${
+        onBlue ? 'text-white/80 hover:bg-white/10 hover:text-white' : 'text-muted hover:bg-surface-2 hover:text-ink'
+      }`}
+    >
+      {serverUnreachable ? (
+        <>
+          <IconWifiOff size={16} className="text-amber-300" />
+          <span className="hidden text-amber-300 min-[360px]:inline">Sin conexión</span>
+        </>
+      ) : syncing ? (
+        <>
+          <IconRefresh size={16} className="animate-spin" />
+          <span className="hidden min-[360px]:inline">Enviando</span>
+        </>
+      ) : pendingTotal > 0 ? (
+        <>
+          <IconAlert size={16} className="text-amber-300" />
+          <span className="text-amber-300">{pendingTotal}</span>
+        </>
+      ) : sessionState === 'starting' ? (
+        <IconRefresh size={16} className="animate-spin" />
+      ) : (
+        <>
+          <IconCheck size={16} className={onBlue ? 'text-emerald-300' : 'text-positive'} />
+          <span className="hidden min-[360px]:inline">Al día</span>
+        </>
+      )}
+    </button>
+  );
+
+  /** Selector de unidad: pastilla sobre el azul, texto discreto en el resto. */
+  const renderEntityButton = (onBlue: boolean) => (
+    <button
+      type="button"
+      onClick={() => setEntitySheetOpen(true)}
+      className={
+        onBlue
+          ? 'flex min-h-[2rem] max-w-[60%] items-center gap-1.5 bg-white/15 px-2.5 py-1 text-xs font-medium text-white transition hover:bg-white/20'
+          : 'flex max-w-full items-center gap-1 text-xs font-medium text-muted transition hover:text-ink'
+      }
+    >
+      <IconBuilding size={13} className="shrink-0" />
+      <span className="truncate">{activeEntity ? activeEntity.name : 'Todas las unidades'}</span>
+      <span className={onBlue ? 'text-white/60' : 'text-faint'}>▾</span>
+    </button>
+  );
 
   return (
     <div
-      className="mx-auto flex h-[100dvh] w-full max-w-3xl flex-col overflow-hidden"
+      className="flex h-[100dvh] w-full flex-col overflow-hidden"
       onTouchStart={(event) => empezarGesto(event, true)}
       onTouchEnd={terminarGesto}
     >
-      {/* CABECERA: baja, con lo que se usa a diario.
-          En Compras NO se pinta: esa pantalla trae su propia barra (volver,
-          «Compras» y la lupa) y así se queda casi toda la pantalla para la lista. */}
-      {enCompras ? null : (
-      <header className="z-30 shrink-0 border-b border-border-soft bg-bg/95 backdrop-blur-md">
-        <div className="flex items-center gap-1 px-2 pb-1.5 pt-[calc(var(--safe-top)+0.35rem)]">
-          <button
-            ref={menuButtonRef}
-            type="button"
-            onClick={() => setDrawerOpen(true)}
-            aria-label="Abrir el menú"
-            aria-expanded={drawerOpen}
-            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-ink transition hover:bg-surface-2"
-          >
-            <IconMenu size={22} />
-          </button>
+      {/*
+        CABECERA
 
-          <div className="min-w-0 flex-1">
-            <Link to="/" className="block leading-tight">
-              <span className="text-[0.95rem] font-bold tracking-tight text-ink">FINANZA</span>
-            </Link>
+        · En el PANEL: appbar cuadrado, a sangre (sin márgenes) y del MISMO azul
+          del botón «+» de la barra. Es más grande a propósito: marca, estado,
+          título «Panel», selector de unidad y el filtro de fechas.
+        · En el RESTO de pantallas: barra fina con un botón de VOLVER en lugar
+          del menú. El menú lateral vive sólo en el panel; aquí no se hereda.
+        · En Compras no se pinta nada: esa pantalla trae su propia barra.
+      */}
+      {conBarraPropia ? null : esPanel ? (
+        <header className="z-30 shrink-0 bg-brand text-white">
+          <div className="px-3 pb-3 pt-[calc(var(--safe-top)+0.6rem)]">
+            <div className="flex items-center gap-1">
+              <button
+                ref={menuButtonRef}
+                type="button"
+                onClick={() => setDrawerOpen(true)}
+                aria-label="Abrir el menú"
+                aria-expanded={drawerOpen}
+                className="flex h-10 w-10 shrink-0 items-center justify-center text-white/90 transition hover:bg-white/10"
+              >
+                <IconMenu size={22} />
+              </button>
+              <Link to="/" className="text-[0.62rem] font-semibold uppercase tracking-[0.2em] text-white/60">
+                FINANZA
+              </Link>
+              <div className="min-w-0 flex-1" />
+
+              {pendingTotal > 0 ? (
+                <Link
+                  to="/datos"
+                  aria-label={`Salud de los datos: ${pendingTotal} sin confirmar`}
+                  title="Salud de los datos"
+                  className="relative flex h-10 w-10 shrink-0 items-center justify-center text-amber-300 transition hover:bg-white/10"
+                >
+                  <IconAlert size={19} />
+                  <span
+                    aria-hidden="true"
+                    className="absolute right-0.5 top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-amber-300 px-1 text-[0.6rem] font-bold text-brand"
+                  >
+                    {pendingTotal > 9 ? '9+' : pendingTotal}
+                  </span>
+                </Link>
+              ) : null}
+
+              {renderStatus(true)}
+            </div>
+
+            <div className="mt-2 flex items-end justify-between gap-2 px-1">
+              <h1 className="text-2xl font-bold tracking-tight">Panel</h1>
+              {renderEntityButton(true)}
+            </div>
+
+            <div className="mt-3 flex gap-1 overflow-x-auto">
+              {PERIODOS_PANEL.map((periodo) => {
+                const activo = periodoPanel === periodo.id;
+                return (
+                  <button
+                    key={periodo.id}
+                    type="button"
+                    aria-pressed={activo}
+                    onClick={() => setPeriodoPanel(periodo.id)}
+                    className={`shrink-0 px-3 py-1.5 text-xs font-semibold transition ${
+                      activo ? 'bg-white text-brand shadow-card' : 'text-white/70 hover:bg-white/10 hover:text-white'
+                    }`}
+                  >
+                    {periodo.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </header>
+      ) : (
+        <header className="z-30 shrink-0 border-b border-border-soft bg-bg/95 backdrop-blur-md">
+          <div className="flex items-center gap-1 px-2 pb-1.5 pt-[calc(var(--safe-top)+0.35rem)]">
             <button
               type="button"
-              onClick={() => setEntitySheetOpen(true)}
-              className="flex max-w-full items-center gap-1 text-xs font-medium text-muted"
+              onClick={volver}
+              aria-label="Volver"
+              title="Volver"
+              className="flex h-11 w-11 shrink-0 items-center justify-center text-ink transition hover:bg-surface-2"
             >
-              <IconBuilding size={13} className="shrink-0" />
-              <span className="truncate">{activeEntity ? activeEntity.name : 'Todas las unidades'}</span>
-              <span className="text-faint">▾</span>
+              <IconChevronLeft size={22} />
             </button>
-          </div>
+            <div className="min-w-0 flex-1">{renderEntityButton(false)}</div>
 
-          {/* Salud de los datos: un icono fijo, siempre a la derecha, que abre la
-              página donde se arregla lo que no llegó al servidor. Se pone
-              SIEMPRE (no sólo cuando hay problemas) para que se sepa dónde está. */}
-          <Link
-            to="/datos"
-            aria-label={pendingTotal > 0 ? `Salud de los datos: ${pendingTotal} sin confirmar` : 'Salud de los datos'}
-            title="Salud de los datos"
-            className={`relative flex h-11 w-11 shrink-0 items-center justify-center rounded-full transition hover:bg-surface-2 ${
-              pendingTotal > 0 ? 'text-warning' : 'text-muted hover:text-ink'
-            }`}
-          >
-            <IconAlert size={19} />
             {pendingTotal > 0 ? (
-              <span
-                aria-hidden="true"
-                className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-warning px-1 text-[0.6rem] font-bold text-white"
+              <Link
+                to="/datos"
+                aria-label={`Salud de los datos: ${pendingTotal} sin confirmar`}
+                title="Salud de los datos"
+                className="relative flex h-11 w-11 shrink-0 items-center justify-center text-warning transition hover:bg-surface-2"
               >
-                {pendingTotal > 9 ? '9+' : pendingTotal}
-              </span>
+                <IconAlert size={19} />
+                <span
+                  aria-hidden="true"
+                  className="absolute right-1 top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-warning px-1 text-[0.6rem] font-bold text-white"
+                >
+                  {pendingTotal > 9 ? '9+' : pendingTotal}
+                </span>
+              </Link>
             ) : null}
-          </Link>
 
-          {/* Estado de sincronización: un indicador con acción */}
-          <button
-            type="button"
-            onClick={() => void reload()}
-            aria-label={statusLabel}
-            className="flex h-11 shrink-0 items-center gap-1.5 rounded-full px-2.5 text-xs font-medium text-muted transition hover:bg-surface-2 hover:text-ink"
-          >
-            {serverUnreachable ? (
-              <>
-                <IconWifiOff size={16} className="text-warning" />
-                <span className="hidden min-[340px]:inline text-warning">Sin conexión</span>
-              </>
-            ) : syncing ? (
-              <>
-                <IconRefresh size={16} className="animate-spin" />
-                <span className="hidden min-[340px]:inline">Enviando</span>
-              </>
-            ) : pendingTotal > 0 ? (
-              <>
-                <IconAlert size={16} className="text-warning" />
-                <span className="text-warning">{pendingTotal}</span>
-              </>
-            ) : sessionState === 'starting' ? (
-              <IconRefresh size={16} className="animate-spin" />
-            ) : (
-              <>
-                <IconCheck size={16} className="text-positive" />
-                <span className="hidden min-[340px]:inline">Al día</span>
-              </>
-            )}
-          </button>
-        </div>
-      </header>
+            {renderStatus(false)}
+          </div>
+        </header>
       )}
 
       {serverUnreachable ? (
@@ -574,7 +689,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {  const {
             <button
               type="button"
               onClick={() => void reload()}
-              className="shrink-0 rounded-full border border-border-soft px-3 py-1 text-xs font-semibold text-ink"
+              className="shrink-0 border border-border-soft px-3 py-1 text-xs font-semibold text-ink"
             >
               Actualizar
             </button>
@@ -608,7 +723,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {  const {
             <button
               type="button"
               onClick={() => void aplicarActualizacion()}
-              className="shrink-0 rounded-full bg-brand px-3 py-1.5 text-xs font-semibold text-white"
+              className="shrink-0 bg-brand px-3 py-1.5 text-xs font-semibold text-white"
             >
               Actualizar
             </button>
@@ -617,8 +732,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {  const {
       ) : null}
 
       <main
-        className={`min-h-0 flex-1 overscroll-contain px-4 ${
-          enCompras ? 'overflow-hidden pb-3 pt-0' : 'overflow-y-auto page-bottom-space py-4'
+        className={`min-h-0 flex-1 overscroll-contain ${esPanel ? 'px-0' : 'px-2'} ${
+          enCompras ? 'overflow-hidden pb-3 pt-0' : 'overflow-y-auto page-bottom-space py-2'
         }`}
       >
         {children}
@@ -631,7 +746,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {  const {
         className="fixed inset-x-0 bottom-0 z-40 border-t border-border-soft bg-bg/95 pb-[var(--safe-bottom)] backdrop-blur-md"
         style={{ paddingLeft: 'var(--safe-left)', paddingRight: 'var(--safe-right)' }}
       >
-        <div className="mx-auto flex max-w-3xl items-stretch justify-between px-1">
+        <div className="flex items-stretch justify-between px-1">
           {BOTTOM_NAV.map((entry) => {
             const Icon = entry.icon;
 
@@ -644,12 +759,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {  const {
                   onClick={abrirAcciones}
                   aria-label="Añadir movimiento"
                   aria-haspopup="dialog"
-                  className="flex flex-col items-center justify-center gap-0.5 px-2"
+                  className="flex items-center justify-center px-4 py-1"
                 >
-                  <span className="flex h-12 w-12 items-center justify-center rounded-full bg-brand text-white shadow-elevated transition active:scale-95">
+                  {/* Sólo el «+», cuadrado como el resto de la aplicación. */}
+                  <span className="flex h-12 w-12 items-center justify-center bg-brand text-white shadow-elevated transition active:scale-95">
                     <Icon size={24} />
                   </span>
-                  <span className="text-[0.66rem] font-medium text-muted">{entry.label}</span>
                 </button>
               );
             }
@@ -662,7 +777,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {  const {
                 to={target}
                 label={entry.label}
                 active={isActiveRoute(target)}
-                search={location.search}
+                search={navSearch}
                 // El contador se anuncia como parte del nombre del acceso, no
                 // como un número suelto delante: quien no ve la pantalla oye
                 // «Control, 2 tareas obligatorias», no «2 Control».
@@ -760,6 +875,28 @@ export function AppShell({ children }: { children: React.ReactNode }) {  const {
               />
             </button>
             {masOperaciones ? ACCIONES_OCASIONALES.map(renderAccion) : null}
+          </div>
+
+          {/* Compras también se maneja desde aquí: es una operación más y no
+              hace falta ir al menú lateral para empezar una lista. */}
+          <div className="overflow-hidden rounded-2xl border border-border-soft bg-surface">
+            <button
+              type="button"
+              onClick={() => {
+                cerrarAcciones();
+                void navigate('/compras');
+              }}
+              className="flex min-h-[3.5rem] w-full items-center gap-3 px-3 py-2.5 text-left transition hover:bg-surface-2 active:bg-surface-2"
+            >
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-brand-soft text-brand">
+                <IconBag size={20} />
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-sm font-semibold text-ink">Nueva compra</span>
+                <span className="block truncate text-[0.72rem] leading-snug text-muted">Lista del súper y carrito</span>
+              </span>
+              <IconChevronRight size={18} className="shrink-0 text-faint" />
+            </button>
           </div>
         </div>
       </Panel>

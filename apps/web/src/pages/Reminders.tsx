@@ -7,6 +7,7 @@ import {
   Button,
   Card,
   EmptyState,
+  Fab,
   Field,
   Notice,
   PasswordField,
@@ -16,7 +17,7 @@ import {
   Sheet,
   Spinner,
 } from '../components/ui';
-import { IconBell, IconCalendar, IconPlus, IconShare } from '../components/icons';
+import { IconBell, IconCalendar, IconShare } from '../components/icons';
 import { toast } from '../components/Toast';
 
 /**
@@ -273,18 +274,12 @@ export function RemindersPage() {
   };
 
   return (
-    <div className="space-y-4 pb-6">
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <h1 className="text-xl font-semibold text-ink">Recordatorios y notas</h1>
-          <p className="mt-0.5 text-xs leading-snug text-muted">
-            Lo que no se puede olvidar: apúntelo aquí y, si quiere, la app le avisa y lo lleva a su calendario.
-          </p>
-        </div>
-        <Button onClick={abrirNuevo} className="shrink-0">
-          <IconPlus size={18} />
-          Nuevo
-        </Button>
+    <div className="space-y-3 pb-6">
+      <div className="min-w-0">
+        <h1 className="text-xl font-semibold text-ink">Recordatorios y notas</h1>
+        <p className="mt-0.5 text-xs leading-snug text-muted">
+          Lo que no se puede olvidar: apúntelo aquí y, si quiere, la app le avisa y lo lleva a su calendario.
+        </p>
       </div>
 
       {/* Resumen: qué hay y cuántos avisos activos. */}
@@ -687,6 +682,8 @@ export function RemindersPage() {
           </form>
         ) : null}
       </Sheet>
+
+      {form === null ? <Fab label="Nuevo" onClick={abrirNuevo} /> : null}
     </div>
   );
 }

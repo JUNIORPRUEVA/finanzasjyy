@@ -2,7 +2,6 @@ import type { ComponentType } from 'react';
 import {
   IconBag,
   IconBell,
-  IconBuilding,
   IconCalendar,
   IconChart,
   IconCheck,
@@ -11,12 +10,10 @@ import {
   IconHome,
   IconList,
   IconLock,
+  IconLogout,
   IconPlus,
-  IconRefresh,
   IconSettings,
   IconTarget,
-  IconTransfer,
-  IconUsers,
   IconWallet,
 } from '../components/icons';
 
@@ -66,44 +63,44 @@ export interface NavEntry {
   order: number;
 }
 
-export const NAV_GROUPS: Array<{ id: NavGroupId; label: string; hint: string; collapsible: boolean }> = [
-  {
-    id: 'gestion',
-    label: 'Gestión financiera',
-    hint: 'Cuentas, deudas y presupuestos',
-    collapsible: true,
-  },
-  {
-    id: 'analisis',
-    label: 'Análisis y documentos',
-    hint: 'Informes, cierres y auditoría',
-    collapsible: true,
-  },
-  {
-    id: 'config',
-    label: 'Configuración',
-    hint: 'Apariencia, preferencias y seguridad',
-    collapsible: true,
-  },
-  { id: 'sesion', label: 'Sesión', hint: '', collapsible: false },
+/**
+ * Grupos del menú lateral.
+ *
+ * Son SECCIONES fijas, no acordeones: todo se ve de un vistazo y cualquier
+ * opción queda a un solo toque. El orden es el de uso real —lo de todos los días
+ * arriba, el análisis después y la configuración al final, separada— para que el
+ * menú se lea de arriba abajo sin tener que abrir nada.
+ */
+export const NAV_GROUPS: Array<{ id: NavGroupId; label: string; collapsible?: boolean }> = [
+  { id: 'gestion', label: 'Día a día' },
+  // «Análisis» es un solo botón que se despliega: sus cuatro pantallas no
+  // tienen que estar siempre a la vista en un menú que debe caber de un vistazo.
+  { id: 'analisis', label: 'Análisis', collapsible: true },
+  { id: 'config', label: 'Configuración' },
+  { id: 'sesion', label: 'Sesión' },
 ];
 
 /**
- * Barra inferior: EXACTAMENTE cinco destinos.
- * «Más» se retiró a propósito: sus funciones viven ahora en el menú lateral, con
- * nombre propio, en vez de escondidas en una lista heterogénea.
+ * Entradas que SIEMPRE están visibles al pie del menú.
+ *
+ * Ajustes y Cerrar sesión son las dos cosas que se buscan en un menú cuando ya
+ * se está dentro de la aplicación; si quedan al final de una lista larga, hay
+ * que desplazarse para encontrarlas. Fijas abajo se ven siempre, sin quitarles
+ * el sitio a las opciones del día a día.
+ */
+export const DRAWER_FOOTER_IDS: readonly string[] = ['ajustes', 'cerrar-sesion'];
+
+/**
+ * Barra inferior: TRES destinos y el botón de añadir en medio.
+ *
+ * Control y Compras se movieron al menú lateral: la barra se queda en lo que se
+ * toca a todas horas (Inicio, añadir, Movimientos) y deja de competir por el
+ * pulgar con acciones que se usan de vez en cuando.
  */
 export const BOTTOM_NAV: NavEntry[] = [
-  { id: 'inicio', label: 'Inicio', icon: IconHome, to: '/', group: 'gestion', availability: 'ready', order: 0 },
-  {
-    id: 'movimientos',
-    label: 'Movimientos',
-    icon: IconList,
-    to: '/movimientos',
-    group: 'gestion',
-    availability: 'ready',
-    order: 1,
-  },
+  // «Panel» y no «Inicio»: es una vista de resumen con enlaces, no el arranque
+  // del asistente. El nombre dice mejor lo que hay dentro.
+  { id: 'panel', label: 'Panel', icon: IconHome, to: '/', group: 'gestion', availability: 'ready', order: 0 },
   {
     id: 'anadir',
     label: 'Añadir',
@@ -112,26 +109,47 @@ export const BOTTOM_NAV: NavEntry[] = [
     action: 'quick-add',
     group: 'gestion',
     availability: 'ready',
-    order: 2,
+    order: 1,
   },
   {
-    id: 'control',
-    label: 'Control',
-    icon: IconTarget,
-    to: '/control',
+    id: 'movimientos',
+    label: 'Movimientos',
+    icon: IconList,
+    to: '/movimientos',
     group: 'gestion',
     availability: 'ready',
-    order: 3,
+    order: 2,
   },
-  { id: 'compras', label: 'Compras', icon: IconBag, to: '/compras', group: 'gestion', availability: 'ready', order: 4 },
 ];
 
 /** Entradas del menú lateral (las secundarias, agrupadas). */
 export const DRAWER_ENTRIES: NavEntry[] = [
   // --- Gestión financiera ---------------------------------------------------
   {
+    // Control y Compras, ARRIBA: son las dos pantallas que más se abren y las
+    // que antes estaban en la barra inferior.
+    id: 'control',
+    label: 'Control',
+    hint: 'Tareas pendientes y cierre del día',
+    icon: IconTarget,
+    to: '/control',
+    group: 'gestion',
+    availability: 'ready',
+    order: 1,
+  },
+  {
+    id: 'compras',
+    label: 'Compras',
+    hint: 'Listas y carrito',
+    icon: IconBag,
+    to: '/compras',
+    group: 'gestion',
+    availability: 'ready',
+    order: 2,
+  },
+  {
     id: 'cuentas',
-    label: 'Cuentas y bancos',
+    label: 'Cuentas',
     hint: 'Dónde está el dinero',
     icon: IconWallet,
     to: '/cuentas',
@@ -139,54 +157,18 @@ export const DRAWER_ENTRIES: NavEntry[] = [
     availability: 'ready',
     order: 10,
   },
-  // «Listas de compras» se retiró del menú: Compras ya está en la barra inferior
-  // y tenerlo dos veces era ruido (el dueño lo señaló). Las listas se abren
-  // desde el propio módulo de Compras.
-  {
-    id: 'traspasos',
-    label: 'Traspasos',
-    hint: 'Mover dinero entre cuentas o negocios',
-    icon: IconTransfer,
-    to: '/traspasos',
-    group: 'gestion',
-    availability: 'ready',
-    order: 12,
-  },
-  {
-    // Dinero de una empresa que está en una cuenta personal. Va aquí, junto a
-    // Traspasos, porque en la práctica es un traslado: primero se aclara de quién
-    // es el dinero y después se liquida hacia la cuenta de la empresa.
-    id: 'custodia',
-    label: 'Fondos en custodia',
-    hint: 'Dinero de una empresa en sus cuentas personales',
-    icon: IconWallet,
-    to: '/custodia',
-    group: 'gestion',
-    availability: 'ready',
-    order: 11,
-  },
-  {
-    // Cierra el ciclo de la custodia por el otro lado: en vez de que una empresa
-    // tenga dinero suyo en custodia, es el propietario quien adelantó un gasto
-    // de la empresa y hay que devolvérselo.
-    id: 'reembolsos',
-    label: 'Reembolsos',
-    hint: 'Pagué algo del negocio con mi dinero',
-    icon: IconRefresh,
-    to: '/reembolsos',
-    group: 'gestion',
-    availability: 'ready',
-    order: 12,
-  },
+  // NOTA: Traspasos, Fondos en custodia y Reembolsos NO se repiten aquí. Son
+  // operaciones y ya están en el botón central «+», que es donde se buscan.
+  // Tenerlas en los dos sitios era exactamente el ruido que sobraba.
   {
     id: 'deudas',
-    label: 'Deudas y préstamos',
+    label: 'Deudas',
     hint: 'Cuotas, tarjetas e intereses',
     icon: IconDebt,
     to: '/deudas',
     group: 'gestion',
     availability: 'ready',
-    order: 13,
+    order: 11,
   },
   {
     // Comparar el saldo del libro con el del banco. Va aquí, al lado de las
@@ -198,7 +180,7 @@ export const DRAWER_ENTRIES: NavEntry[] = [
     to: '/conciliacion',
     group: 'gestion',
     availability: 'ready',
-    order: 15,
+    order: 14,
   },
   // «Por cobrar», «por pagar» y «recurrentes» son tres pestañas de la MISMA
   // pantalla: se quedan en una entrada, como en Ajustes.
@@ -210,45 +192,39 @@ export const DRAWER_ENTRIES: NavEntry[] = [
     to: '/obligaciones',
     group: 'gestion',
     availability: 'ready',
-    order: 14,
+    order: 12,
   },
   {
     id: 'presupuestos',
     label: 'Presupuestos',
     hint: 'Límites por categoría',
-    icon: IconChart,
+    // Diana, no barras: «Informes» ya usa el gráfico de barras y dos iconos
+    // iguales en la misma lista obligan a leer para distinguirlos.
+    icon: IconTarget,
     to: '/presupuestos',
     group: 'gestion',
     availability: 'ready',
-    order: 17,
-  },
-  {
-    id: 'unidades',
-    label: 'Unidades financieras',
-    hint: 'Negocios y finanzas personales',
-    icon: IconBuilding,
-    to: '/unidades',
-    group: 'gestion',
-    availability: 'ready',
-    order: 18,
+    order: 13,
   },
   {
     // Notas y avisos: lo que no se puede olvidar. La app avisa a la hora fijada
     // y el enlace de calendario lo lleva también a Google Calendar.
     id: 'recordatorios',
-    label: 'Recordatorios y notas',
+    label: 'Recordatorios',
     hint: 'Lo que no se puede olvidar, con aviso',
     icon: IconBell,
     to: '/recordatorios',
     group: 'gestion',
     availability: 'ready',
-    order: 19,
+    order: 15,
   },
+  // Las «Unidades financieras» salieron del menú: se gestionan en
+  // Configuración → Administración, junto a las personas con acceso.
 
   // --- Análisis y documentos ------------------------------------------------
   {
     id: 'informes',
-    label: 'Informes y exportaciones',
+    label: 'Informes',
     hint: 'Resultados y descarga en CSV',
     icon: IconChart,
     to: '/informes',
@@ -258,7 +234,7 @@ export const DRAWER_ENTRIES: NavEntry[] = [
   },
   {
     id: 'cierres',
-    label: 'Historial de cierres',
+    label: 'Cierres',
     hint: 'Cada día cerrado, con su diferencia',
     icon: IconCalendar,
     to: '/cierres',
@@ -268,7 +244,7 @@ export const DRAWER_ENTRIES: NavEntry[] = [
   },
   {
     id: 'documentos',
-    label: 'Documentos y adjuntos',
+    label: 'Documentos',
     hint: 'Facturas y comprobantes',
     icon: IconFile,
     to: '/adjuntos',
@@ -289,42 +265,18 @@ export const DRAWER_ENTRIES: NavEntry[] = [
   },
 
   // --- Configuración --------------------------------------------------------
-  // Un solo acceso: perfil, apariencia, moneda, avisos y seguridad son pestañas
-  // de la misma pantalla. Cinco entradas para lo mismo era ruido en el menú.
+  // UNA sola puerta. Dentro de esa página están todas las opciones: perfil,
+  // apariencia, notificaciones, seguridad, unidades, personas con acceso y
+  // salud de los datos. En el menú no se repite ninguna de ellas.
   {
     id: 'ajustes',
-    label: 'Ajustes',
-    hint: 'Perfil, apariencia, moneda y seguridad',
+    label: 'Configuración',
+    hint: 'Todo lo que puede cambiar, en un solo sitio',
     icon: IconSettings,
     to: '/ajustes',
     group: 'config',
     availability: 'ready',
     order: 30,
-  },
-  {
-    id: 'sincronizacion',
-    label: 'Sincronización',
-    hint: 'Qué falta por confirmar en el servidor',
-    icon: IconList,
-    to: '/mas?tab=sincronizacion',
-    group: 'config',
-    availability: 'ready',
-    order: 35,
-  },
-  {
-    // Quién puede entrar y de quién es cada acción. Va en Configuración porque se
-    // toca una vez; el resultado (la firma) se ve en Movimientos y Auditoría.
-    id: 'personas',
-    label: 'Personas con acceso',
-    hint: 'Quién entra y de quién es cada acción',
-    icon: IconUsers,
-    to: '/personas',
-    group: 'config',
-    // Sólo propietario y administradores: el servidor lo exige igualmente, y no
-    // tiene sentido enseñar una puerta que se va a cerrar.
-    roles: ['OWNER', 'ADMIN'],
-    availability: 'ready',
-    order: 33,
   },
 
   // --- Sesión ---------------------------------------------------------------
@@ -332,7 +284,7 @@ export const DRAWER_ENTRIES: NavEntry[] = [
     id: 'cerrar-sesion',
     label: 'Cerrar sesión',
     hint: 'Los movimientos pendientes no se borran',
-    icon: IconLock,
+    icon: IconLogout,
     action: 'logout',
     group: 'sesion',
     availability: 'ready',
@@ -345,7 +297,7 @@ export const ALL_NAV_ENTRIES: NavEntry[] = [...BOTTOM_NAV, ...DRAWER_ENTRIES];
 
 /** Entradas del menú lateral que el usuario puede ver, agrupadas y ordenadas. */
 export function visibleDrawerEntries(role: string | null | undefined): Array<{
-  group: { id: NavGroupId; label: string; hint: string; collapsible: boolean };
+  group: { id: NavGroupId; label: string; collapsible?: boolean };
   entries: NavEntry[];
 }> {
   const canSee = (entry: NavEntry) =>

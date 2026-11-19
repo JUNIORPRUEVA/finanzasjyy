@@ -11,76 +11,93 @@ import { ensureAuthenticated, menu, menuButton, openMenu, sessionIndicator } fro
  * pantalla se pierde si no vuelve—.
  */
 test.describe('menú lateral', () => {
-  test('se abre con el botón de tres líneas y agrupa las funciones por para qué sirven', async ({ page }) => {
+  test('se abre con el botón de tres líneas y muestra sólo lo esencial', async ({ page }) => {
     await ensureAuthenticated(page);
 
     await openMenu(page);
     const drawer = menu(page);
 
-    // Los tres bloques, con una frase que dice qué hay dentro y cuántas opciones.
-    for (const grupo of ['Gestión financiera', 'Análisis y documentos', 'Configuración']) {
-      await expect(drawer.getByRole('button', { name: new RegExp(grupo) })).toBeVisible();
+    // Lo del día a día, todo a la vista.
+    await expect(drawer.getByText('Día a día', { exact: true })).toBeVisible();
+    await expect(drawer.getByRole('link', { name: /^Cuentas/ })).toBeVisible();
+    await expect(drawer.getByRole('link', { name: /^Deudas/ })).toBeVisible();
+    await expect(drawer.getByRole('link', { name: /Obligaciones/ })).toBeVisible();
+    await expect(drawer.getByRole('link', { name: /Presupuestos/ })).toBeVisible();
+
+    // Control y Compras van LOS PRIMEROS y se movieron aquí desde la barra.
+    const primeroYsegundo = await drawer
+      .locator('nav a')
+      .evaluateAll((enlaces) => enlaces.slice(0, 2).map((enlace) => enlace.textContent?.trim() ?? ''));
+    expect(primeroYsegundo).toEqual(['Control', 'Compras']);
+
+    // Una sola fila de pie: Configuración + salir (icono).
+    await expect(drawer.getByRole('link', { name: /^Configuración/ })).toBeVisible();
+    await expect(drawer.getByRole('button', { name: 'Cerrar sesión' })).toBeVisible();
+
+    // La versión ya no está en el menú: vive en Configuración.
+    await expect(drawer.getByText(/Buscar actualización/i)).toHaveCount(0);
+
+    // Sin duplicados: las operaciones viven en el botón «+» y la administración
+    // dentro de Configuración. Si alguien las devolviera al menú, esto avisa.
+    for (const repetida of [
+      'Traspasos',
+      'Fondos en custodia',
+      'Reembolsos',
+      'Unidades financieras',
+      'Personas con acceso',
+      'Salud de los datos',
+      'Listas de compras',
+    ]) {
+      await expect(drawer.getByRole('link', { name: new RegExp(repetida) })).toHaveCount(0);
     }
-
-    // «Gestión financiera» viene abierta (es lo de todos los días).
-    await expect(drawer.getByRole('link', { name: /Cuentas y bancos/ })).toBeVisible();
-    await expect(drawer.getByRole('link', { name: /Deudas y préstamos/ })).toBeVisible();
-
-    // Compras NO se repite aquí: ya está en la barra inferior y el dueño pidió
-    // quitarla del menú. Si alguien la devolviera, esta prueba lo avisa.
-    await expect(drawer.getByRole('link', { name: /Listas de compras/ })).toHaveCount(0);
-
-    // Las otras dos vienen plegadas: sus opciones no se ven hasta abrirlas, y por
-    // eso el menú cabe en una pantalla de teléfono sin ser una lista infinita.
-    await expect(drawer.getByRole('link', { name: /Auditoría/ })).toBeHidden();
-    await expect(drawer.getByRole('link', { name: /^Ajustes/ })).toBeHidden();
-
-    await drawer.getByRole('button', { name: /Análisis y documentos/ }).click();
-    await expect(drawer.getByRole('link', { name: /Auditoría/ })).toBeVisible();
-
-    // Perfil, apariencia, moneda y seguridad son pestañas de la MISMA pantalla:
-    // una sola entrada en el menú, no cinco.
-    await drawer.getByRole('button', { name: /Configuración/ }).click();
-    await expect(drawer.getByRole('link', { name: /^Ajustes/ })).toBeVisible();
-    await expect(drawer.getByRole('link', { name: /Apariencia/ })).toHaveCount(0);
 
     // El pie recuerda que no se pierde trabajo al cerrar sesión: es la duda que
     // tiene cualquiera antes de pulsar ese botón.
     await expect(drawer.getByText(/los movimientos que estén sin confirmar se conservan/i)).toBeVisible();
   });
 
-  test('sólo hay un bloque abierto a la vez (y se puede cerrar el que está abierto)', async ({ page }) => {
+  test('«Análisis» es un solo botón que se despliega', async ({ page }) => {
     await ensureAuthenticated(page);
 
     await openMenu(page);
     const drawer = menu(page);
-    const abiertos = async () => {
-      const estados = await drawer
-        .locator('button[aria-expanded]')
-        .evaluateAll((botones) => botones.map((b) => b.getAttribute('aria-expanded')));
-      return estados.filter((estado) => estado === 'true').length;
-    };
+    const analisis = drawer.getByRole('button', { name: /^Análisis/ });
 
-    // De entrada hay exactamente uno abierto.
-    expect(await abiertos()).toBe(1);
+    // Plegado: sus pantallas no ocupan sitio.
+    await expect(analisis).toBeVisible();
+    await expect(analisis).toHaveAttribute('aria-expanded', 'false');
+    await expect(drawer.getByRole('link', { name: /Auditoría/ })).toBeHidden();
 
-    await drawer.getByRole('button', { name: /Análisis y documentos/ }).click();
-    expect(await abiertos(), 'abrir uno debe cerrar el anterior').toBe(1);
-    await expect(drawer.getByRole('button', { name: /Análisis y documentos/ })).toHaveAttribute(
-      'aria-expanded',
-      'true',
-    );
-    await expect(drawer.getByRole('button', { name: /Gestión financiera/ })).toHaveAttribute(
-      'aria-expanded',
-      'false',
-    );
+    // Desplegado: aparecen las cuatro.
+    await analisis.click();
+    await expect(analisis).toHaveAttribute('aria-expanded', 'true');
+    await expect(drawer.getByRole('link', { name: /Auditoría/ })).toBeVisible();
+    await expect(drawer.getByRole('link', { name: /^Informes/ })).toBeVisible();
+    await expect(drawer.getByRole('link', { name: /^Cierres/ })).toBeVisible();
+    await expect(drawer.getByRole('link', { name: /^Documentos/ })).toBeVisible();
 
-    await drawer.getByRole('button', { name: /Configuración/ }).click();
-    expect(await abiertos()).toBe(1);
+    // Y se vuelve a plegar.
+    await analisis.click();
+    await expect(analisis).toHaveAttribute('aria-expanded', 'false');
+    await expect(drawer.getByRole('link', { name: /Auditoría/ })).toBeHidden();
+  });
 
-    // Volver a pulsar el que está abierto lo cierra: deja el menú recogido del todo.
-    await drawer.getByRole('button', { name: /Configuración/ }).click();
-    expect(await abiertos()).toBe(0);
+  test('el panel tiene menú; las demás pantallas, botón de volver', async ({ page }) => {
+    await ensureAuthenticated(page);
+
+    // En el panel está el menú lateral (y no hay botón de volver).
+    await expect(menuButton(page)).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Volver' })).toHaveCount(0);
+
+    // En otra pantalla NO se hereda el appbar ni el menú: hay un botón Volver.
+    await page.goto('/cuentas');
+    await expect(page.getByRole('button', { name: 'Volver' })).toBeVisible();
+    await expect(menuButton(page)).toHaveCount(0);
+
+    // Volver regresa a la pantalla anterior (el panel).
+    await page.getByRole('button', { name: 'Volver' }).click();
+    await expect(page).toHaveURL(/\/$/);
+    await expect(menuButton(page)).toBeVisible();
   });
 
   test('se cierra con Escape y el foco vuelve al botón que lo abrió', async ({ page }) => {
@@ -122,7 +139,7 @@ test.describe('menú lateral', () => {
     await ensureAuthenticated(page);
 
     await openMenu(page);
-    await menu(page).getByRole('link', { name: /Cuentas y bancos/ }).click();
+    await menu(page).getByRole('link', { name: /^Cuentas/ }).click();
 
     await expect(page).toHaveURL(/\/cuentas/);
     await expect(menu(page)).toBeHidden();
@@ -161,7 +178,7 @@ test.describe('menú lateral', () => {
     // sería que el menú no está bloqueando el fondo.
     const navLink = page
       .getByRole('navigation', { name: 'Navegación principal' })
-      .getByRole('link', { name: 'Inicio', exact: true });
+      .getByRole('link', { name: 'Panel', exact: true });
 
     await expect(navLink.click({ trial: true, timeout: 2_000 })).rejects.toThrow();
     await expect(menu(page)).toBeVisible();

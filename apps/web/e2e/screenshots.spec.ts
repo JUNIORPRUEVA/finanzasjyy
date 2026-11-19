@@ -53,9 +53,12 @@ test('capturas del menú lateral y de la apariencia', async ({ page }, testInfo)
   await ensureAuthenticated(page);
   const dir = path.join(OUTPUT_DIR, testInfo.project.name);
 
-  // Menú lateral abierto, sobre el inicio.
+  // Menú lateral abierto, sobre el inicio. Se espera a que termine la animación
+  // de entrada (0,22 s): si se captura antes, el panel sale translúcido y la
+  // imagen de referencia no sirve para revisar el aspecto.
   await page.goto('/');
   await openMenu(page);
+  await page.waitForTimeout(400);
   await page.screenshot({ path: path.join(dir, 'menu-lateral.png') });
 
   // Apariencia: las tres opciones y cómo queda cada tema.
@@ -67,12 +70,16 @@ test('capturas del menú lateral y de la apariencia', async ({ page }, testInfo)
   await page.getByRole('button', { name: /Claro/ }).first().click();
   await page.goto('/');
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
+  // Se espera a que el panel tenga sus cifras: si no, la captura sale con los
+  // esqueletos de carga y no sirve como referencia visual.
+  await expect(page.getByText(/¿Dónde está mi dinero\?/i)).toBeVisible({ timeout: 20_000 });
   await page.screenshot({ path: path.join(dir, 'inicio-claro.png') });
 
   await page.goto('/ajustes?tab=apariencia');
   await page.getByRole('button', { name: /Oscuro/ }).first().click();
   await page.goto('/');
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+  await expect(page.getByText(/¿Dónde está mi dinero\?/i)).toBeVisible({ timeout: 20_000 });
   await page.screenshot({ path: path.join(dir, 'inicio-oscuro.png') });
 
   // Se deja la apariencia como estaba (claro) para no sorprender a nadie.

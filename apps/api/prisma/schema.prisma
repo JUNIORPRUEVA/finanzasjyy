@@ -431,6 +431,7 @@ model FinancialEntity {
   notifications    Notification[]
   attachments      Attachment[]
   shoppingLists    ShoppingList[]
+  productCatalog   ProductCatalogEntry[]
   custodyFunds     CustodyFund[]          @relation("CustodyFundEntity")
   custodyMovements CustodyMovement[]      @relation("CustodyMovementEntity")
   reminders        Reminder[]
@@ -1498,6 +1499,36 @@ model ShoppingListItem {
   list ShoppingList @relation(fields: [listId], references: [id], onDelete: Cascade)
 
   @@index([listId, isPurchased])
+}
+
+/// CATÁLOGO DE PRODUCTOS OBSERVADOS
+/// -------------------------------
+/// Sale de lo que ya se compró (factura leída o producto marcado con precio):
+/// nombre normalizado, unidad, último precio, mínimo y máximo, y desde cuándo.
+/// Sirve para dos cosas: autocompletar el precio al añadir un producto y saber
+/// cómo evoluciona lo que se paga. No es un documento financiero ni mueve dinero.
+model ProductCatalogEntry {
+  id             String   @id @default(uuid())
+  entityId       String
+  /// Nombre en minúsculas y sin acentos: «Arroz 5 lb» y «arroz 5 LB» son el mismo.
+  normalizedName String
+  /// Nombre tal como se escribió la última vez (para mostrarlo).
+  name           String
+  unit           String?
+  lastUnitPrice  Decimal? @db.Decimal(18, 2)
+  minUnitPrice   Decimal? @db.Decimal(18, 2)
+  maxUnitPrice   Decimal? @db.Decimal(18, 2)
+  lastQuantity   Decimal? @db.Decimal(18, 3)
+  lastSupplier   String?
+  timesPurchased Int      @default(0)
+  lastSeenAt     DateTime @default(now())
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  entity FinancialEntity @relation(fields: [entityId], references: [id], onDelete: Cascade)
+
+  @@unique([entityId, normalizedName])
+  @@index([entityId, lastSeenAt])
 }
 
 // ============================================================================

@@ -138,11 +138,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // elegido nada (primera vez, o teléfono nuevo): así el usuario encuentra
       // FINANZA como le gusta sin configurarlo otra vez, y una elección hecha
       // aquí no se le deshace al reabrir la aplicación.
+      //
+      // «system» es el valor que trae la cuenta por defecto, no una elección
+      // real: en ese caso NO se toca nada y el dispositivo se queda con el tema
+      // por defecto de la aplicación, que es el claro. Así nadie acaba en oscuro
+      // por la configuración del teléfono sin haberlo elegido.
       const accountTheme = profile.preferences?.theme;
-      if (
-        readStoredTheme() === null &&
-        (accountTheme === 'light' || accountTheme === 'dark' || accountTheme === 'system')
-      ) {
+      if (readStoredTheme() === null && (accountTheme === 'light' || accountTheme === 'dark')) {
         setThemePreference(accountTheme);
       }
     },

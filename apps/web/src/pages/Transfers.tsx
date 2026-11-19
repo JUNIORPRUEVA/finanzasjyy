@@ -2,7 +2,19 @@ import { useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, ApiError } from '../lib/api';
 import { submitOrQueue } from '../lib/sync';
-import { Badge, Button, Card, EmptyState, Field, MoneyInput, Notice, SectionTitle, Select, Spinner } from '../components/ui';
+import {
+  Badge,
+  Button,
+  Card,
+  EmptyState,
+  Field,
+  MoneyInput,
+  Notice,
+  PageIntro,
+  SectionTitle,
+  Select,
+  Spinner,
+} from '../components/ui';
 import { IconChevronDown } from '../components/icons';
 import { useAuth } from '../store/auth';
 import { formatBusinessDate, formatMoney, todayBusinessDate } from '../lib/format';
@@ -223,12 +235,14 @@ export function TransfersPage() {
     !busy;
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
+      <PageIntro
+        title="Traspasos"
+        purpose="Mueva dinero entre cuentas suyas sin contarlo como ingreso ni gasto."
+      />
+
       <Card className="space-y-3">
-        <SectionTitle
-          title="Mover dinero"
-          hint="De una cuenta suya a otra. No es un ingreso ni un gasto: sólo cambia de sitio."
-        />
+        <SectionTitle title="Mover dinero" hint="Elija el origen, el destino y el importe" />
 
         {accountsQuery.isLoading ? <Spinner label="Cargando cuentas…" /> : null}
 

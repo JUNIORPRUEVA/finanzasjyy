@@ -8,7 +8,9 @@ import {
   expectNoHorizontalOverflow,
   expectNoWideElement,
   masOperaciones,
+  menu,
   navAddButton,
+  openMenu,
   quickMenu,
 } from './helpers';
 
@@ -48,14 +50,16 @@ test.describe('recorrido de todas las pantallas', () => {
       await expectNoWideElement(page, `${route.name} @ ${page.viewportSize()?.width}px`);
 
       // Toda pantalla conserva la barra inferior y el botón de añadir… salvo
-      // Compras, que es una tarea aparte: se entra a comprar, se marca en el
-      // carrito y se sale con la flecha. Allí se exige justo lo contrario.
-      if (route.path.startsWith('/compras')) {
+      // Compras y el detalle de una compra, que son una tarea aparte: se entra a
+      // comprar, se marca en el carrito y se sale con la flecha. El CATÁLOGO es
+      // una pantalla normal de consulta y sí lleva la barra.
+      const esTareaDeCompra = route.path.startsWith('/compras') && route.path !== '/compras/catalogo';
+      if (esTareaDeCompra) {
         await expect(page.getByRole('navigation', { name: 'Navegación principal' })).toHaveCount(0);
         await expect(navAddButton(page)).toHaveCount(0);
       } else {
         await expect(navAddButton(page)).toBeVisible();
-        await expect(page.getByRole('link', { name: 'Inicio', exact: true })).toBeVisible();
+        await expect(page.getByRole('link', { name: 'Panel', exact: true })).toBeVisible();
       }
 
       expect(consoleErrors, `${route.name}: errores de consola → ${consoleErrors.join(' | ')}`).toEqual([]);
@@ -64,19 +68,19 @@ test.describe('recorrido de todas las pantallas', () => {
 });
 
 test.describe('navegación inferior', () => {
-  test('la barra inferior tiene exactamente los cinco destinos acordados y ninguno es «Más»', async ({ page }) => {
+  test('la barra inferior tiene exactamente los tres destinos acordados y ninguno es «Más»', async ({ page }) => {
     await ensureAuthenticated(page);
 
     const bar = page.getByRole('navigation', { name: 'Navegación principal' });
     await expect(bar).toBeVisible();
 
     // Los nombres y su ORDEN: es la promesa que se le hace al usuario.
-    // Se toma la ÚLTIMA línea de cada acceso porque «Control» puede llevar encima
-    // su contador de tareas obligatorias (el número se pinta dentro del mismo
-    // enlace), y ese contador no cambia el nombre del destino.
-    const labels = (await bar.locator('a, button').allInnerTexts()).map((text) =>
-      text.trim().split('\n').pop()!.trim(),
-    );
+    // El botón central se lee por su `aria-label` porque ya no lleva texto visible.
+    const labels = await bar
+      .locator('a, button')
+      .evaluateAll((elements) =>
+        elements.map((element) => (element.getAttribute('aria-label') ?? element.textContent ?? '').trim()),
+      );
     expect(labels).toEqual([...BOTTOM_NAV]);
 
     // «Más» desapareció como destino: su contenido vive ahora en el menú lateral,
@@ -84,7 +88,7 @@ test.describe('navegación inferior', () => {
     await expect(bar.getByText('Más', { exact: true })).toHaveCount(0);
   });
 
-  test('los cinco accesos llevan a donde dicen', async ({ page }) => {
+  test('los tres accesos llevan a donde dicen, y Control y Compras viven en el menú', async ({ page }) => {
     await ensureAuthenticated(page);
 
     await page.getByRole('link', { name: 'Movimientos', exact: true }).click();
@@ -96,12 +100,15 @@ test.describe('navegación inferior', () => {
     await page.getByRole('button', { name: 'Cerrar', exact: true }).first().click();
     await expect(page.getByText('¿Qué desea hacer?')).toBeHidden();
 
-    // «Control» puede ir acompañado del número de tareas obligatorias, así que se
-    // busca por su nombre sin exigir coincidencia exacta.
-    await page.getByRole('link', { name: /^Control/ }).click();
+    // Control y Compras salieron de la barra: se llega a ellos por el menú.
+    await page.goto('/');
+    await openMenu(page);
+    await menu(page).getByRole('link', { name: /^Control/ }).click();
     await expect(page).toHaveURL(/\/control/);
 
-    await page.getByRole('link', { name: 'Compras', exact: true }).click();
+    await page.goto('/');
+    await openMenu(page);
+    await menu(page).getByRole('link', { name: /^Compras/ }).click();
     await expect(page).toHaveURL(/\/compras/);
     await expect(page.getByRole('heading', { name: 'Compras' })).toBeVisible();
 
@@ -206,8 +213,9 @@ test.describe('navegación inferior', () => {
       await expect(panel.getByRole('button', { name: new RegExp(label) })).toBeVisible();
     }
 
-    // «Compras» NO se repite aquí: ya es un destino de la barra inferior.
-    await expect(panel.getByRole('button', { name: /^Compras/ })).toHaveCount(0);
+    // Compras se maneja desde aquí con su propio botón: no hay que ir al menú
+    // lateral para empezar una lista.
+    await expect(panel.getByRole('button', { name: /Nueva compra/ })).toBeVisible();
     await expect(panel.getByRole('button', { name: /Fondos en custodia/ })).toHaveCount(0);
 
     // Al desplegarla aparecen las ocasionales, sin cerrar el panel.

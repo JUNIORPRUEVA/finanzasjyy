@@ -9,10 +9,10 @@ import {
   Card,
   EmptyState,
   Field,
-  Kpi,
   Money,
   MoneyInput,
   Notice,
+  PageIntro,
   SectionTitle,
   SegmentedControl,
   Select,
@@ -412,17 +412,11 @@ export function CustodyPage() {
   const resumen = resumenQuery.data!;
 
   return (
-    <div className="space-y-4">
-      <Card className="space-y-2">
-        <SectionTitle
-          title="Fondos en custodia"
-          hint="Dinero de sus empresas que está en sus cuentas personales (BHD, Banreservas…)"
-        />
-        <p className="text-xs leading-snug text-muted">
-          No es un procesador de pagos: aquí el dinero <strong>ya está</strong> en su banco. Lo que se aclara es de
-          quién es, para que los saldos coincidan con el extracto y los ingresos no se cuenten dos veces.
-        </p>
-      </Card>
+    <div className="space-y-3">
+      <PageIntro
+        title="Fondos en custodia"
+        purpose="Dinero de sus empresas que está en sus cuentas personales: aquí se aclara de quién es."
+      />
 
       <Tabs
         tabs={[
@@ -446,27 +440,28 @@ export function CustodyPage() {
       {tab === 'resumen' ? (
         <>
           <Card>
-            <SectionTitle title="Totales" hint="Suma de todas sus cuentas reales (sin tarjetas de crédito)" />
-            <div className="grid grid-cols-[repeat(auto-fit,minmax(8.5rem,1fr))] gap-3">
-              <Kpi label="Saldo real" value={resumen.totals.realBalance} currency={moneda} hint="Lo que dice el banco" />
-              <Kpi
-                label="De empresas"
-                value={resumen.totals.custody}
-                tone="warning"
-                currency={moneda}
-                hint="Bajo custodia, pendiente de liquidar"
-              />
-              <Kpi
-                label="Suyo de verdad"
-                value={resumen.totals.personalNet}
-                tone={Number(resumen.totals.personalNet) < 0 ? 'negative' : 'positive'}
-                currency={moneda}
-                hint="Saldo real − dinero de empresas"
-              />
+            <SectionTitle title="Totales" hint="Sin tarjetas de crédito" />
+            <div className="divide-y divide-border-soft text-sm">
+              <div className="flex items-baseline justify-between gap-3 py-1.5">
+                <span className="text-muted">Saldo real (lo que dice el banco)</span>
+                <Money value={resumen.totals.realBalance} currency={moneda} />
+              </div>
+              <div className="flex items-baseline justify-between gap-3 py-1.5">
+                <span className="text-muted">De empresas, pendiente de liquidar</span>
+                <Money value={resumen.totals.custody} currency={moneda} tone="warning" />
+              </div>
+              <div className="flex items-baseline justify-between gap-3 py-1.5">
+                <span className="text-muted">Suyo de verdad</span>
+                <Money
+                  value={resumen.totals.personalNet}
+                  currency={moneda}
+                  tone={Number(resumen.totals.personalNet) < 0 ? 'negative' : 'positive'}
+                />
+              </div>
             </div>
 
             {resumen.byBeneficiary.length > 0 ? (
-              <div className="mt-3 space-y-1 border-t border-border-soft pt-3">
+              <div className="mt-2 space-y-1 border-t border-border-soft pt-2">
                 <p className="text-xs font-medium uppercase tracking-wide text-muted">Por empresa</p>
                 {resumen.byBeneficiary.map((fila) => (
                   <div key={fila.entityId} className="flex items-center justify-between gap-2 text-sm">
@@ -481,7 +476,7 @@ export function CustodyPage() {
           <Card>
             <SectionTitle
               title="Cuenta por cuenta"
-              hint="El saldo real siempre coincide con el extracto del banco"
+              hint="Saldo real y de quién es"
               right={
                 resumen.accounts.length > 1 ? (
                   <Button

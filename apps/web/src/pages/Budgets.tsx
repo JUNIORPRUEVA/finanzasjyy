@@ -1,7 +1,21 @@
 import { useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, ApiError } from '../lib/api';
-import { Badge, Button, Card, EmptyState, Field, MoneyInput, Notice, SectionTitle, Select, Sheet, Spinner } from '../components/ui';
+import {
+  Badge,
+  Button,
+  Card,
+  EmptyState,
+  Fab,
+  Field,
+  MoneyInput,
+  Notice,
+  PageIntro,
+  SectionTitle,
+  Select,
+  Sheet,
+  Spinner,
+} from '../components/ui';
 import { useAuth } from '../store/auth';
 import { formatMoney, todayBusinessDate } from '../lib/format';
 
@@ -102,6 +116,8 @@ export function BudgetsPage() {
   const [period, setPeriod] = useState('MONTHLY');
   const [startDate, setStartDate] = useState(todayBusinessDate());
   const [lines, setLines] = useState<Array<{ categoryId: string; limitAmount: string }>>([{ categoryId: '', limitAmount: '' }]);
+  // La hoja de alta se abre desde el botón flotante: la lista manda.
+  const [creando, setCreando] = useState(false);
 
   const categoryOptions = categories.map((category) => ({ value: category.id, label: category.name }));
 
@@ -131,6 +147,7 @@ export function BudgetsPage() {
       setName('');
       setLines([{ categoryId: '', limitAmount: '' }]);
       await queryClient.invalidateQueries();
+      setCreando(false);
     } catch (caught) {
       setMessage({ tone: 'negative', text: caught instanceof ApiError ? caught.message : 'No se pudo crear el presupuesto.' });
     } finally {
@@ -164,12 +181,17 @@ export function BudgetsPage() {
   };
 
   return (
-    <div className="space-y-4">
-      {message ? <Notice tone={message.tone}>{message.text}</Notice> : null}
+    <div className="space-y-3">
+      <PageIntro
+        title="Presupuestos"
+        purpose="Límites por categoría comparados con el gasto real. Avisan, no bloquean."
+      />
+
+      {message && !creando ? <Notice tone={message.tone}>{message.text}</Notice> : null}
 
       {alertsQuery.data && alertsQuery.data.count > 0 ? (
         <Card>
-          <SectionTitle title="Avisos de presupuesto" hint="Avisa, no bloquea: la realidad manda" />
+          <SectionTitle title="Avisos de presupuesto" hint="Categorías al límite o por encima" />
           <div className="space-y-2">
             {alertsQuery.data.alerts.map((alert) => (
               <Notice key={`${alert.budgetName}-${alert.categoryName}`} tone={alert.health === 'EXCEEDED' ? 'critical' : 'warning'}>
@@ -181,7 +203,7 @@ export function BudgetsPage() {
       ) : null}
 
       <Card>
-        <SectionTitle title="Mis presupuestos" hint="Límite por categoría comparado con el gasto real" />
+        <SectionTitle title="Mis presupuestos" hint="Toque una categoría para cambiar su límite" />
         {budgetsQuery.isLoading ? <Spinner /> : null}
         {budgetsQuery.isError && !budgetsQuery.data ? (
           <EmptyState
@@ -276,52 +298,53 @@ export function BudgetsPage() {
         </div>
       </Card>
 
-      <Card className="space-y-3">
-        <SectionTitle title="Crear un presupuesto" hint="Se compara con los gastos que ya registra: no hay que anotar nada aparte" />
-        <Select label="Unidad" value={entityId} onChange={setEntityId} options={entities.map((entity) => ({ value: entity.id, label: entity.name }))} />
-        <Field label="Nombre" value={name} onChange={setName} hint="Por ejemplo: Gastos mensuales Fulltech" />
-        <Select label="Período" value={period} onChange={setPeriod} options={PERIODS} />
-        <Field label="Empieza el" value={startDate} onChange={setStartDate} type="date" />
+      {/* Alta de presupuesto: hoja inferior que abre el botón flotante. */}
+      <Sheet open={creando} onClose={() => setCreando(false)} title="Nuevo presupuesto">
+        <div className="space-y-3 pb-3">
+          {message ? <Notice tone={message.tone}>{message.text}</Notice> : null}
+          <Select label="Unidad" value={entityId} onChange={setEntityId} options={entities.map((entity) => ({ value: entity.id, label: entity.name }))} />
+          <Field label="Nombre" value={name} onChange={setName} hint="Por ejemplo: Gastos mensuales Fulltech" />
+          <Select label="Período" value={period} onChange={setPeriod} options={PERIODS} />
+          <Field label="Empieza el" value={startDate} onChange={setStartDate} type="date" />
 
-        <div className="space-y-2">
-          {lines.map((line, index) => (
-            <div key={`line-${index}`} className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-              <Select
-                label={`Categoría ${index + 1}`}
-                value={line.categoryId}
-                onChange={(value) => {
-                  const next = [...lines];
-                  next[index] = { ...line, categoryId: value };
-                  setLines(next);
-                }}
-                options={categoryOptions}
-              />
-              <MoneyInput
-                label="Límite"
-                value={line.limitAmount}
-                onChange={(value) => {
-                  const next = [...lines];
-                  next[index] = { ...line, limitAmount: value };
-                  setLines(next);
-                }}
-              />
-            </div>
-          ))}
-          <Button variant="secondary" onClick={() => setLines([...lines, { categoryId: '', limitAmount: '' }])}>
-            Añadir otra categoría
+          <div className="space-y-2">
+            {lines.map((line, index) => (
+              <div key={`line-${index}`} className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                <Select
+                  label={`Categoría ${index + 1}`}
+                  value={line.categoryId}
+                  onChange={(value) => {
+                    const next = [...lines];
+                    next[index] = { ...line, categoryId: value };
+                    setLines(next);
+                  }}
+                  options={categoryOptions}
+                />
+                <MoneyInput
+                  label="Límite"
+                  value={line.limitAmount}
+                  onChange={(value) => {
+                    const next = [...lines];
+                    next[index] = { ...line, limitAmount: value };
+                    setLines(next);
+                  }}
+                />
+              </div>
+            ))}
+            <Button variant="secondary" onClick={() => setLines([...lines, { categoryId: '', limitAmount: '' }])}>
+              Añadir otra categoría
+            </Button>
+          </div>
+
+          <p className="text-xs text-muted">Total presupuestado: {formatMoney(totalPlanned.toFixed(2), currency)}</p>
+
+          <Button className="w-full" disabled={!canCreate || busy} onClick={() => void create()}>
+            {busy ? 'Guardando…' : 'Crear presupuesto'}
           </Button>
         </div>
+      </Sheet>
 
-        <p className="text-xs text-muted">Total presupuestado: {formatMoney(totalPlanned.toFixed(2), currency)}</p>
-
-        <Button disabled={!canCreate || busy} onClick={() => void create()}>
-          {busy ? 'Guardando…' : 'Crear presupuesto'}
-        </Button>
-      </Card>
-
-      <p className="pb-4 text-center text-xs text-faint">
-        Superar un presupuesto no impide registrar el gasto: se avisa y se muestra en rojo, porque el gasto ya ocurrió.
-      </p>
+      {!creando ? <Fab label="Nuevo presupuesto" onClick={() => setCreando(true)} /> : null}
 
       {/* Límite por categoría: hoja inferior con campo de importe de verdad. */}
       <Sheet

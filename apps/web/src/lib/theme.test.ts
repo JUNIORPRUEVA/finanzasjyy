@@ -27,9 +27,9 @@ describe('tema y apariencia', () => {
     vi.restoreAllMocks();
   });
 
-  it('sin nada guardado, la preferencia del dispositivo es «como el sistema»', () => {
+  it('sin nada guardado, la preferencia del dispositivo es «claro»', () => {
     expect(readStoredTheme()).toBeNull();
-    expect(deviceThemePreference()).toBe('system');
+    expect(deviceThemePreference()).toBe('light');
   });
 
   it('guarda la elección y la aplica al documento', () => {
@@ -73,7 +73,7 @@ describe('tema y apariencia', () => {
   it('ignora un valor corrupto en el almacenamiento en lugar de romperse', () => {
     localStorage.setItem(STORAGE_KEY, 'turquesa');
     expect(readStoredTheme()).toBeNull();
-    expect(deviceThemePreference()).toBe('system');
+    expect(deviceThemePreference()).toBe('light');
   });
 
   it('«como el sistema» resuelve al modo del teléfono', () => {

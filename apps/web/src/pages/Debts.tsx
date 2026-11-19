@@ -1,7 +1,21 @@
 import { useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, ApiError, newOperationId } from '../lib/api';
-import { Badge, Button, Card, EmptyState, Field, MoneyInput, Notice, SectionTitle, Select, Spinner } from '../components/ui';
+import {
+  Badge,
+  Button,
+  Card,
+  EmptyState,
+  Fab,
+  Field,
+  MoneyInput,
+  Notice,
+  PageIntro,
+  SectionTitle,
+  Select,
+  Sheet,
+  Spinner,
+} from '../components/ui';
 import { useAuth } from '../store/auth';
 import { formatBusinessDate, formatMoney, todayBusinessDate } from '../lib/format';
 
@@ -115,6 +129,8 @@ export function DebtsPage() {
   const [newFrequency, setNewFrequency] = useState('MONTHLY');
   const [newStartDate, setNewStartDate] = useState(todayBusinessDate());
   const [newAccountId, setNewAccountId] = useState('');
+  // La hoja de alta se abre desde el botón flotante: la lista manda.
+  const [creando, setCreando] = useState(false);
 
   const entityOptions = entities.map((entity) => ({ value: entity.id, label: entity.name }));
   const bankAccounts = accounts.filter((account) => !account.isCreditCard);
@@ -173,6 +189,7 @@ export function DebtsPage() {
       setNewRate('');
       setNewInstallment('');
       await queryClient.invalidateQueries();
+      setCreando(false);
     } catch (caught) {
       setMessage({ tone: 'negative', text: caught instanceof ApiError ? caught.message : 'No se pudo registrar la deuda.' });
     } finally {
@@ -211,33 +228,40 @@ export function DebtsPage() {
   const canCreate = newEntityId !== '' && newName.trim().length >= 2 && newPrincipal !== '' && Number(newPrincipal) > 0;
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
+      <PageIntro
+        title="Deudas"
+        purpose="Lo que debe y sus cuotas. Toque una deuda para registrar un pago."
+      />
+
       {summary ? (
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-          <Card>
-            <p className="text-xs uppercase text-muted">Total que debo</p>
-            <p className="text-xl font-semibold text-negative">{formatMoney(summary.totalDebt, currency)}</p>
-            <p className="mt-1 text-xs text-faint">Capital pendiente de préstamos y deudas.</p>
-          </Card>
-          <Card>
-            <p className="text-xs uppercase text-muted">Total que me deben</p>
-            <p className="text-xl font-semibold text-positive">{formatMoney(summary.totalReceivable, currency)}</p>
-            <p className="mt-1 text-xs text-faint">No es dinero disponible: todavía no está en caja.</p>
-          </Card>
-          <Card>
-            <p className="text-xs uppercase text-muted">Posición neta</p>
-            <p className="text-xl font-semibold text-ink">{formatMoney(summary.netPosition, currency)}</p>
-            <p className="mt-1 text-xs text-faint">
-              {summary.overdueCount} vencido(s) · {summary.dueSoonCount} por vencer
-            </p>
-          </Card>
-        </div>
+        <Card>
+          {/* Una sola tarjeta con las tres cifras en filas: se leen de un vistazo
+              y los importes largos nunca se cortan. */}
+          <div className="divide-y divide-border-soft text-sm">
+            <div className="flex items-baseline justify-between gap-3 py-1.5">
+              <span className="text-muted">Debo (capital pendiente)</span>
+              <span className="font-semibold text-negative">{formatMoney(summary.totalDebt, currency)}</span>
+            </div>
+            <div className="flex items-baseline justify-between gap-3 py-1.5">
+              <span className="text-muted">Me deben</span>
+              <span className="font-semibold text-positive">{formatMoney(summary.totalReceivable, currency)}</span>
+            </div>
+            <div className="flex items-baseline justify-between gap-3 py-1.5">
+              <span className="text-muted">Posición neta</span>
+              <span className="font-semibold text-ink">{formatMoney(summary.netPosition, currency)}</span>
+            </div>
+          </div>
+          <p className="mt-1.5 text-xs text-faint">
+            {summary.overdueCount} vencido(s) · {summary.dueSoonCount} por vencer · «Me deben» todavía no está en caja
+          </p>
+        </Card>
       ) : null}
 
-      {message ? <Notice tone={message.tone}>{message.text}</Notice> : null}
+      {message && !creando ? <Notice tone={message.tone}>{message.text}</Notice> : null}
 
       <Card className="space-y-3">
-        <SectionTitle title="Préstamos y deudas" hint="Toque una deuda para registrar el pago de una cuota" />
+        <SectionTitle title="Sus deudas" hint="Capital pendiente y cuotas" />
         {loansQuery.isLoading ? <Spinner /> : null}
         {/* Sin conexión y sin copia guardada, «no hay deudas» sería falso: lo que
             pasa es que no se pudo preguntar. Se dice así. */}
@@ -255,7 +279,7 @@ export function DebtsPage() {
         {loans.length === 0 && !loansQuery.isLoading && !loansQuery.isError ? (
           <EmptyState
             title="No hay deudas registradas"
-            hint="Registre abajo un préstamo o una tarjeta."
+            hint="Use «Nueva deuda» para registrar un préstamo o una tarjeta."
           />
         ) : null}
 
@@ -374,49 +398,55 @@ export function DebtsPage() {
         </Card>
       ) : null}
 
-      <Card className="space-y-3">
-        <SectionTitle title="Registrar una deuda o un préstamo" hint="Con lo que ya debe hoy, no con lo que va a deber" />
-        <Select label="Unidad financiera" value={newEntityId} onChange={setNewEntityId} options={entityOptions} />
-        <Select
-          label="Naturaleza"
-          value={newDirection}
-          onChange={(value) => setNewDirection(value as 'PAYABLE' | 'RECEIVABLE')}
-          options={[
-            { value: 'PAYABLE', label: 'Yo debo (deuda mía)' },
-            { value: 'RECEIVABLE', label: 'Me deben (préstamo que otorgué)' },
-          ]}
-        />
-        <Field label="Descripción" value={newName} onChange={setNewName} hint="Por ejemplo: Préstamo del Banco BHD a 24 meses" />
-        <MoneyInput label="Capital pendiente" value={newPrincipal} onChange={setNewPrincipal} />
-        <MoneyInput label="Cuota (opcional)" value={newInstallment} onChange={setNewInstallment} />
-        <Field
-          label="Tasa anual % (opcional)"
-          value={newRate}
-          onChange={setNewRate}
-          hint="Si no la conoce, déjela vacía: no se inventa ninguna tasa."
-        />
-        <Select label="Frecuencia de pago" value={newFrequency} onChange={setNewFrequency} options={FREQUENCIES} />
-        <Field label="Fecha de inicio" value={newStartDate} onChange={setNewStartDate} type="date" />
-        <Select
-          label="¿Ya recibió el dinero en alguna cuenta? (opcional)"
-          value={newAccountId}
-          onChange={setNewAccountId}
-          options={accountOptions}
-          placeholder="— No, el dinero ya está contado en el saldo —"
-        />
-        <Notice tone="neutral" title="Para no contar el dinero dos veces">
-          Si el dinero recibido <strong>ya está incluido</strong> en el saldo de una cuenta (porque esa cuenta ya tenía
-          ese saldo), deje la última casilla vacía: así sólo se registra la deuda. Si el préstamo acaba de entrar y el
-          saldo de la cuenta todavía no lo incluye, elija la cuenta y el sistema lo ingresará.
-        </Notice>
-        <Button disabled={!canCreate || busy} onClick={() => void createLoan()}>
-          {busy ? 'Registrando…' : 'Registrar deuda'}
-        </Button>
-      </Card>
-
       <p className="pb-4 text-center text-xs text-faint">
         Un préstamo recibido no es una ganancia, y devolver capital no es un gasto: sólo los intereses son gasto real.
       </p>
+
+      {/* Alta de deuda: hoja inferior que abre el botón flotante. */}
+      <Sheet open={creando} onClose={() => setCreando(false)} title="Registrar una deuda o un préstamo">
+        <div className="space-y-3 pb-3">
+          {message ? <Notice tone={message.tone}>{message.text}</Notice> : null}
+          <Select label="Unidad financiera" value={newEntityId} onChange={setNewEntityId} options={entityOptions} />
+          <Select
+            label="Naturaleza"
+            value={newDirection}
+            onChange={(value) => setNewDirection(value as 'PAYABLE' | 'RECEIVABLE')}
+            options={[
+              { value: 'PAYABLE', label: 'Yo debo (deuda mía)' },
+              { value: 'RECEIVABLE', label: 'Me deben (préstamo que otorgué)' },
+            ]}
+          />
+          <Field label="Descripción" value={newName} onChange={setNewName} hint="Por ejemplo: Préstamo del Banco BHD a 24 meses" />
+          <MoneyInput
+            label="Capital pendiente"
+            value={newPrincipal}
+            onChange={setNewPrincipal}
+            hint="Con lo que ya debe hoy, no con lo que va a deber."
+          />
+          <MoneyInput label="Cuota (opcional)" value={newInstallment} onChange={setNewInstallment} />
+          <Field
+            label="Tasa anual % (opcional)"
+            value={newRate}
+            onChange={setNewRate}
+            hint="Si no la conoce, déjela vacía: no se inventa ninguna tasa."
+          />
+          <Select label="Frecuencia de pago" value={newFrequency} onChange={setNewFrequency} options={FREQUENCIES} />
+          <Field label="Fecha de inicio" value={newStartDate} onChange={setNewStartDate} type="date" />
+          <Select
+            label="¿Ya recibió el dinero en alguna cuenta? (opcional)"
+            value={newAccountId}
+            onChange={setNewAccountId}
+            options={accountOptions}
+            placeholder="— No, el dinero ya está contado en el saldo —"
+            hint="Si el dinero ya está en el saldo de una cuenta, déjelo vacío: así sólo se registra la deuda."
+          />
+          <Button className="w-full" disabled={!canCreate || busy} onClick={() => void createLoan()}>
+            {busy ? 'Registrando…' : 'Registrar deuda'}
+          </Button>
+        </div>
+      </Sheet>
+
+      {!creando ? <Fab label="Nueva deuda" onClick={() => setCreando(true)} /> : null}
     </div>
   );
 }

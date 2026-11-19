@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, ApiError } from '../lib/api';
-import { Button, Card, EmptyState, Field, Notice, SectionTitle, Select, Spinner } from '../components/ui';
+import { Button, Card, EmptyState, Field, Notice, PageIntro, SectionTitle, Select, Spinner } from '../components/ui';
 import { useAuth } from '../store/auth';
 import { formatMoney, todayBusinessDate } from '../lib/format';
 
@@ -225,14 +225,11 @@ export function ReconciliationPage() {
   const puedeAnotar = puedeComparar && causa !== '' && nota.trim().length >= 5 && !descartar.isPending;
 
   return (
-    <div className="space-y-4">
-      <Card className="space-y-2">
-        <SectionTitle title="Conciliar con el banco" hint="Compare lo que dice el banco con lo que dice FINANZA" />
-        <p className="text-xs leading-snug text-muted">
-          Comparar <strong>no cambia nada</strong>. Si hay diferencia, usted decide: corregirla con un asiento (con su
-          motivo) o dejarla anotada y esperar al movimiento que falta.
-        </p>
-      </Card>
+    <div className="space-y-3">
+      <PageIntro
+        title="Conciliar con el banco"
+        purpose="Compare el banco con FINANZA. Comparar no cambia nada: usted decide qué corregir."
+      />
 
       {mensaje ? <Notice tone={mensaje.tono}>{mensaje.texto}</Notice> : null}
 

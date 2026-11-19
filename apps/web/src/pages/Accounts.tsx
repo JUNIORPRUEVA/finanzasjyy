@@ -3,7 +3,22 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, ApiError } from '../lib/api';
 import { useAuth } from '../store/auth';
-import { Badge, Button, Card, EmptyState, Field, Money, MoneyInput, Notice, SectionTitle, Select, Spinner } from '../components/ui';
+import {
+  Badge,
+  Button,
+  Card,
+  EmptyState,
+  Fab,
+  Field,
+  Money,
+  MoneyInput,
+  Notice,
+  PageIntro,
+  SectionTitle,
+  Select,
+  Sheet,
+  Spinner,
+} from '../components/ui';
 import { todayBusinessDate } from '../lib/format';
 
 interface Account {
@@ -177,11 +192,16 @@ export function AccountsPage() {
   const totalLiabilities = liabilities.reduce((acc, account) => acc + Number(account.balance), 0);
 
   return (
-    <div className="space-y-4">
-      {message ? <Notice tone={message.tone}>{message.text}</Notice> : null}
+    <div className="space-y-3">
+      <PageIntro
+        title="Cuentas"
+        purpose="Dónde está su dinero. Toque una cuenta para ver sus movimientos o ajustar el saldo."
+      />
+
+      {message && !creating ? <Notice tone={message.tone}>{message.text}</Notice> : null}
 
       <Card>
-        <SectionTitle title="Resumen" hint="El dinero disponible NO incluye tarjetas ni cuentas por cobrar" />
+        <SectionTitle title="Resumen" hint="No incluye tarjetas ni cuentas por cobrar" />
         <div className="grid grid-cols-[repeat(auto-fit,minmax(8.5rem,1fr))] gap-3 text-sm">
           <div>
             <p className="text-xs uppercase text-muted">Disponible</p>
@@ -203,44 +223,7 @@ export function AccountsPage() {
       </Card>
 
       <Card>
-        <SectionTitle
-          title="Cuentas"
-          right={
-            <Button variant="secondary" onClick={() => setCreating((value) => !value)}>
-              {creating ? 'Cancelar' : 'Nueva cuenta'}
-            </Button>
-          }
-        />
-
-        {creating ? (
-          <div className="mb-4 space-y-3 rounded-lg border border-border-soft p-3">
-            <Select
-              label="Unidad financiera"
-              value={entityId}
-              onChange={setEntityId}
-              options={entities.map((entity) => ({ value: entity.id, label: entity.name }))}
-            />
-            <Field label="Nombre de la cuenta" value={name} onChange={setName} placeholder="Ej.: Banco Popular — corriente" />
-            <Select label="Tipo" value={type} onChange={setType} options={ACCOUNT_TYPES} />
-            <MoneyInput
-              label="Saldo inicial documentado"
-              value={openingBalance}
-              onChange={setOpeningBalance}
-              hint="El que figura hoy en el banco o en la caja. Si no lo sabe, déjelo en 0."
-            />
-            <Field label="Fecha del saldo inicial" value={openingDate} onChange={setOpeningDate} type="date" />
-            {type === 'CREDIT_CARD' ? (
-              <MoneyInput label="Límite de crédito" value={creditLimit} onChange={setCreditLimit} hint="Opcional" />
-            ) : null}
-            <Button
-              className="w-full"
-              disabled={!entityId || name.trim().length < 2 || createMutation.isPending}
-              onClick={() => createMutation.mutate()}
-            >
-              {createMutation.isPending ? 'Creando…' : 'Crear cuenta'}
-            </Button>
-          </div>
-        ) : null}
+        <SectionTitle title="Todas sus cuentas" hint="Saldos de hoy, por unidad" />
 
         <div className="space-y-3">
           {accounts.map((account) => {
@@ -250,11 +233,15 @@ export function AccountsPage() {
               <div key={account.id} className="rounded-lg border border-border-soft p-3">
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
-                    <p className="flex items-center gap-2 truncate text-sm font-medium text-ink">
-                      {account.name}
-                      {account.isLiability ? <Badge tone="warning">pasivo</Badge> : <Badge tone="positive">activo</Badge>}
-                      {account.status !== 'ACTIVE' ? <Badge tone="neutral">{account.status}</Badge> : null}
-                    </p>
+                    {/* El nombre se recorta, las etiquetas no: antes el nombre
+                        empujaba la insignia fuera y se montaba sobre el saldo. */}
+                    <div className="flex min-w-0 items-center gap-2">
+                      <span className="truncate text-sm font-medium text-ink">{account.name}</span>
+                      <span className="flex shrink-0 items-center gap-1">
+                        {account.isLiability ? <Badge tone="warning">pasivo</Badge> : <Badge tone="positive">activo</Badge>}
+                        {account.status !== 'ACTIVE' ? <Badge tone="neutral">{account.status}</Badge> : null}
+                      </span>
+                    </div>
                     <p className="truncate text-xs text-faint">
                       {account.entity?.name} · {account.type} · {account.movementCount} movimiento(s)
                     </p>
@@ -325,6 +312,40 @@ export function AccountsPage() {
           ) : null}
         </div>
       </Card>
+
+      {/* Alta de cuenta: hoja inferior que abre el botón flotante. */}
+      <Sheet open={creating} onClose={() => setCreating(false)} title="Nueva cuenta">
+        <div className="space-y-3 pb-3">
+          {message ? <Notice tone={message.tone}>{message.text}</Notice> : null}
+          <Select
+            label="Unidad financiera"
+            value={entityId}
+            onChange={setEntityId}
+            options={entities.map((entity) => ({ value: entity.id, label: entity.name }))}
+          />
+          <Field label="Nombre de la cuenta" value={name} onChange={setName} placeholder="Ej.: Banco Popular — corriente" />
+          <Select label="Tipo" value={type} onChange={setType} options={ACCOUNT_TYPES} />
+          <MoneyInput
+            label="Saldo inicial documentado"
+            value={openingBalance}
+            onChange={setOpeningBalance}
+            hint="El que figura hoy en el banco o en la caja. Si no lo sabe, déjelo en 0."
+          />
+          <Field label="Fecha del saldo inicial" value={openingDate} onChange={setOpeningDate} type="date" />
+          {type === 'CREDIT_CARD' ? (
+            <MoneyInput label="Límite de crédito" value={creditLimit} onChange={setCreditLimit} hint="Opcional" />
+          ) : null}
+          <Button
+            className="w-full"
+            disabled={!entityId || name.trim().length < 2 || createMutation.isPending}
+            onClick={() => createMutation.mutate()}
+          >
+            {createMutation.isPending ? 'Creando…' : 'Crear cuenta'}
+          </Button>
+        </div>
+      </Sheet>
+
+      {!creating ? <Fab label="Nueva cuenta" onClick={() => setCreating(true)} /> : null}
     </div>
   );
 }

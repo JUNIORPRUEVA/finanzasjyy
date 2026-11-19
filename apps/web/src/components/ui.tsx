@@ -9,6 +9,7 @@ import {
   IconEye,
   IconEyeOff,
   IconLock,
+  IconPlus,
   IconSearch,
 } from './icons';
 
@@ -40,9 +41,24 @@ export function Card({
   as?: 'div' | 'section';
 }) {
   return (
-    <Tag className={`rounded-card border border-border-soft bg-surface p-4 shadow-card ${className}`}>
+    <Tag className={`rounded-card border border-border-soft bg-surface p-3 shadow-card ${className}`}>
       {children}
     </Tag>
+  );
+}
+
+/**
+ * CABECERA DE PANTALLA
+ * --------------------
+ * Título y una frase que dice para qué sirve la pantalla y cómo se usa. En todas
+ * igual: quien entra por primera vez entiende qué hace sin abrir nada más.
+ */
+export function PageIntro({ title, purpose }: { title: string; purpose: string }) {
+  return (
+    <div className="px-1">
+      <h1 className="text-lg font-semibold tracking-tight text-ink">{title}</h1>
+      <p className="mt-0.5 text-[0.72rem] leading-snug text-muted">{purpose}</p>
+    </div>
   );
 }
 
@@ -56,9 +72,9 @@ export function SectionTitle({
   right?: ReactNode;
 }) {
   return (
-    <div className="mb-3 flex items-start justify-between gap-3">
+    <div className="mb-2 flex items-start justify-between gap-3">
       <div className="min-w-0">
-        <h2 className="text-base font-semibold tracking-tight text-ink">{title}</h2>
+        <h2 className="text-[0.95rem] font-semibold tracking-tight text-ink">{title}</h2>
         {hint ? <p className="mt-0.5 text-xs leading-snug text-muted">{hint}</p> : null}
       </div>
       {right ? <div className="shrink-0">{right}</div> : null}
@@ -274,7 +290,7 @@ export function Badge({ children, tone = 'neutral' }: { children: ReactNode; ton
   };
   return (
     <span
-      className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[0.7rem] font-medium ${classes[tone]}`}
+      className={`inline-flex items-center border px-2 py-0.5 text-[0.7rem] font-medium ${classes[tone]}`}
     >
       {children}
     </span>
@@ -361,7 +377,7 @@ export function IconButton({
       onClick={onClick}
       aria-label={label}
       title={label}
-      className={`inline-flex h-11 w-11 items-center justify-center rounded-full text-muted transition hover:bg-surface-2 hover:text-ink ${className}`}
+      className={`inline-flex h-11 w-11 items-center justify-center text-muted transition hover:bg-surface-2 hover:text-ink ${className}`}
     >
       {children}
     </button>
@@ -415,6 +431,7 @@ export function Field({
   required,
   error,
   onEnter,
+  compact = false,
 }: {
   label: string;
   value: string;
@@ -429,6 +446,8 @@ export function Field({
   /** Mensaje de validación: si existe, el campo se marca en rojo y se anuncia. */
   error?: string;
   onEnter?: () => void;
+  /** Variante fina, para listas de configuración. */
+  compact?: boolean;
 }) {
   // La pista y el error NO forman parte del nombre del campo: se asocian con
   // `aria-describedby`. Así el lector de pantalla dice «Descripción» y, aparte,
@@ -438,7 +457,7 @@ export function Field({
 
   return (
     <div className="block">
-      <label htmlFor={inputId} className="mb-1 block text-sm font-medium text-ink">
+      <label htmlFor={inputId} className={`mb-1 block font-medium text-ink ${compact ? 'text-xs' : 'text-sm'}`}>
         {label}
       </label>
       <input
@@ -462,9 +481,9 @@ export function Field({
         required={required}
         aria-invalid={error ? true : undefined}
         aria-describedby={describedBy}
-        className={`w-full rounded-xl border bg-surface-2 px-3 py-2.5 text-ink outline-none transition placeholder:text-faint focus:border-brand ${
-          error ? 'border-negative' : 'border-border-soft'
-        }`}
+        className={`w-full border bg-surface-2 px-3 text-ink outline-none transition placeholder:text-faint focus:border-brand ${
+          compact ? 'rounded-lg py-1.5 text-sm' : 'rounded-xl py-2.5'
+        } ${error ? 'border-negative' : 'border-border-soft'}`}
       />
       {error ? (
         <span id={`${inputId}-error`} className="mt-1 block text-xs text-negative">
@@ -472,7 +491,7 @@ export function Field({
         </span>
       ) : null}
       {hint ? (
-        <span id={`${inputId}-hint`} className="mt-1 block text-xs text-faint">
+        <span id={`${inputId}-hint`} className={`mt-1 block text-faint ${compact ? 'text-[0.68rem]' : 'text-xs'}`}>
           {hint}
         </span>
       ) : null}
@@ -495,19 +514,21 @@ export function PasswordField({
   onChange,
   autoComplete = 'current-password',
   hint,
+  compact = false,
 }: {
   label: string;
   value: string;
   onChange: (value: string) => void;
   autoComplete?: string;
   hint?: string;
+  compact?: boolean;
 }) {
   const [visible, setVisible] = useState(false);
   const inputId = useId();
 
   return (
     <div className="block">
-      <label htmlFor={inputId} className="mb-1 block text-sm font-medium text-ink">
+      <label htmlFor={inputId} className={`mb-1 block font-medium text-ink ${compact ? 'text-xs' : 'text-sm'}`}>
         {label}
       </label>
       <span className="relative block">
@@ -521,7 +542,9 @@ export function PasswordField({
           onChange={(event) => onChange(event.target.value)}
           autoComplete={autoComplete}
           enterKeyHint="go"
-          className="w-full rounded-xl border border-border-soft bg-surface-2 py-2.5 pl-10 pr-12 text-ink outline-none transition focus:border-brand"
+          className={`w-full border border-border-soft bg-surface-2 pl-10 pr-12 text-ink outline-none transition focus:border-brand ${
+            compact ? 'rounded-lg py-1.5 text-sm' : 'rounded-xl py-2.5'
+          }`}
         />
         <button
           type="button"
@@ -546,6 +569,7 @@ export function Select({
   placeholder,
   hint,
   action,
+  compact = false,
 }: {
   label: string;
   value: string;
@@ -554,6 +578,8 @@ export function Select({
   groups?: Array<{ label: string; options: Array<{ value: string; label: string }> }>;
   placeholder?: string;
   hint?: string;
+  /** Variante fina, para listas de configuración. */
+  compact?: boolean;
   /**
    * Acción junto al nombre del campo («＋ Nueva»). Va fuera del `<label>` a
    * propósito: un botón dentro de una etiqueta abre además el desplegable.
@@ -565,7 +591,7 @@ export function Select({
   return (
     <div className="block">
       <div className="mb-1 flex items-baseline justify-between gap-2">
-        <label htmlFor={id} className="block text-sm font-medium text-ink">
+        <label htmlFor={id} className={`block font-medium text-ink ${compact ? 'text-xs' : 'text-sm'}`}>
           {label}
         </label>
         {action}
@@ -574,7 +600,9 @@ export function Select({
         id={id}
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        className="w-full appearance-none rounded-xl border border-border-soft bg-surface-2 px-3 py-2.5 text-ink outline-none transition focus:border-brand"
+        className={`w-full appearance-none border border-border-soft bg-surface-2 px-3 text-ink outline-none transition focus:border-brand ${
+          compact ? 'rounded-lg py-1.5 text-sm' : 'rounded-xl py-2.5'
+        }`}
       >
         <option value="">{placeholder ?? '— Seleccione —'}</option>
         {groups
@@ -593,7 +621,9 @@ export function Select({
               </option>
             ))}
       </select>
-      {hint ? <span className="mt-1 block text-xs text-faint">{hint}</span> : null}
+      {hint ? (
+        <span className={`mt-1 block text-faint ${compact ? 'text-[0.68rem]' : 'text-xs'}`}>{hint}</span>
+      ) : null}
     </div>
   );
 }
@@ -757,14 +787,17 @@ export function Tabs<T extends string>({
   onChange: (id: T) => void;
 }) {
   return (
-    <div className="flex gap-1 overflow-x-auto rounded-xl border border-border-soft bg-surface p-1">
+    // Sin desplazamiento horizontal: si no caben, pasan a la línea siguiente.
+    // Así TODAS las pestañas se ven de un vistazo (en Configuración hay cinco y
+    // con scroll la última quedaba escondida).
+    <div className="flex flex-wrap gap-1 rounded-xl border border-border-soft bg-surface p-1">
       {tabs.map((tab) => (
         <button
           key={tab.id}
           type="button"
           onClick={() => onChange(tab.id)}
           aria-pressed={active === tab.id}
-          className={`touch-target whitespace-nowrap rounded-lg px-3 py-1.5 text-sm font-semibold transition ${
+          className={`touch-target shrink-0 whitespace-nowrap rounded-lg px-3 py-1.5 text-sm font-semibold transition ${
             active === tab.id ? 'bg-brand text-white' : 'text-muted hover:bg-surface-2 hover:text-ink'
           }`}
         >
@@ -840,9 +873,9 @@ export function Sheet({
       />
       <div
         ref={ref}
-        className="relative w-full max-w-lg animate-rise rounded-t-sheet border border-border-soft bg-bg-elevated pb-[calc(var(--safe-bottom)+1rem)] shadow-elevated"
+        className="relative flex max-h-[92dvh] w-full max-w-lg animate-rise flex-col rounded-t-sheet border border-border-soft bg-bg-elevated shadow-elevated"
       >
-        <div className="flex items-center justify-between px-5 pt-4">
+        <div className="flex shrink-0 items-center justify-between px-5 pt-4">
           <p id={titleId} className="text-base font-semibold text-ink">
             {title}
           </p>
@@ -850,9 +883,61 @@ export function Sheet({
             <IconClose size={20} />
           </IconButton>
         </div>
-        <div className="px-5 pt-2">{children}</div>
+        {/* Los formularios largos se desplazan dentro de la hoja: en un teléfono
+            pequeño, el botón de guardar tiene que seguir siendo alcanzable. */}
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 pb-[calc(var(--safe-bottom)+1rem)] pt-2">
+          {children}
+        </div>
       </div>
     </div>
+  );
+}
+
+/**
+ * BOTÓN FLOTANTE PARA CREAR (estilo AppSheet)
+ * -------------------------------------------
+ * Cuando la pantalla es una lista, el formulario de alta no vive dentro de ella:
+ * se abre desde este botón, abajo a la derecha, donde llega el pulgar. Así la
+ * lista ocupa la pantalla y no hay que bajar hasta el final para añadir nada.
+ *
+ * Por defecto se coloca ENCIMA de la barra de navegación (que mide --nav-height
+ * y es fija). Las pantallas que no llevan barra inferior —Compras y su
+ * detalle— pasan `sobreBarra={false}` para bajar el botón al borde.
+ * Incluye el hueco final para que no tape el último elemento de la lista.
+ */
+export function Fab({
+  label,
+  onClick,
+  sobreBarra = true,
+  ariaLabel,
+}: {
+  label: string;
+  onClick: () => void;
+  sobreBarra?: boolean;
+  /** Nombre más descriptivo para lectores de pantalla y pruebas. */
+  ariaLabel?: string;
+}) {
+  return (
+    <>
+      {/* Hueco para que el botón no tape el último elemento. Sin clics: si no,
+          este div queda encima del botón y se come el toque. */}
+      <div className="pointer-events-none h-20" aria-hidden="true" />
+      <button
+        type="button"
+        onClick={onClick}
+        aria-label={ariaLabel ?? label}
+        className={`fixed right-4 z-40 flex h-14 w-14 items-center justify-center bg-brand text-sm font-semibold text-white shadow-elevated transition active:scale-95 sm:w-auto sm:justify-start sm:gap-1.5 sm:pl-4 sm:pr-5 ${
+          sobreBarra
+            ? 'bottom-[calc(var(--nav-height)+var(--safe-bottom)+0.75rem)]'
+            : 'bottom-[calc(var(--safe-bottom)+1.25rem)]'
+        }`}
+      >
+        <IconPlus size={22} />
+        {/* En el teléfono basta el «+»: el botón tapa menos lista. El nombre
+            accesible sigue estando completo. Con espacio, se lee la etiqueta. */}
+        <span className="hidden sm:inline">{label}</span>
+      </button>
+    </>
   );
 }
 
@@ -1051,20 +1136,28 @@ export function Panel({
  * aplicación ocupa la ventana entera y sólo desplaza su interior).
  */
 export function ListScreen({
+  title,
+  purpose,
   toolbar,
   footer,
   children,
 }: {
+  /** Título y para qué sirve la pantalla. Si faltan, la lista empieza en la barra. */
+  title?: string;
+  purpose?: string;
   toolbar: ReactNode;
   /** Se queda pegado abajo, fuera del scroll (paginación, totales…). */
   footer?: ReactNode;
   children: ReactNode;
 }) {
   return (
-    <div className="flex h-full min-h-0 flex-col gap-2">
-      <div className="shrink-0 space-y-2">{toolbar}</div>
-      <div className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain">{children}</div>
-      {footer ? <div className="shrink-0 border-t border-border-soft bg-bg pt-2">{footer}</div> : null}
+    <div className="flex h-full min-h-0 flex-col gap-1.5">
+      <div className="shrink-0 space-y-1.5">
+        {title && purpose ? <PageIntro title={title} purpose={purpose} /> : null}
+        {toolbar}
+      </div>
+      <div className="min-h-0 flex-1 space-y-2 overflow-y-auto overscroll-contain">{children}</div>
+      {footer ? <div className="shrink-0 border-t border-border-soft bg-bg pt-1.5">{footer}</div> : null}
     </div>
   );
 }
@@ -1107,7 +1200,7 @@ export function SearchBox({
           type="button"
           onClick={() => onChange('')}
           aria-label="Borrar la búsqueda"
-          className="absolute right-1 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full text-faint transition hover:bg-surface hover:text-ink"
+          className="absolute right-1 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center text-faint transition hover:bg-surface hover:text-ink"
         >
           <IconClose size={16} />
         </button>
@@ -1221,7 +1314,7 @@ export function DateRangeFilter({
                 key={opcion.dias}
                 type="button"
                 onClick={() => atajo(opcion.dias)}
-                className="rounded-full border border-border-soft px-3 py-1.5 text-xs text-muted transition hover:text-ink"
+                className="border border-border-soft px-3 py-1.5 text-xs text-muted transition hover:text-ink"
               >
                 {opcion.label}
               </button>

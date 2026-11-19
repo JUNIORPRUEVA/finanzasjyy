@@ -1,9 +1,13 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { CurrentUser, type AuthenticatedUser } from '../common/http.decorators.js';
 import { RequestMeta, type RequestMetaInfo } from '../common/request-meta.js';
 import {
   CreateShoppingListDto,
+  IngestCatalogDto,
   RegisterShoppingExpenseDto,
+  ScanInvoiceDto,
+  ShoppingAdviceDto,
   ShoppingItemDto,
   ShoppingListQuery,
   UpdateShoppingItemDto,
@@ -32,6 +36,64 @@ export class ShoppingController {
   @Get('summary')
   summary(@CurrentUser() user: AuthenticatedUser, @Query('entityId') entityId?: string) {
     return this.shopping.summary(user, entityId);
+  }
+
+  /**
+   * Análisis del historial de compras: gasto, productos repetidos, precios que
+   * suben y equilibrio por grupos de alimentos. No envía nada fuera del servidor.
+   */
+  @Get('insights')
+  insights(@CurrentUser() user: AuthenticatedUser, @Query('entityId') entityId?: string) {
+    return this.shopping.insights(user, entityId);
+  }
+
+  /** Catálogo de productos con su último precio (para consultar y autocompletar). */
+  @Get('catalog')
+  catalog(
+    @CurrentUser() user: AuthenticatedUser,
+    @Query('entityId') entityId?: string,
+    @Query('search') search?: string,
+  ) {
+    return this.shopping.catalog(user, entityId, search);
+  }
+
+  /** Ficha de un producto: precios y últimas compras. */
+  @Get('catalog/:normalizedName')
+  catalogDetail(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('normalizedName') normalizedName: string,
+    @Query('entityId') entityId?: string,
+  ) {
+    return this.shopping.catalogDetail(user, normalizedName, entityId);
+  }
+
+  /**
+   * Alimenta el catálogo con las líneas de una factura leída. No crea listas ni
+   * mueve dinero: sólo aprende nombres y precios.
+   */
+  @Post('catalog/ingest')
+  ingestCatalog(@CurrentUser() user: AuthenticatedUser, @Body() dto: IngestCatalogDto) {
+    return this.shopping.ingestCatalog(user, dto);
+  }
+
+  /**
+   * LEE UNA FACTURA CON IA y devuelve las líneas SIN guardar nada.
+   * El usuario revisa y confirma; la IA nunca crea el gasto.
+   *
+   * Cada lectura cuesta una llamada al proveedor, así que se limita por minuto:
+   * leer 60 facturas seguidas no es un uso normal y sí un posible abuso.
+   */
+  @Throttle({ default: { limit: 12, ttl: 60_000 } })
+  @Post('invoice-scan')
+  scanInvoice(@CurrentUser() user: AuthenticatedUser, @Body() dto: ScanInvoiceDto) {
+    return this.shopping.scanInvoice(user, dto);
+  }
+
+  /** Consejos redactados por la IA a partir del historial real. */
+  @Throttle({ default: { limit: 6, ttl: 60_000 } })
+  @Post('advice')
+  advice(@CurrentUser() user: AuthenticatedUser, @Body() dto: ShoppingAdviceDto) {
+    return this.shopping.advice(user, dto.entityId);
   }
 
   @Get(':id')

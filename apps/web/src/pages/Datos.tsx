@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Badge, Button, Card, EmptyState, Notice, SectionTitle, Spinner } from '../components/ui';
+import { Badge, Button, Card, EmptyState, Notice, PageIntro, SectionTitle, Spinner } from '../components/ui';
 import { IconAlert, IconCheck, IconRefresh } from '../components/icons';
 import { api, ApiError } from '../lib/api';
 import { listQueuedOperations, type QueuedOperation } from '../lib/db';
@@ -196,11 +196,13 @@ export function DatosPage() {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
+      <PageIntro title="Salud de los datos" purpose="Qué falta por llegar al servidor y cómo arreglarlo." />
+
       <Card className={salud.total > 0 ? 'border-warning/50 bg-warning/10' : undefined}>
         <SectionTitle
-          title="Salud de los datos"
-          hint="Todo lo que registró tiene que llegar al servidor; aquí se arregla lo que no llegó"
+          title="Estado de este dispositivo"
+          hint="Lo que no llegó al servidor se reenvía desde aquí"
           right={<Badge tone={salud.total > 0 ? 'warning' : 'positive'}>{salud.total} sin confirmar</Badge>}
         />
 

@@ -52,7 +52,7 @@ if (Test-Path $apiEnvPath) {
     }
 }
 
-foreach ($clave in @('VAPID_PUBLIC_KEY', 'VAPID_PRIVATE_KEY', 'VAPID_SUBJECT')) {
+foreach ($clave in @('VAPID_PUBLIC_KEY', 'VAPID_PRIVATE_KEY', 'VAPID_SUBJECT', 'OPENAI_API_KEY', 'OPENAI_MODEL', 'OPENAI_BASE_URL')) {
     if ([string]::IsNullOrWhiteSpace($values[$clave]) -and -not [string]::IsNullOrWhiteSpace($apiEnvPrevio[$clave])) {
         $values[$clave] = $apiEnvPrevio[$clave]
         Write-Host "    Se conservan las claves de notificaciones que ya estaban en apps/api/.env ($clave)" -ForegroundColor Yellow
@@ -82,6 +82,11 @@ VAPID_SUBJECT=$($values['VAPID_SUBJECT'])
 
 ATTACHMENTS_DIR=./.datos-locales/adjuntos
 MAX_ATTACHMENT_MB=8
+
+# Asistente de compras (opcional). Vacío = sin IA; todo lo demás sigue igual.
+OPENAI_API_KEY=$($values['OPENAI_API_KEY'])
+OPENAI_MODEL=$($values['OPENAI_MODEL'])
+OPENAI_BASE_URL=$($values['OPENAI_BASE_URL'])
 "@
 
 $webEnv = @"

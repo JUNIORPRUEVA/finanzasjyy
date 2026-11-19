@@ -9,7 +9,6 @@ import {
   Badge,
   Button,
   Card,
-  EmptyState,
   Kpi,
   Money,
   Notice,
@@ -17,17 +16,15 @@ import {
   SectionTitle,
   Skeleton,
   Spinner,
-  Tabs,
 } from '../components/ui';
-import { formatBusinessDate, formatMoney } from '../lib/format';
-import { IconArrowDown, IconArrowUp, IconBag, IconChevronRight, IconTarget, IconWifiOff } from '../components/icons';
+import { formatMoney } from '../lib/format';
+import { normalizePeriodo } from '../lib/periods';
+import { IconArrowDown, IconArrowUp, IconBag, IconChevronRight, IconWifiOff } from '../components/icons';
 
 // Los gráficos se cargan sólo cuando hacen falta (son la parte más pesada).
 const DashboardCharts = lazy(() =>
   import('../components/DashboardCharts').then((module) => ({ default: module.DashboardCharts })),
 );
-
-type Preset = 'TODAY' | 'YESTERDAY' | 'WEEK' | 'MONTH' | 'LAST_30_DAYS';
 
 interface Summary {
   range: { from: string; to: string; preset: string };
@@ -92,6 +89,7 @@ interface PendingTasks {
     isMandatory: boolean;
     amount: string | null;
     actionUrl: string;
+    entityName?: string | null;
   }>;
   level: string;
 }
@@ -112,7 +110,9 @@ export function DashboardPage() {
   const { preferences } = useAuth();
   const entityId = params.get('entityId') ?? '';
   const currency = preferences?.currency ?? 'DOP';
-  const [preset, setPreset] = useState<Preset>('TODAY');
+  // El período lo elige el filtro de la cabecera azul y llega por la dirección:
+  // una sola fuente para los dos, sin estado duplicado.
+  const preset = normalizePeriodo(params.get('periodo'));
   const [showCharts, setShowCharts] = useState(false);
 
   const summaryQuery = useQuery<Summary>({
@@ -176,6 +176,7 @@ export function DashboardPage() {
     ? Number(summary.period.income) === 0 && Number(summary.period.expense) === 0
     : false;
 
+
   const heroTone = useMemo(() => {
     if (!summary) {
       return 'neutral' as const;
@@ -216,6 +217,34 @@ export function DashboardPage() {
     );
   }
 
+  /*
+   * ¿Hay algo que enseñar?
+   *
+   * Regla de esta pantalla: un bloque que sólo diría «0» o «todavía no» NO se
+   * pinta. Antes el inicio podía acumular siete tarjetas vacías y el usuario
+   * tenía que buscar la única cifra que importaba. Ahora se muestran sólo los
+   * bloques con datos reales y, si no hay ninguno, una sola tarjeta con lo
+   * primero que hay que hacer.
+   */
+  const sinDeudas =
+    Number(summary.obligations.totalDebt) === 0 &&
+    Number(summary.obligations.receivables) === 0 &&
+    Number(summary.obligations.loanDebt) === 0 &&
+    Number(summary.obligations.creditCardDebt) === 0 &&
+    summary.obligations.upcomingPayments.length === 0;
+  const sinCierres = summary.closings.today.length === 0 && summary.closings.pendingDays === 0;
+  const sinControl = !controlQuery.data || controlQuery.data.counts.total === 0;
+  const sinTareas = !tasksQuery.data || tasksQuery.data.tasks.length === 0;
+  const sinCompras = !shoppingQuery.data || shoppingQuery.data.openLists === 0;
+  const sinTransferencias = !chartsQuery.data || chartsQuery.data.transfers.count === 0;
+  const panelVacio =
+    noMovementsInPeriod && sinDeudas && sinCierres && !hasBudget && sinControl && sinTareas && sinCompras && sinTransferencias;
+  // Comparar unidades con ceros no dice nada: se comparan sólo las que tuvieron
+  // ingresos o gastos, y la tarjeta sólo aparece si hay al menos dos.
+  const comparacionConDatos = (chartsQuery.data?.entitiesComparison ?? []).filter(
+    (row) => Number(row.income) !== 0 || Number(row.expense) !== 0,
+  );
+
   return (
     <div className="space-y-4">
       {/* ------------------------------------------------------------------ */}
@@ -230,13 +259,7 @@ export function DashboardPage() {
         </div>
 
         <div className="mt-2">
-          <AmountDisplay
-            value={summary.money.availableCash}
-            currency={currency}
-            tone={heroTone}
-            size="hero"
-            hint={summary.money.note}
-          />
+          <AmountDisplay value={summary.money.availableCash} currency={currency} tone={heroTone} size="hero" />
         </div>
 
         <div className="mt-4 grid grid-cols-2 gap-3 border-t border-border-soft pt-3">
@@ -273,44 +296,53 @@ export function DashboardPage() {
           </div>
         ) : null}
 
-        <div className="mt-3">
-          {summary.dataQuality.isProvisional ? (
-            <p className="flex items-start gap-1.5 text-xs leading-snug text-warning">
-              <IconWifiOff size={14} className="mt-0.5 shrink-0" />
-              {summary.dataQuality.message}
-            </p>
-          ) : summary.dataQuality.pendingClosings > 0 ? (
-            <p className="text-xs leading-snug text-muted">{summary.dataQuality.message}</p>
-          ) : (
-            <p className="text-xs leading-snug text-positive">Cifras conciliadas con el libro mayor.</p>
-          )}
-        </div>
+        {/* Sólo se dice algo si hay algo que decir: con el panel vacío, la línea
+            «cifras conciliadas» era una frase de relleno. */}
+        {summary.dataQuality.isProvisional ? (
+          <p className="mt-3 flex items-start gap-1.5 text-xs leading-snug text-warning">
+            <IconWifiOff size={14} className="mt-0.5 shrink-0" />
+            {summary.dataQuality.message}
+          </p>
+        ) : summary.dataQuality.pendingClosings > 0 ? (
+          <Link to="/cierres" className="mt-3 inline-flex text-xs font-medium text-brand">
+            {summary.dataQuality.pendingClosings} día(s) sin cerrar →
+          </Link>
+        ) : null}
       </Card>
 
       {/* El agente de datos: lo primero que ve si algo no llegó al servidor. */}
       <AgenteDeSalud />
 
-      {/* Cómo va hoy */}
-      <div className="grid grid-cols-2 gap-3">
-        <Kpi label="Ingresos de hoy" value={summary.today.income} tone="positive" currency={currency} />
-        <Kpi label="Gastos de hoy" value={summary.today.expense} tone="negative" currency={currency} />
-        <Kpi
-          label="Resultado de hoy"
-          value={summary.today.result}
-          tone={summary.today.result.startsWith('-') ? 'negative' : 'positive'}
-          hint={`${summary.today.movementCount} movimiento(s)`}
-          currency={currency}
-        />
-        <Kpi
-          label="Resultado del período"
-          value={summary.period.result}
-          tone={summary.period.result.startsWith('-') ? 'negative' : 'positive'}
-          hint={`Margen ${summary.period.margin}% · ${periodLabel}`}
-          currency={currency}
-        />
-      </div>
+      {/* Cómo va hoy: sólo cuando hay movimientos que contar. */}
+      {!noMovementsInPeriod ? (
+        <div className="grid grid-cols-2 gap-3">
+          <Kpi label="Ingresos de hoy" value={summary.today.income} tone="positive" currency={currency} />
+          <Kpi label="Gastos de hoy" value={summary.today.expense} tone="negative" currency={currency} />
+          <Kpi
+            label="Resultado de hoy"
+            value={summary.today.result}
+            tone={summary.today.result.startsWith('-') ? 'negative' : 'positive'}
+            currency={currency}
+          />
+          <Kpi
+            label="Resultado del período"
+            value={summary.period.result}
+            tone={summary.period.result.startsWith('-') ? 'negative' : 'positive'}
+            hint={periodLabel}
+            currency={currency}
+          />
+        </div>
+      ) : null}
+      {!noMovementsInPeriod ? (
+        <div className="px-1 text-right">
+          <Link to="/movimientos" className="text-xs font-medium text-brand">
+            Ver movimientos
+          </Link>
+        </div>
+      ) : null}
 
-      {/* Acciones rápidas: las dos que se usan a diario, y los atajos al lado. */}
+      {/* Acciones rápidas: las dos que se usan a diario. Los demás atajos viven
+          en el botón «+»; repetirlos aquí era ruido. */}
       <div className="grid grid-cols-2 gap-2">
         <Link to="/registrar?kind=INCOME">
           <Button fullWidth variant="secondary">
@@ -323,48 +355,23 @@ export function DashboardPage() {
           </Button>
         </Link>
       </div>
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 px-1 text-xs font-medium">
-        <Link to="/traspasos" className="text-brand">
-          Transferir
-        </Link>
-        <Link to="/compras" className="text-brand">
-          Compras
-        </Link>
-        <Link to="/cierres" className="text-brand">
-          Cerrar el día
-        </Link>
-      </div>
 
-      {/* Control diario */}
-      {controlQuery.data ? (
+      {/* Primer uso: una sola tarjeta, con lo primero que hay que hacer. */}
+      {panelVacio ? (
         <Card>
-          <SectionTitle
-            title="Mi control diario"
-            hint={controlQuery.data.headline}
-            right={
-              <Badge
-                tone={
-                  controlQuery.data.level === 'RED' ? 'critical' : controlQuery.data.level === 'YELLOW' ? 'warning' : 'positive'
-                }
-              >
-                {controlQuery.data.level === 'RED' ? 'ROJO' : controlQuery.data.level === 'YELLOW' ? 'AMARILLO' : 'VERDE'}
-              </Badge>
-            }
-          />
-          <p className="text-xs leading-snug text-muted">
-            {controlQuery.data.counts.total} tarea(s): {controlQuery.data.counts.critical} urgente(s),{' '}
-            {controlQuery.data.counts.warning} pendiente(s). Lleva {controlQuery.data.streaks.consecutiveClosedDays}{' '}
-            día(s) seguido(s) cerrando.
+          <p className="text-sm font-semibold text-ink">Empiece por aquí</p>
+          <p className="mt-1 text-xs leading-snug text-muted">
+            Cree una cuenta con el dinero que tiene hoy o registre su primer movimiento. Las cifras aparecen solas.
           </p>
           <div className="mt-3 grid grid-cols-2 gap-2">
-            <Link to="/control">
-              <Button fullWidth variant="secondary" size="sm">
-                <IconTarget size={16} /> Ver mis tareas
+            <Link to="/cuentas" className="block">
+              <Button fullWidth size="sm" variant="secondary">
+                Crear cuenta
               </Button>
             </Link>
-            <Link to="/cierres">
-              <Button fullWidth variant="secondary" size="sm">
-                Cerrar el día
+            <Link to="/registrar?kind=EXPENSE" className="block">
+              <Button fullWidth size="sm">
+                Registrar gasto
               </Button>
             </Link>
           </div>
@@ -372,7 +379,7 @@ export function DashboardPage() {
       ) : null}
 
       {/* Compras: lo que está pendiente de comprar y cuánto se calcula gastar */}
-      {shoppingQuery.data && shoppingQuery.data.openLists > 0 ? (
+      {!sinCompras && shoppingQuery.data ? (
         <Card>
           <SectionTitle
             title="Listas de compras"
@@ -402,57 +409,58 @@ export function DashboardPage() {
         </Card>
       ) : null}
 
-      {/* Selector del período que se está mirando */}
-      <Tabs
-        tabs={[
-          { id: 'TODAY' as Preset, label: 'Hoy' },
-          { id: 'YESTERDAY' as Preset, label: 'Ayer' },
-          { id: 'WEEK' as Preset, label: 'Semana' },
-          { id: 'MONTH' as Preset, label: 'Mes' },
-          { id: 'LAST_30_DAYS' as Preset, label: '30 días' },
-        ]}
-        active={preset}
-        onChange={setPreset}
-      />
+      {/* Resumen del período: sin movimientos no hay nada que resumir. */}
+      {!noMovementsInPeriod ? (
+        <>
+          <Card>
+            <SectionTitle
+              title={`Resumen ${periodLabel}`}
+              hint={`Del ${summary.range.from} al ${summary.range.to}`}
+              right={
+                <Link to="/informes" className="text-xs font-medium text-brand">
+                  Ver informes
+                </Link>
+              }
+            />
+            <div className="grid grid-cols-[repeat(auto-fit,minmax(8.5rem,1fr))] gap-2">
+              <div>
+                <p className="text-[0.7rem] uppercase tracking-wide text-faint">Entró</p>
+                <p className="mt-0.5 text-sm font-semibold text-positive">
+                  <Money value={summary.period.income} currency={currency} />
+                </p>
+              </div>
+              <div>
+                <p className="text-[0.7rem] uppercase tracking-wide text-faint">Salió</p>
+                <p className="mt-0.5 text-sm font-semibold text-negative">
+                  <Money value={summary.period.expense} currency={currency} />
+                </p>
+              </div>
+              <div>
+                <p className="text-[0.7rem] uppercase tracking-wide text-faint">Resultado</p>
+                <p className="mt-0.5 text-sm font-semibold">
+                  <Money
+                    value={summary.period.result}
+                    currency={currency}
+                    tone={summary.period.result.startsWith('-') ? 'negative' : 'positive'}
+                  />
+                </p>
+              </div>
+            </div>
+          </Card>
+        </>
+      ) : null}
 
+      {/* Deudas y cobros: sólo si existe alguna. */}
+      {!sinDeudas ? (
       <Card>
-        <SectionTitle title={`Resumen ${periodLabel}`} hint={`Del ${summary.range.from} al ${summary.range.to}`} />
-        <div className="grid grid-cols-[repeat(auto-fit,minmax(8.5rem,1fr))] gap-2">
-          <div>
-            <p className="text-[0.7rem] uppercase tracking-wide text-faint">Entró</p>
-            <p className="mt-0.5 text-sm font-semibold text-positive">
-              <Money value={summary.period.income} currency={currency} />
-            </p>
-          </div>
-          <div>
-            <p className="text-[0.7rem] uppercase tracking-wide text-faint">Salió</p>
-            <p className="mt-0.5 text-sm font-semibold text-negative">
-              <Money value={summary.period.expense} currency={currency} />
-            </p>
-          </div>
-          <div>
-            <p className="text-[0.7rem] uppercase tracking-wide text-faint">Resultado</p>
-            <p className="mt-0.5 text-sm font-semibold">
-              <Money
-                value={summary.period.result}
-                currency={currency}
-                tone={summary.period.result.startsWith('-') ? 'negative' : 'positive'}
-              />
-            </p>
-          </div>
-        </div>
-
-        {noMovementsInPeriod ? (
-          <p className="mt-3 border-t border-border-soft pt-2 text-xs leading-snug text-muted">
-            No hay movimientos en {periodLabel}. Las cifras están a cero porque no ha registrado nada todavía, no porque
-            se haya perdido información.
-          </p>
-        ) : null}
-      </Card>
-
-      {/* Deudas y cobros */}
-      <Card>
-        <SectionTitle title="Lo que debo y lo que me deben" />
+        <SectionTitle
+          title="Lo que debo y lo que me deben"
+          right={
+            <Link to="/deudas" className="text-xs font-medium text-brand">
+              Ver deudas
+            </Link>
+          }
+        />
         <div className="grid grid-cols-2 gap-3">
           <Kpi label="Deuda total" value={summary.obligations.totalDebt} tone="negative" currency={currency} />
           <Kpi label="Cuentas por cobrar" value={summary.obligations.receivables} tone="positive" currency={currency} />
@@ -484,8 +492,9 @@ export function DashboardPage() {
           </div>
         ) : null}
       </Card>
+      ) : null}
 
-      {/* Presupuesto y retiros */}
+      {/* Presupuesto y retiros: sin límite definido, la tarjeta no se pinta. */}
       {hasBudget ? (
         <Card>
           <SectionTitle title="Presupuesto del mes" hint={`Consumido ${summary.budget.percentUsed}%`} />
@@ -514,30 +523,22 @@ export function DashboardPage() {
             </Button>
           </Link>
         </Card>
-      ) : (
-        <Card>
-          <SectionTitle title="Presupuesto del mes" />
-          <EmptyState
-            title="Todavía no ha fijado un presupuesto"
-            hint="Sin límite definido no se puede decir si va bien o mal. Póngase uno y FINANZA le avisará al acercarse."
-          />
-          <Link to="/presupuestos" className="mt-3 block">
-            <Button fullWidth variant="secondary" size="sm">
-              Definir presupuesto <IconChevronRight size={14} />
-            </Button>
-          </Link>
-        </Card>
-      )}
+      ) : null}
 
       {/* Tareas financieras pendientes: cada una lleva a donde se resuelve. */}
       {tasksQuery.data && tasksQuery.data.tasks.length > 0 ? (
         <Card>
-          <SectionTitle title="Tareas financieras pendientes" hint="Calculadas con datos reales, no con estimaciones" />
+          <SectionTitle title="Tareas financieras pendientes" />
           <div className="space-y-2">
-            {tasksQuery.data.tasks.slice(0, 5).map((task) => {
+            {tasksQuery.data.tasks.slice(0, 3).map((task) => {
               const content = (
-                <div className="flex w-full items-start justify-between gap-2 rounded-xl border border-border-soft p-3 text-left">
+                <div className="flex w-full items-start justify-between gap-2 border border-border-soft p-3 text-left">
                   <div className="min-w-0">
+                    {task.entityName ? (
+                      <p className="text-[0.6rem] font-semibold uppercase tracking-[0.08em] text-faint">
+                        {task.entityName}
+                      </p>
+                    ) : null}
                     <p className="text-sm font-medium leading-snug text-ink">{task.title}</p>
                     <p className="mt-0.5 text-xs leading-snug text-muted">{task.detail}</p>
                     {task.amount ? (
@@ -565,40 +566,21 @@ export function DashboardPage() {
         </Card>
       ) : null}
 
-      {/* Cierres de hoy */}
-      <Card>
-        <SectionTitle
-          title="Cierres de hoy"
-          right={
-            summary.closings.pendingDays > 0 ? <Badge tone="warning">{summary.closings.pendingDays} día(s) pendiente(s)</Badge> : null
-          }
-        />
-        {summary.closings.today.length > 0 ? (
-          <div className="space-y-2">
-            {summary.closings.today.map((closing) => (
-              <div key={closing.entityId} className="flex items-center justify-between gap-2 text-sm">
-                <span className="truncate text-muted">{formatBusinessDate(summary.range.to)}</span>
-                <span className="flex shrink-0 items-center gap-2">
-                  {closing.closed ? <Badge tone="positive">cerrado</Badge> : <Badge tone="warning">pendiente</Badge>}
-                  {closing.difference ? <Money value={closing.difference} tone="negative" currency={currency} /> : null}
-                </span>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <EmptyState
-            title="Todavía no hay cierre de hoy"
-            hint="Vaya a «Cierre» para revisar el día, contar el efectivo y confirmar."
-          />
-        )}
-      </Card>
-
-      {/* Comparación entre unidades */}
-      {chartsQuery.data && chartsQuery.data.entitiesComparison.length > 1 ? (
+      {/* Comparación entre unidades: sólo las que tienen actividad, y sólo si
+          hay al menos dos que comparar. */}
+      {comparacionConDatos.length > 1 ? (
         <Card>
-          <SectionTitle title="Comparación entre unidades" hint="Ventas no son ganancias: aquí se ve el resultado real" />
+          <SectionTitle
+            title="Comparación entre unidades"
+            hint="Ventas no son ganancias: aquí se ve el resultado real"
+            right={
+              <Link to="/informes" className="text-xs font-medium text-brand">
+                Ver informes
+              </Link>
+            }
+          />
           <div className="space-y-2">
-            {chartsQuery.data.entitiesComparison.map((row) => (
+            {comparacionConDatos.map((row) => (
               <div key={row.entityId} className="flex items-center justify-between gap-2 text-sm">
                 <span className="min-w-0 flex-1 truncate text-ink">{row.entityName}</span>
                 <span className="flex shrink-0 items-center gap-2">
@@ -614,10 +596,18 @@ export function DashboardPage() {
         </Card>
       ) : null}
 
-      {/* Transferencias */}
-      {chartsQuery.data ? (
+      {/* Transferencias: sólo si hubo alguna. */}
+      {chartsQuery.data && !sinTransferencias ? (
         <Card>
-          <SectionTitle title="Transferencias" hint={chartsQuery.data.transfers.note} />
+          <SectionTitle
+            title="Transferencias"
+            hint={chartsQuery.data.transfers.note}
+            right={
+              <Link to="/traspasos" className="text-xs font-medium text-brand">
+                Ver traspasos
+              </Link>
+            }
+          />
           <div className="flex items-center justify-between gap-2 text-sm text-ink">
             <span>
               {chartsQuery.data.transfers.count} transferencia(s), {chartsQuery.data.transfers.internalCount} interna(s)
@@ -628,21 +618,12 @@ export function DashboardPage() {
       ) : null}
 
       {/* Gráficos: se piden sólo si el usuario los quiere ver, y sólo si hay algo que contar. */}
-      {noMovementsInPeriod ? (
-        <Card>
-          <SectionTitle title="Gráficos" />
-          <p className="text-sm leading-snug text-muted">
-            No se muestran gráficos porque no hay movimientos en {periodLabel}. En cuanto registre el primero, aquí
-            aparecerá la evolución diaria y el reparto por categoría.
-          </p>
-          <Link to="/registrar?kind=INCOME" className="mt-3 block">
-            <Button fullWidth>Registrar el primer movimiento</Button>
-          </Link>
-        </Card>
-      ) : !showCharts ? (
-        <Button fullWidth variant="secondary" onClick={() => setShowCharts(true)}>
-          Ver gráficos del período
-        </Button>
+      {noMovementsInPeriod ? null : !showCharts ? (
+        <div className="px-1 py-1 text-center">
+          <button type="button" className="text-xs font-medium text-brand" onClick={() => setShowCharts(true)}>
+            Ver gráficos del período
+          </button>
+        </div>
       ) : (
         <Suspense
           fallback={
