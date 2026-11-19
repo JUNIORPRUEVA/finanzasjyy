@@ -25,7 +25,7 @@ import {
   Spinner,
 } from '../components/ui';
 import { toast } from '../components/Toast';
-import { IconBag, IconChart, IconChevronLeft, IconChevronRight, IconClose, IconSearch } from '../components/icons';
+import { IconBag, IconChart, IconChevronLeft, IconChevronRight, IconClose, IconFile, IconSearch } from '../components/icons';
 import {
   createListOffline,
   flushShoppingQueue,
@@ -35,6 +35,8 @@ import {
 import { countShoppingPending, getLocalShoppingLists, removeLocalShoppingList } from '../lib/db';
 import { todayBusinessDate } from '../lib/format';
 import { formatMoney } from '../lib/format';
+import { fileToDataUrl, MAX_FACTURA_MB, prepareInvoiceFile } from '../lib/invoice-file';
+import { FacturaLineasEditor, type FacturaLinea } from '../components/FacturaLineasEditor';
 
 /**
  * COMPRAS PERSONALES — LISTAS
@@ -127,6 +129,25 @@ export function ShoppingPage() {
 
   const [toDelete, setToDelete] = useState<RemoteShoppingList | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
+
+  /*
+   * COMPRA DESDE UNA FACTURA
+   * -----------------------
+   * El mismo lector que hay dentro de una compra, pero antes de crearla: se hace
+   * la foto, la IA escribe los productos con su precio y la compra nace ya con
+   * todo lo comprado. Así no hay que teclear nada en el supermercado.
+   */
+  const [facturaOpen, setFacturaOpen] = useState(false);
+  const [facturaCargando, setFacturaCargando] = useState(false);
+  const [facturaGuardando, setFacturaGuardando] = useState(false);
+  const [facturaError, setFacturaError] = useState<string | null>(null);
+  const [facturaAvisos, setFacturaAvisos] = useState<string[]>([]);
+  const [facturaLineas, setFacturaLineas] = useState<FacturaLinea[]>([]);
+  const [facturaResumen, setFacturaResumen] = useState<{
+    supplier: string | null;
+    date: string | null;
+    total: string | null;
+  } | null>(null);
 
   const currency = preferences?.currency ?? 'DOP';
 
@@ -256,6 +277,146 @@ export function ShoppingPage() {
       }
     } finally {
       setSaving(false);
+    }
+  };
+
+  const reiniciarFactura = () => {
+    setFacturaLineas([]);
+    setFacturaResumen(null);
+    setFacturaAvisos([]);
+    setFacturaError(null);
+  };
+
+  /**
+   * Pide a la IA que lea la foto o el PDF. La imagen se reduce en el teléfono
+   * antes de salir (una foto de móvil pesa varios MB y hacía fallar la subida).
+   */
+  const leerFactura = async (file: File) => {
+    reiniciarFactura();
+
+    if (file.size > MAX_FACTURA_MB * 1024 * 1024) {
+      setFacturaError(`El archivo pesa demasiado. El máximo es ${MAX_FACTURA_MB} MB.`);
+      return;
+    }
+
+    setFacturaCargando(true);
+    try {
+      const preparado = await prepareInvoiceFile(file);
+      const contentBase64 = await fileToDataUrl(preparado);
+
+      const result = await api.post<{
+        invoice: {
+          supplier: string | null;
+          date: string | null;
+          total: string | null;
+          warnings: string[];
+          lines: Array<{
+            name: string;
+            quantity: string;
+            unit: string | null;
+            unitPrice: string | null;
+            total: string | null;
+          }>;
+        };
+      }>('/shopping-lists/invoice-scan', {
+        entityId: newEntityId,
+        filename: preparado.name,
+        mimeType: preparado.type || 'image/jpeg',
+        contentBase64,
+      });
+
+      setFacturaLineas(
+        result.invoice.lines.map((line) => ({
+          name: line.name,
+          quantity: line.quantity || '1',
+          unit: line.unit,
+          unitPrice: line.unitPrice ?? line.total ?? '',
+          include: true,
+        })),
+      );
+      setFacturaResumen({ supplier: result.invoice.supplier, date: result.invoice.date, total: result.invoice.total });
+      setFacturaAvisos(result.invoice.warnings ?? []);
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 503) {
+        setFacturaError(
+          'La lectura de facturas con IA no está activada en este servidor. Puede crear la lista y añadir los productos a mano.',
+        );
+      } else {
+        setFacturaError(
+          error instanceof ApiError ? error.message : 'No se pudo leer la factura. Inténtelo con una foto más clara.',
+        );
+      }
+    } finally {
+      setFacturaCargando(false);
+    }
+  };
+
+  /** Crea la compra ya con los productos revisados, comprados y con su precio. */
+  const crearCompraDesdeFactura = async () => {
+    const elegidas = facturaLineas.filter((line) => line.include && line.name.trim().length > 0);
+    if (elegidas.length === 0) {
+      setFacturaError('Marque al menos un producto para crear la compra.');
+      return;
+    }
+    if (!newEntityId) {
+      setFacturaError('Elija la unidad financiera de la compra.');
+      return;
+    }
+
+    setFacturaGuardando(true);
+    setFacturaError(null);
+    try {
+      const fechaFactura = facturaResumen?.date ?? null;
+      const nombre =
+        (facturaResumen?.supplier ?? '').trim() ||
+        `Compra del ${fechaFactura ?? (newDate || todayBusinessDate(preferences?.timezone))}`;
+
+      const created = await api.post<RemoteShoppingList>('/shopping-lists', {
+        entityId: newEntityId,
+        name: nombre.slice(0, 80),
+        plannedDate: fechaFactura ?? (newDate || null),
+        notes: 'Creada desde una factura',
+        items: elegidas.map((line) => {
+          const price = line.unitPrice.trim();
+          return {
+            name: line.name.trim(),
+            quantity: line.quantity || '1',
+            unit: line.unit,
+            estimatedUnitPrice: price === '' ? null : price,
+            actualUnitPrice: price === '' ? null : price,
+            isPurchased: true,
+          };
+        }),
+      });
+
+      // El catálogo aprende los precios; si falla, la compra ya está hecha.
+      try {
+        await api.post('/shopping-lists/catalog/ingest', {
+          entityId: newEntityId,
+          supplier: facturaResumen?.supplier ?? null,
+          lines: elegidas.map((line) => ({
+            name: line.name.trim(),
+            unit: line.unit,
+            unitPrice: line.unitPrice.trim() === '' ? null : line.unitPrice.trim(),
+            quantity: line.quantity || '1',
+          })),
+        });
+      } catch {
+        // Es una ayuda, no un requisito para guardar la compra.
+      }
+
+      setFacturaOpen(false);
+      reiniciarFactura();
+      await refresh();
+      toast.success(
+        `${elegidas.length} productos en la compra`,
+        'Revise la lista y registre el gasto con la cuenta de donde salió el dinero.',
+      );
+      navigate(`/compras/${created.id}`);
+    } catch (error) {
+      setFacturaError(error instanceof ApiError ? error.message : 'No se pudo crear la compra.');
+    } finally {
+      setFacturaGuardando(false);
     }
   };
 
@@ -413,7 +574,7 @@ export function ShoppingPage() {
           ) : null}
 
           {/* Filtro: tres píldoras en una sola línea, sin caja alrededor. */}
-          <div className="flex items-center gap-1.5" role="group" aria-label="Filtrar las listas">
+          <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Filtrar las listas">
             {(
               [
                 { value: 'ABIERTAS', label: 'Abiertas' },
@@ -442,12 +603,30 @@ export function ShoppingPage() {
               type="button"
               onClick={() => void alternarModoTienda()}
               aria-pressed={modoTienda}
+              aria-label="Modo tienda: trabajar sin esperar al servidor"
               title="Trabajar sin esperar al servidor (la compra se guarda en el teléfono)"
-              className={`ml-auto px-2.5 py-1.5 text-xs font-semibold transition ${
+              className={`px-2.5 py-1.5 text-xs font-semibold transition ${
                 modoTienda ? 'bg-brand/10 text-brand' : 'text-muted hover:text-ink'
               }`}
             >
-              {modoTienda ? 'Modo tienda' : 'Modo tienda'}
+              Modo tienda
+            </button>
+
+            {/*
+              COMPRA DESDE UNA FOTO: antes de crear nada. La IA escribe los
+              productos con su precio y la compra nace ya completa.
+            */}
+            <button
+              type="button"
+              onClick={() => {
+                reiniciarFactura();
+                setFacturaOpen(true);
+              }}
+              title="Crear la compra a partir de la foto de una factura"
+              className="flex items-center gap-1 px-2 py-1.5 text-xs font-semibold text-muted transition hover:text-ink"
+            >
+              <IconFile size={16} />
+              Desde factura
             </button>
 
             {/* Catálogo de productos con su último precio: lo que se compra y cuánto cuesta. */}
@@ -592,6 +771,26 @@ export function ShoppingPage() {
       {/* Nueva lista */}
       <Sheet open={creating} onClose={() => setCreating(false)} title="Nueva lista de compras">
         <div className="space-y-3 pb-3">
+          {/* Atajo: si la compra ya está hecha, la factura la escribe sola. */}
+          <button
+            type="button"
+            onClick={() => {
+              setCreating(false);
+              reiniciarFactura();
+              setFacturaOpen(true);
+            }}
+            className="flex w-full items-center gap-2 border border-brand/40 bg-brand/5 p-2.5 text-left text-xs font-semibold text-brand transition active:scale-[0.99]"
+          >
+            <IconFile size={18} />
+            <span className="min-w-0 flex-1">
+              ¿Ya tiene la factura?
+              <span className="mt-0.5 block text-[0.7rem] font-normal text-muted">
+                Haga una foto y la IA añade los productos con sus precios.
+              </span>
+            </span>
+            <IconChevronRight size={16} className="shrink-0" />
+          </button>
+
           <Field
             label="Nombre de la lista"
             value={newName}
@@ -642,6 +841,126 @@ export function ShoppingPage() {
               {saving ? 'Creando…' : 'Crear lista'}
             </Button>
           </div>
+        </div>
+      </Sheet>
+
+      {/* COMPRA DESDE UNA FACTURA
+          ------------------------
+          La IA lee la foto o el PDF y PROPONE las líneas con sus precios. La
+          compra no se crea hasta que el usuario revisa y pulsa el botón: un dato
+          mal leído nunca se convierte en un gasto equivocado. */}
+      <Sheet
+        open={facturaOpen}
+        onClose={() => {
+          setFacturaOpen(false);
+          reiniciarFactura();
+        }}
+        title="Compra desde una factura"
+      >
+        <div className="space-y-3 pb-3">
+          {facturaLineas.length === 0 ? (
+            <>
+              <p className="text-xs leading-snug text-muted">
+                Haga una foto de la factura (o suba el PDF). La IA escribe los productos, las cantidades y los precios;
+                usted los revisa y la compra queda creada ya con todo comprado.
+              </p>
+
+              <div className="block">
+                <label htmlFor="factura-unidad" className="mb-1 block text-sm font-medium text-ink">
+                  Unidad financiera
+                </label>
+                <select
+                  id="factura-unidad"
+                  value={newEntityId}
+                  onChange={(event) => setNewEntityId(event.target.value)}
+                  className="w-full border border-border-soft bg-surface-2 px-3 py-2.5 text-ink outline-none transition focus:border-brand"
+                >
+                  {entities.map((entity) => (
+                    <option key={entity.id} value={entity.id}>
+                      {entity.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <label
+                className={`flex h-12 w-full cursor-pointer items-center justify-center gap-2 bg-brand px-4 text-sm font-semibold text-white transition active:scale-[0.99] ${
+                  facturaCargando ? 'pointer-events-none opacity-60' : ''
+                }`}
+              >
+                <IconFile size={18} />
+                {facturaCargando ? 'Leyendo la factura…' : 'Hacer foto o elegir archivo'}
+                <input
+                  type="file"
+                  accept="image/*,application/pdf"
+                  capture="environment"
+                  disabled={facturaCargando}
+                  className="sr-only"
+                  onChange={(event) => {
+                    const file = event.target.files?.[0];
+                    event.target.value = '';
+                    if (file) {
+                      void leerFactura(file);
+                    }
+                  }}
+                />
+              </label>
+
+              {facturaCargando ? <Skeleton className="h-16 w-full" /> : null}
+              {facturaError ? <Notice tone="warning">{facturaError}</Notice> : null}
+
+              <p className="text-[0.7rem] leading-snug text-faint">
+                La imagen se reduce en el teléfono antes de enviarse y sólo se usa para leerla: no se guarda en ninguna
+                carpeta pública.
+              </p>
+            </>
+          ) : (
+            <>
+              <div className="border border-border-soft bg-surface-2 p-2 text-xs text-muted">
+                {facturaResumen?.supplier ? <span className="font-semibold text-ink">{facturaResumen.supplier}</span> : null}
+                {facturaResumen?.date ? ` · ${facturaResumen.date}` : ''}
+                {facturaResumen?.total ? ` · total ${facturaResumen.total}` : ''}
+                <span className="mt-1 block text-[0.7rem] text-faint">
+                  {facturaLineas.filter((line) => line.include).length} de {facturaLineas.length} productos seleccionados
+                </span>
+              </div>
+
+              {facturaAvisos.length > 0 ? (
+                <Notice tone="warning" title="Revise esto antes de crear la compra">
+                  <ul className="list-disc space-y-1 pl-4">
+                    {facturaAvisos.slice(0, 4).map((aviso) => (
+                      <li key={aviso}>{aviso}</li>
+                    ))}
+                  </ul>
+                </Notice>
+              ) : null}
+
+              <FacturaLineasEditor lineas={facturaLineas} onChange={setFacturaLineas} />
+
+              {facturaError ? <Notice tone="warning">{facturaError}</Notice> : null}
+
+              <div className="flex items-baseline justify-between gap-3 border-t border-border-soft pt-2 text-sm">
+                <span className="text-muted">Total seleccionado</span>
+                <span className="font-semibold text-ink">
+                  {facturaLineas
+                    .filter((line) => line.include)
+                    .reduce((acc, line) => acc + (Number(line.quantity) || 0) * (Number(line.unitPrice) || 0), 0)
+                    .toFixed(2)}
+                </span>
+              </div>
+
+              <div className="flex flex-col gap-2">
+                <Button fullWidth size="lg" disabled={facturaGuardando} onClick={() => void crearCompraDesdeFactura()}>
+                  {facturaGuardando
+                    ? 'Creando la compra…'
+                    : `Crear la compra (${facturaLineas.filter((line) => line.include).length})`}
+                </Button>
+                <Button variant="ghost" onClick={reiniciarFactura}>
+                  Leer otra factura
+                </Button>
+              </div>
+            </>
+          )}
         </div>
       </Sheet>
 

@@ -7,6 +7,7 @@ import { AppModule } from './app.module.js';
 import { AllExceptionsFilter } from './common/all-exceptions.filter.js';
 import { SerializationInterceptor } from './common/serialization.interceptor.js';
 import { buildCorsOptions } from './common/cors.js';
+import { applyBodyLimit } from './common/body-limit.js';
 
 async function bootstrap(): Promise<void> {
   const logger = new Logger('Bootstrap');
@@ -46,6 +47,17 @@ async function bootstrap(): Promise<void> {
   );
 
   app.enableCors(buildCorsOptions());
+
+  /*
+   * TAMAÑO DE LAS PETICIONES
+   * ------------------------
+   * Una foto de factura viaja como «data URL» en base64: una foto normal de
+   * móvil ocupa varios MB y, al codificarla, crece un tercio más. Express pone
+   * 100 kB por defecto, así que la petición moría con un 413 antes de llegar a
+   * la IA y el usuario sólo veía «error del servidor» (las pruebas usaban un PNG
+   * de 1×1 y por eso nunca lo detectaron).
+   */
+  applyBodyLimit(app);
 
   app.useGlobalPipes(
     new ValidationPipe({

@@ -153,6 +153,29 @@ Errores con mensaje para el usuario:
 Nada de esto registra dinero por sí solo: el gasto sigue siendo el último paso, el único que mueve
 cuentas.
 
+### 8.1. Crear la compra desde la factura (antes de añadir nada)
+
+En **Compras**, el atajo **«Desde factura»** (también dentro de «Nueva lista») hace el camino
+contrario: primero la foto, después la compra.
+
+1. Se hace la foto o se sube el PDF.
+2. La IA escribe las líneas con cantidad y precio; se corrige lo que haga falta.
+3. **«Crear la compra»** crea la lista con el nombre del comercio (o «Compra del día»), ya con todos
+   los productos marcados como comprados y su precio real, y alimenta el catálogo.
+4. Se abre la compra creada: ahí se revisa y se pulsa **«Registrar el gasto sin factura»** (el gasto
+   es siempre el último paso, igual que en el recorrido normal).
+
+### La foto se reduce antes de salir
+
+Una foto de móvil pesa entre 3 y 10 MB. Antes de enviarla, el teléfono la convierte a JPEG de 1800 px
+(calidad 0,82), así que en la práctica viaja en unos cientos de kB: se sube rápido con datos móviles y
+la IA la lee igual. El servidor acepta hasta 12 MB de petición y la API rechaza archivos de más de
+`AI_MAX_INVOICE_MB` (8 MB).
+
+> Si alguna vez aparece «error del servidor» al subir la foto, revise el tamaño en el registro de la
+> API: un `413` significa que la petición era demasiado grande (`AI_MAX_INVOICE_MB`,
+> `client_max_body_size` de nginx y el límite del cuerpo en la API deben ir coordinados).
+
 ## 9. Catálogo de productos (qué comprar y cómo comprar)
 
 Cada producto comprado deja ficha: **nombre normalizado, unidad, último precio, mínimo, máximo,

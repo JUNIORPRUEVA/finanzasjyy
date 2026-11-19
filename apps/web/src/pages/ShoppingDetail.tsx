@@ -39,18 +39,8 @@ import { groupItems, fold, listToPlainText, nutritionAdvice } from '../lib/shopp
 import { PLANTILLAS, productosNuevos, type Plantilla } from '../lib/shopping-templates';
 import { repartirCompra, textoDeParte, type ParteCompra } from '../lib/shopping-split';
 import { normalizeProductName } from '../lib/product-name';
-
-/** Una línea leída de la factura, editable antes de guardarla. */
-interface LineaFactura {
-  name: string;
-  quantity: string;
-  unit: string | null;
-  unitPrice: string;
-  include: boolean;
-}
-
-/** Tamaño máximo del archivo de la factura (el servidor aplica el mismo). */
-const FACTURA_MAX_MB = 8;
+import { fileToDataUrl, MAX_FACTURA_MB, prepareInvoiceFile } from '../lib/invoice-file';
+import { FacturaLineasEditor, type FacturaLinea } from '../components/FacturaLineasEditor';
 
 /**
  * DETALLE DE UNA LISTA DE COMPRAS
@@ -95,7 +85,7 @@ export function ShoppingDetailPage() {
   const [facturaGuardando, setFacturaGuardando] = useState(false);
   const [facturaError, setFacturaError] = useState<string | null>(null);
   const [facturaAvisos, setFacturaAvisos] = useState<string[]>([]);
-  const [facturaLineas, setFacturaLineas] = useState<LineaFactura[]>([]);
+  const [facturaLineas, setFacturaLineas] = useState<FacturaLinea[]>([]);
   const [facturaResumen, setFacturaResumen] = useState<{ supplier: string | null; date: string | null; total: string | null } | null>(
     null,
   );
@@ -522,20 +512,22 @@ export function ShoppingDetailPage() {
     setFacturaLineas([]);
     setFacturaResumen(null);
 
-    if (file.size > FACTURA_MAX_MB * 1024 * 1024) {
-      setFacturaError(`El archivo pesa demasiado. El máximo es ${FACTURA_MAX_MB} MB.`);
+    if (file.size > MAX_FACTURA_MB * 1024 * 1024) {
+      setFacturaError(`El archivo pesa demasiado. El máximo es ${MAX_FACTURA_MB} MB.`);
       return;
     }
 
     setFacturaCargando(true);
     try {
-      setFacturaArchivo(file);
-      const contentBase64 = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(String(reader.result));
-        reader.onerror = () => reject(new Error('No se pudo leer el archivo'));
-        reader.readAsDataURL(file);
-      });
+      /*
+       * La foto se reduce ANTES de salir del teléfono: una foto de 5 MB tarda
+       * una eternidad con datos móviles y hacía que la petición muriera por
+       * tamaño en el servidor. Un JPEG de 1800 px sigue siendo legible para la
+       * IA y viaja en unos cientos de kB.
+       */
+      const preparado = await prepareInvoiceFile(file);
+      setFacturaArchivo(preparado);
+      const contentBase64 = await fileToDataUrl(preparado);
 
       const result = await api.post<{
         invoice: {
@@ -547,8 +539,8 @@ export function ShoppingDetailPage() {
         };
       }>('/shopping-lists/invoice-scan', {
         entityId: list.entityId,
-        filename: file.name,
-        mimeType: file.type || 'image/jpeg',
+        filename: preparado.name,
+        mimeType: preparado.type || 'image/jpeg',
         contentBase64,
       });
 
@@ -627,12 +619,7 @@ export function ShoppingDetailPage() {
       // La factura puede quedarse guardada como documento del gasto.
       if (guardarFacturaEnDocumentos && facturaArchivo) {
         try {
-          const contentBase64 = await new Promise<string>((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onload = () => resolve(String(reader.result));
-            reader.onerror = () => reject(new Error('No se pudo leer el archivo'));
-            reader.readAsDataURL(facturaArchivo);
-          });
+          const contentBase64 = await fileToDataUrl(facturaArchivo);
           await api.post('/attachments', {
             entityId: list.entityId,
             filename: facturaArchivo.name || 'factura',
@@ -1474,75 +1461,9 @@ export function ShoppingDetailPage() {
                 </Notice>
               ) : null}
 
-              <div className="space-y-2">
-                {facturaLineas.map((line, index) => (
-                  <div key={`${line.name}-${index}`} className="border border-border-soft p-2">
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="checkbox"
-                        checked={line.include}
-                        onChange={(event) => {
-                          const next = [...facturaLineas];
-                          next[index] = { ...line, include: event.target.checked };
-                          setFacturaLineas(next);
-                        }}
-                        aria-label={`Incluir ${line.name}`}
-                        className="h-5 w-5 shrink-0 accent-[var(--color-brand)]"
-                      />
-                      <input
-                        value={line.name}
-                        onChange={(event) => {
-                          const next = [...facturaLineas];
-                          next[index] = { ...line, name: event.target.value };
-                          setFacturaLineas(next);
-                        }}
-                        aria-label={`Producto ${index + 1}`}
-                        className="min-w-0 flex-1 border border-border-soft bg-surface-2 px-2 py-1.5 text-sm text-ink outline-none focus:border-brand"
-                      />
-                    </div>
-                    <div className="mt-1.5 flex items-center gap-2 pl-7">
-                      <div className="w-20 shrink-0">
-                        <label className="block text-[0.65rem] uppercase tracking-wide text-faint">
-                          Cantidad
-                          <input
-                            value={line.quantity}
-                            inputMode="decimal"
-                            aria-label={`Cantidad ${index + 1}`}
-                            onChange={(event) => {
-                              const next = [...facturaLineas];
-                              next[index] = { ...line, quantity: event.target.value };
-                              setFacturaLineas(next);
-                            }}
-                            className="mt-0.5 w-full border border-border-soft bg-surface-2 px-2 py-1 text-sm text-ink outline-none focus:border-brand"
-                          />
-                        </label>
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <label className="block text-[0.65rem] uppercase tracking-wide text-faint">
-                          Precio por unidad
-                          <input
-                            value={line.unitPrice}
-                            inputMode="decimal"
-                            aria-label={`Precio ${index + 1}`}
-                            placeholder="sin precio"
-                            onChange={(event) => {
-                              const next = [...facturaLineas];
-                              next[index] = { ...line, unitPrice: event.target.value };
-                              setFacturaLineas(next);
-                            }}
-                            className="mt-0.5 w-full border border-border-soft bg-surface-2 px-2 py-1 text-sm text-ink outline-none focus:border-brand"
-                          />
-                        </label>
-                        {line.quantity !== '' && line.unitPrice !== '' && Number(line.quantity) > 0 && Number(line.unitPrice) > 0 ? (
-                          <p className="mt-0.5 text-[0.68rem] text-faint">
-                            = {(Number(line.quantity) * Number(line.unitPrice)).toFixed(2)}
-                          </p>
-                        ) : null}
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
+              {/* Las líneas se corrigen en el mismo editor que usa la pantalla
+                  de Compras al crear una compra desde la factura. */}
+              <FacturaLineasEditor lineas={facturaLineas} onChange={setFacturaLineas} />
 
               {facturaError ? <Notice tone="warning">{facturaError}</Notice> : null}
 

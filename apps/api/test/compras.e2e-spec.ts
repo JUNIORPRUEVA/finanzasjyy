@@ -1,9 +1,11 @@
-import { INestApplication, ValidationPipe } from '@nestjs/common';
+import { ValidationPipe } from '@nestjs/common';
+import type { NestExpressApplication } from '@nestjs/platform-express';
 import { Test } from '@nestjs/testing';
 import request from 'supertest';
 import { AppModule } from '../src/app.module.js';
 import { AllExceptionsFilter } from '../src/common/all-exceptions.filter.js';
 import { SerializationInterceptor } from '../src/common/serialization.interceptor.js';
+import { applyBodyLimit } from '../src/common/body-limit.js';
 import { PrismaService } from '../src/prisma/prisma.service.js';
 import { hashPassword } from '../src/auth/password.js';
 import { businessDateToIso, businessToday } from '../src/domain/business-date.js';
@@ -25,7 +27,7 @@ import { businessDateToIso, businessToday } from '../src/domain/business-date.js
  *   5. Aislamiento: un usuario ajeno no ve ni toca las listas de otra unidad.
  */
 describe('FINANZA — compras personales (e2e)', () => {
-  let app: INestApplication;
+  let app: NestExpressApplication;
   let prisma: PrismaService;
   let http: ReturnType<typeof request>;
 
@@ -56,8 +58,11 @@ describe('FINANZA — compras personales (e2e)', () => {
 
   beforeAll(async () => {
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
-    app = moduleRef.createNestApplication();
+    app = moduleRef.createNestApplication<NestExpressApplication>();
     app.setGlobalPrefix('api/v1');
+    // El mismo límite de cuerpo que la aplicación real: si aquí no se aplica,
+    // una foto de factura vuelve a morir con 413 y las pruebas no lo ven.
+    applyBodyLimit(app);
     app.useGlobalPipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }));
     app.useGlobalFilters(new AllExceptionsFilter());
     app.useGlobalInterceptors(new SerializationInterceptor());
@@ -528,6 +533,24 @@ describe('FINANZA — compras personales (e2e)', () => {
         .send({ entityId, filename: 'x.exe', mimeType: 'application/x-msdownload', contentBase64: 'QUJD' });
 
       expect(response.status).toBe(400);
+    });
+
+    it('una foto real (varios cientos de kB) no se rechaza por tamaño', async () => {
+      /*
+       * Regresión comprobada en producción: Express limita el cuerpo a 100 kB
+       * por defecto y una foto de factura lo supera, así que la petición moría
+       * con 413 antes de llegar a la IA. El límite debe permitir la foto; lo que
+       * falle después es cosa del proveedor, no del tamaño.
+       */
+      const grande = Buffer.alloc(400_000, 'A').toString('base64');
+
+      const response = await http
+        .post('/api/v1/shopping-lists/invoice-scan')
+        .set(auth())
+        .send({ entityId, filename: 'factura.jpg', mimeType: 'image/jpeg', contentBase64: grande });
+
+      expect(response.status).not.toBe(413);
+      expect([200, 400, 502, 503]).toContain(response.status);
     });
 
     it('un usuario ajeno no puede pedir la lectura sobre una unidad que no es suya', async () => {

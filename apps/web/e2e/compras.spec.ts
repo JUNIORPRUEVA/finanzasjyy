@@ -5,6 +5,11 @@ import { ensureAuthenticated, ensureTestAccount } from './helpers';
 /** Carpeta de capturas, igual que en `screenshots.spec.ts`. */
 const CAPTURAS = path.join(process.cwd(), '..', '..', 'docs', 'capturas');
 
+/** Fecha de hoy en ISO corto (AAAA-MM-DD), sin depender de la zona del equipo. */
+function todayIso(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
 /**
  * COMPRAS PERSONALES — RECORRIDO COMPLETO
  * =======================================
@@ -416,5 +421,64 @@ test.describe('compras personales', () => {
 
     // Y el gasto NO se ha movido: sigue pendiente de que el usuario lo registre.
     await expect(page.getByRole('button', { name: /Finalizar compra con factura/ })).toBeVisible();
+  });
+
+  test('crear la compra desde la foto de una factura deja los productos y sus precios', async ({ page }) => {
+    test.setTimeout(180_000);
+    await ensureAuthenticated(page);
+    await ensureTestAccount(page);
+
+    // La IA no está configurada en la suite: se simula su respuesta.
+    await page.route('**/api/v1/shopping-lists/invoice-scan', (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          model: 'modelo-de-prueba',
+          invoice: {
+            supplier: 'Supermercado Desde Factura',
+            date: todayIso(),
+            total: '450.00',
+            currency: 'DOP',
+            warnings: [],
+            lines: [
+              { name: 'Café desde factura E2E', quantity: '2', unit: 'libra', unitPrice: '125', total: '250' },
+              { name: 'Azúcar desde factura E2E', quantity: '1', unit: 'libra', unitPrice: '200', total: '200' },
+            ],
+          },
+        }),
+      }),
+    );
+
+    await page.goto('/compras');
+    // El atajo vive en la barra de filtros, antes de crear nada.
+    await page.getByRole('button', { name: 'Desde factura' }).click();
+
+    const hoja = page.getByRole('dialog', { name: 'Compra desde una factura' });
+    await expect(hoja).toBeVisible();
+    await expect(hoja.getByText(/La IA escribe los productos/i)).toBeVisible();
+
+    const png = Buffer.from(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFAAH/q842iQAAAABJRU5ErkJggg==',
+      'base64',
+    );
+    await hoja.locator('input[type="file"]').setInputFiles({ name: 'factura.png', mimeType: 'image/png', buffer: png });
+
+    // Se revisan las líneas antes de crear la compra.
+    await expect(hoja.getByText('Supermercado Desde Factura')).toBeVisible({ timeout: 20_000 });
+    await expect(hoja.getByLabel('Producto 1')).toHaveValue('Café desde factura E2E');
+    await expect(hoja.getByText(/2 de 2 productos seleccionados/i)).toBeVisible();
+    await expect(hoja.getByText(/^450\.00$/).first()).toBeVisible();
+    await hoja.screenshot({ path: path.join(CAPTURAS, 'compras-desde-factura.png') });
+
+    await hoja.getByRole('button', { name: /Crear la compra \(2\)/ }).click();
+
+    // La compra se abre ya creada, con los productos comprados y sus precios.
+    await expect(page).toHaveURL(/\/compras\/[0-9a-f-]{36}/, { timeout: 30_000 });
+    await expect(page.getByRole('heading', { name: 'Supermercado Desde Factura' })).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByText('Café desde factura E2E').first()).toBeVisible();
+    await expect(page.getByText('Azúcar desde factura E2E').first()).toBeVisible();
+    await expect(page.getByText(/2 de 2 productos comprados/)).toBeVisible();
+    await page.screenshot({ path: path.join(CAPTURAS, 'compras-desde-factura-creada.png') });
   });
 });
